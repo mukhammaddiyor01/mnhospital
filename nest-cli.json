@@ -1,8 +1,32 @@
 {
   "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
-  "sourceRoot": "src",
+  "sourceRoot": "apps/mnhospital-api/src",
   "compilerOptions": {
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "webpack": true,
+    "tsConfigPath": "apps/mnhospital-api/tsconfig.app.json"
+  },
+  "monorepo": true,
+  "root": "apps/mnhospital-api",
+  "projects": {
+    "mnhospital": {
+      "type": "application",
+      "root": "apps/mnhospital-api",
+      "entryFile": "main",
+      "sourceRoot": "apps/mnhospital-api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/mnhospital-api/tsconfig.app.json"
+      }
+    },
+    "mnhospital-batch": {
+      "type": "application",
+      "root": "apps/mnhospital-batch",
+      "entryFile": "main",
+      "sourceRoot": "apps/mnhospital-batch/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/mnhospital-batch/tsconfig.app.json"
+      }
+    }
   }
 }
