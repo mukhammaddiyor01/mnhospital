@@ -4,8 +4,8 @@ import { MnhospitalBatchService } from './mnhospital-batch.service';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [ConfigModule.forRoot()],
-  controllers: [MnhospitalBatchController],
-  providers: [MnhospitalBatchService],
+	imports: [ConfigModule.forRoot()],
+	controllers: [MnhospitalBatchController],
+	providers: [MnhospitalBatchService],
 })
 export class MnhospitalBatchModule {}

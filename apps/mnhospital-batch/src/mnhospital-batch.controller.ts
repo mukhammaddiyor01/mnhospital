@@ -3,10 +3,10 @@ import { MnhospitalBatchService } from './mnhospital-batch.service';
 
 @Controller()
 export class MnhospitalBatchController {
-  constructor(private readonly mnhospitalBatchService: MnhospitalBatchService) {}
+	constructor(private readonly mnhospitalBatchService: MnhospitalBatchService) {}
 
-  @Get()
-  getHello(): string {
-    return this.mnhospitalBatchService.getHello();
-  }
+	@Get()
+	getHello(): string {
+		return this.mnhospitalBatchService.getHello();
+	}
 }
