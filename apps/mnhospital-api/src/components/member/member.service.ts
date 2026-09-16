@@ -1,4 +1,10 @@
-import { BadGatewayException, ConflictException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+	BadGatewayException,
+	BadRequestException,
+	ConflictException,
+	Injectable,
+	InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
@@ -19,8 +25,8 @@ export class MemberService {
 
 			return result;
 		} catch (err) {
-			console.log('Error, Service.model:', err);
-			throw new BadGatewayException(err);
+			console.log('Error, Service.model:', err.message);
+			throw new BadRequestException(Message.USED_MEMBER_NICK_OR_PHONE);
 		}
 	}
 
