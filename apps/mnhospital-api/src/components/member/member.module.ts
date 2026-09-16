@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { MemberService } from './member.service';
+import { MemberResolver } from './member.resolver';
 import ConversationSchema from './schema/Conversation.model';
 import MemberSchema from './schema/Member.model';
 import MessageSchema from './schema/Message.model';
@@ -15,5 +17,6 @@ import RefreshTokenSchema from './schema/RefreshToken.model';
 		]),
 	],
 	exports: [MongooseModule],
+	providers: [MemberService, MemberResolver],
 })
 export class MemberModule {}
