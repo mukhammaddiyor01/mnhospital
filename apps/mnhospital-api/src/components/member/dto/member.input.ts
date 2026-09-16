@@ -18,7 +18,9 @@ export class MemberInput {
 
 	@IsString()
 	@IsNotEmpty()
-	@Matches(/^\+?[1-9]\d{7,14}$/)
+	@Matches(/^(?:\+?[1-9]\d{7,14}|0\d{1,2}-?\d{3,4}-?\d{4})$/, {
+		message: 'memberPhone must be a valid international or local phone number',
+	})
 	@Field(() => String)
 	memberPhone: string;
 
@@ -67,15 +69,13 @@ export class MemberInput {
 
 @InputType()
 export class LoginInput {
-	@IsString()
 	@IsNotEmpty()
-	@Length(3, 30)
+	@Length(3, 12)
 	@Field(() => String)
 	memberNick: string;
 
-	@IsString()
 	@IsNotEmpty()
-	@Length(8, 32)
+	@Length(5, 12)
 	@Field(() => String)
 	memberPassword: string;
 }

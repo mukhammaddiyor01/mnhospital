@@ -38,7 +38,9 @@ export class MemberUpdate {
 
 	@IsOptional()
 	@IsString()
-	@Matches(/^\+?[1-9]\d{7,14}$/)
+	@Matches(/^(?:\+?[1-9]\d{7,14}|0\d{1,2}-?\d{3,4}-?\d{4})$/, {
+		message: 'memberPhone must be a valid international or local phone number',
+	})
 	@Field(() => String, { nullable: true })
 	memberPhone?: string;
 
