@@ -6,6 +6,7 @@ import ConversationSchema from './schema/Conversation.model';
 import MemberSchema from './schema/Member.model';
 import MessageSchema from './schema/Message.model';
 import RefreshTokenSchema from './schema/RefreshToken.model';
+import { AuthModule } from '../auth/guards/auth.module';
 
 @Module({
 	imports: [
@@ -15,6 +16,7 @@ import RefreshTokenSchema from './schema/RefreshToken.model';
 			{ name: 'Conversation', schema: ConversationSchema },
 			{ name: 'Message', schema: MessageSchema },
 		]),
+		AuthModule,
 	],
 	exports: [MongooseModule],
 	providers: [MemberService, MemberResolver],
