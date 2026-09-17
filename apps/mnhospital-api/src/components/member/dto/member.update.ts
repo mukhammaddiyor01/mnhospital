@@ -1,9 +1,10 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
+import { Transform } from 'class-transformer';
 import {
 	IsEmail,
 	IsEnum,
+	IsInstance,
 	IsInt,
-	IsMongoId,
 	IsNotEmpty,
 	IsOptional,
 	IsString,
@@ -11,14 +12,17 @@ import {
 	Matches,
 	Min,
 } from 'class-validator';
+import { Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
 import { MemberAuthType, MemberStatus, MemberType } from '../enums/member.enum';
 
 @InputType()
 export class MemberUpdate {
-	@IsMongoId()
+	@Transform(({ value }) => (typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value))
+	@IsInstance(ObjectId, { message: '_id must be a valid ObjectId' })
 	@IsNotEmpty()
 	@Field(() => String)
-	_id: string;
+	_id: ObjectId;
 
 	@IsOptional()
 	@IsEnum(MemberType)

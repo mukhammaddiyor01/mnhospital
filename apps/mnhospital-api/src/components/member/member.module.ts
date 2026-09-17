@@ -7,6 +7,7 @@ import MemberSchema from './schema/Member.model';
 import MessageSchema from './schema/Message.model';
 import RefreshTokenSchema from './schema/RefreshToken.model';
 import { AuthModule } from '../auth/auth.module';
+import { ViewModule } from '../view/view.module';
 
 @Module({
 	imports: [
@@ -17,6 +18,7 @@ import { AuthModule } from '../auth/auth.module';
 			{ name: 'Message', schema: MessageSchema },
 		]),
 		AuthModule,
+		ViewModule,
 	],
 	exports: [MongooseModule],
 	providers: [MemberService, MemberResolver],

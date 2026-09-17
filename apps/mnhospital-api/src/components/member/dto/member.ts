@@ -1,11 +1,12 @@
 import { Field, Int, ObjectType } from '@nestjs/graphql';
 import { MemberAuthType, MemberStatus, MemberType } from '../enums/member.enum';
 import { Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
 
 @ObjectType()
 export class Member {
 	@Field(() => String)
-	_id: Types.ObjectId;
+	_id: ObjectId;
 
 	@Field(() => MemberType)
 	memberType: MemberType;

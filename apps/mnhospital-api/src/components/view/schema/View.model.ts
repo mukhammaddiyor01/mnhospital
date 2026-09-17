@@ -1,11 +1,11 @@
 import { Schema } from 'mongoose';
-import { ReferenceGroup } from '../enums/reference.enum';
+import { ViewGroup } from '../enums/view.enum';
 
 const ViewSchema = new Schema(
 	{
 		viewGroup: {
 			type: String,
-			enum: ReferenceGroup,
+			enum: ViewGroup,
 			required: true,
 		},
 		viewRefId: {

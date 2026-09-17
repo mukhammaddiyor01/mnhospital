@@ -2,6 +2,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
 
 export const validMimeTypes = ['image/png', 'image/jpg', 'image/jpeg'];
 export const getSerialForImage = (filename: string) => {
@@ -9,6 +10,6 @@ export const getSerialForImage = (filename: string) => {
 	return uuidv4() + ext;
 };
 
-export const shapeIntoMongoObjectId = (target: string | Types.ObjectId): Types.ObjectId => {
-	return typeof target === 'string' ? new Types.ObjectId(target) : target;
+export const shapeIntoMongoObjectId = (target: string | ObjectId): ObjectId => {
+	return typeof target === 'string' ? new ObjectId(target) : target;
 };

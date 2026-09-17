@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
 import { LoginInput, MemberInput } from './dto/member.input';
 import { Member } from './dto/member';
 import { MemberStatus } from './enums/member.enum';
@@ -8,12 +9,16 @@ import { Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberUpdate } from './dto/member.update';
 import { T } from '../../libs/types/common';
+import { ViewService } from '../view/view.service';
+import { ViewInput } from '../view/dto/view.input';
+import { ViewGroup } from '../view/enums/view.enum';
 
 @Injectable()
 export class MemberService {
 	constructor(
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		private authService: AuthService,
+		private viewService: ViewService,
 	) {}
 
 	public async signup(input: MemberInput): Promise<Member> {
@@ -55,7 +60,7 @@ export class MemberService {
 
 	// Authenticated
 
-	public async updateMember(memberId: Types.ObjectId, input: MemberUpdate): Promise<Member> {
+	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {
 		const result: Member = await this.memberModel
 			.findOneAndUpdate(
 				{
@@ -72,7 +77,7 @@ export class MemberService {
 		return result;
 	}
 
-	public async getMember(targetId: Types.ObjectId): Promise<Member> {
+	public async getMember(memberId: ObjectId, targetId: ObjectId): Promise<Member> {
 		const search: T = {
 			_id: targetId,
 			memberStatus: {
@@ -81,6 +86,20 @@ export class MemberService {
 		};
 		const targetMember = await this.memberModel.findOne(search).exec();
 		if (!targetMember) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (memberId) {
+			// Record a unique member profile view.
+			const viewInput: ViewInput = {
+				memberId,
+				viewRefId: targetId,
+				viewGroup: ViewGroup.MEMBER,
+			};
+			const newView = await this.viewService.recordView(viewInput);
+			if (newView) {
+				await this.memberModel.findByIdAndUpdate(targetId, { $inc: { memberViews: 1 } }).exec();
+				targetMember.memberViews++;
+			}
+		}
 
 		return targetMember;
 	}
