@@ -65,24 +65,4 @@ export class MemberResolver {
 		const targetId = shapeIntoMongoObjectId(input);
 		return this.memberService.getMember(memberId, targetId);
 	}
-
-	/* ADMIN */
-
-	// Authorization: ADMIN
-	@Roles(MemberType.ADMIN)
-	@UseGuards(RolesGuard)
-	@Mutation(() => String)
-	public async getAllMembersByAdmin(): Promise<string> {
-		console.log('Mutation: getAllMembersByAdmin ');
-		return this.memberService.getAllMembersByAdmin();
-	}
-
-	// Authorization: ADMIN
-	@Roles(MemberType.ADMIN)
-	@UseGuards(RolesGuard)
-	@Mutation(() => String)
-	public async updateMemberByAdmin(): Promise<string> {
-		console.log('Mutation: updateMemberByAdmin ');
-		return this.memberService.updateMemberByAdmin();
-	}
 }

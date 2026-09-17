@@ -103,14 +103,4 @@ export class MemberService {
 
 		return targetMember;
 	}
-
-	/* ADMIN */
-
-	public async getAllMembersByAdmin(): Promise<string> {
-		return 'getMember executed';
-	}
-
-	public async updateMemberByAdmin(): Promise<string> {
-		return 'updateMember executed';
-	}
 }

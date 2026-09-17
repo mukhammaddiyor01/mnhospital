@@ -8,6 +8,8 @@ import { DoctorMessageModule } from './doctor-message/doctorMessage.module';
 import DoctorReportSchema from './doctor-reports/schema/DoctorReport.model';
 import { DoctorScheduleModule } from './doctor-schedule/doctorSchedule.module';
 import { DoctorViewsModule } from './doctor-views/doctorViews.module';
+import { DoctorResolver } from './doctor.resolver';
+import { DoctorService } from './doctor.service';
 import DoctorSchema from './schema/Doctor.model';
 
 @Module({
@@ -25,5 +27,6 @@ import DoctorSchema from './schema/Doctor.model';
 		DoctorViewsModule,
 	],
 	exports: [MongooseModule],
+	providers: [DoctorResolver, DoctorService],
 })
 export class DoctorModule {}
