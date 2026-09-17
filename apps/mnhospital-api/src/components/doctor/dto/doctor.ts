@@ -2,34 +2,44 @@ import { Field, Int, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { DoctorSpecialty } from '../enums/doctor.enum';
+import { MemberAuthType, MemberStatus, MemberType } from '../../member/enums/member.enum';
 
 @ObjectType()
 export class Doctor {
 	@Field(() => String)
 	_id: ObjectId;
 
-	@Field(() => String)
-	memberId: ObjectId;
+	@Field(() => MemberType)
+	memberType: MemberType;
 
-	@Field(() => String)
-	servicesId: ObjectId;
+	@Field(() => MemberStatus)
+	memberStatus: MemberStatus;
 
-	@Field(() => String)
-	departmentId: ObjectId;
+	@Field(() => MemberAuthType)
+	memberAuthType: MemberAuthType;
 
-	@Field(() => DoctorSpecialty)
-	docSpecialty: DoctorSpecialty;
+	@Field(() => String, { nullable: true })
+	servicesId?: ObjectId;
+
+	@Field(() => String, { nullable: true })
+	departmentId?: ObjectId;
+
+	@Field(() => DoctorSpecialty, { nullable: true })
+	docSpecialty?: DoctorSpecialty;
 
 	@Field(() => String)
 	docNick: string;
 
 	docPassword?: string;
 
+	@Field(() => String, { nullable: true })
+	accessToken?: string;
+
 	@Field(() => String)
 	docPhone: string;
 
-	@Field(() => String)
-	docMail: string;
+	@Field(() => String, { nullable: true })
+	docMail?: string;
 
 	@Field(() => String)
 	docFullName: string;

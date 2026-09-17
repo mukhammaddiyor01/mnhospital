@@ -11,6 +11,7 @@ import { DoctorViewsModule } from './doctor-views/doctorViews.module';
 import { DoctorResolver } from './doctor.resolver';
 import { DoctorService } from './doctor.service';
 import DoctorSchema from './schema/Doctor.model';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
 	imports: [
@@ -25,6 +26,7 @@ import DoctorSchema from './schema/Doctor.model';
 		DoctorMessageModule,
 		DoctorScheduleModule,
 		DoctorViewsModule,
+		AuthModule,
 	],
 	exports: [MongooseModule],
 	providers: [DoctorResolver, DoctorService],

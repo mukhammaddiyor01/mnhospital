@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { LoginInput, MemberInput } from './dto/member.input';
 import { Member } from './dto/member';
-import { MemberStatus } from './enums/member.enum';
+import { MemberStatus, MemberType } from './enums/member.enum';
 import { Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberUpdate } from './dto/member.update';
@@ -22,6 +22,9 @@ export class MemberService {
 	) {}
 
 	public async signup(input: MemberInput): Promise<Member> {
+		if (input.memberType === MemberType.DOCTOR) {
+			throw new BadRequestException(Message.DOCTOR_SIGNUP_REQUIRED);
+		}
 		//TODO: Hash password
 		input.memberPassword = await this.authService.hashPassword(input.memberPassword);
 

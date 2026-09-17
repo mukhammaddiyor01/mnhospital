@@ -1,30 +1,38 @@
 import { Schema } from 'mongoose';
 import { DoctorSpecialty } from '../enums/doctor.enum';
+import { MemberAuthType, MemberStatus, MemberType } from '../../member/enums/member.enum';
 
 const DoctorSchema = new Schema(
 	{
-		memberId: {
-			type: Schema.Types.ObjectId,
-			ref: 'Member',
-			required: true,
-			unique: true,
+		memberType: {
+			type: String,
+			enum: MemberType,
+			default: MemberType.DOCTOR,
+			immutable: true,
+		},
+		memberStatus: {
+			type: String,
+			enum: MemberStatus,
+			default: MemberStatus.ACTIVE,
+		},
+		memberAuthType: {
+			type: String,
+			enum: MemberAuthType,
+			default: MemberAuthType.PHONE,
 		},
 		servicesId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Service',
-			required: true,
 			index: true,
 		},
 		departmentId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Department',
-			required: true,
 			index: true,
 		},
 		docSpecialty: {
 			type: String,
 			enum: DoctorSpecialty,
-			required: true,
 			index: true,
 		},
 		docNick: {
@@ -44,25 +52,24 @@ const DoctorSchema = new Schema(
 		},
 		docMail: {
 			type: String,
-			required: true,
-			unique: true,
+			index: { unique: true, sparse: true },
 			lowercase: true,
 		},
 		docFullName: {
 			type: String,
-			required: true,
+			default: '',
 		},
 		docImage: {
 			type: String,
-			required: true,
+			default: '',
 		},
 		docAddress: {
 			type: String,
-			required: true,
+			default: '',
 		},
 		docDesc: {
 			type: String,
-			required: true,
+			default: '',
 		},
 		docExperience: {
 			type: Number,

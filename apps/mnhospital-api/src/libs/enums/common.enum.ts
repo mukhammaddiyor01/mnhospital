@@ -9,9 +9,12 @@ export enum Message {
 	BAD_REQUEST = 'Bad Request',
 
 	USED_MEMBER_NICK_OR_PHONE = 'Already used member nick or phone!',
+	USED_DOCTOR_NICK_PHONE_OR_MAIL = 'Doctor nick, phone or email is already in use!',
 	USED_NICK_PHONE = 'You are inserting already used nick or phone!',
 	TOKEN_CREATION_FAILED = 'Token creation error!',
 	NO_MEMBER_NICK = 'no member with that member nick!',
+	NO_DOCTOR_NICK = 'No doctor with that doctor nick!',
+	DOCTOR_SIGNUP_REQUIRED = 'Doctors must register through signupDoctor!',
 	BLOCKED_USER = 'You have been blocked, contact MNHospital!',
 	WRONG_PASSWORD = 'Wrong password entered, please try again!',
 	NOT_AUTHENTICATED = 'You are not authenticated, Please login first!',
