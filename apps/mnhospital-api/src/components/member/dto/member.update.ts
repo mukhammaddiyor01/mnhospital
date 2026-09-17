@@ -87,4 +87,6 @@ export class MemberUpdate {
 	@Min(0)
 	@Field(() => Int, { nullable: true })
 	memberAddress?: number;
+
+	deleteAt?: Date;
 }

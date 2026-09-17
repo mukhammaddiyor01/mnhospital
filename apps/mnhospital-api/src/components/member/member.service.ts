@@ -13,6 +13,7 @@ import { Member } from './dto/member';
 import { MemberStatus } from './enums/member.enum';
 import { Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
+import { MemberUpdate } from './dto/member.update';
 
 @Injectable()
 export class MemberService {
@@ -60,8 +61,21 @@ export class MemberService {
 
 	// Authenticated
 
-	public async updateMember(): Promise<string> {
-		return 'updateMember executed';
+	public async updateMember(memberId: Object, input: MemberUpdate): Promise<Member> {
+		const result: Member = await this.memberModel
+			.findByIdAndUpdate(
+				{
+					_id: memberId,
+					memberStatus: MemberStatus.ACTIVE,
+				},
+				input,
+				{ new: true },
+			)
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		result.accessToken = await this.authService.createToken(result);
+		return result;
 	}
 
 	public async getMember(): Promise<string> {
