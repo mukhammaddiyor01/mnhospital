@@ -4,6 +4,8 @@ import * as path from 'path';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 
+export const availabeDoctorSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews', 'memberRank'];
+
 export const validMimeTypes = ['image/png', 'image/jpg', 'image/jpeg'];
 export const getSerialForImage = (filename: string) => {
 	const ext = path.parse(filename).ext;

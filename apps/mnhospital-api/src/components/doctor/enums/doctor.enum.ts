@@ -10,3 +10,11 @@ export enum DoctorSpecialty {
 	DENTIST = 'DENTIST',
 }
 registerEnumType(DoctorSpecialty, { name: 'DoctorSpecialty' });
+
+export enum DoctorSort {
+	CREATED_AT = 'createdAt',
+	POINTS = 'docPoints',
+	EXPERIENCE = 'docExperience',
+	PATIENTS = 'docPatients',
+}
+registerEnumType(DoctorSort, { name: 'DoctorSort' });
