@@ -12,7 +12,7 @@ import { LoginInput, MemberInput } from './dto/member.input';
 import { Member } from './dto/member';
 import { MemberStatus } from './enums/member.enum';
 import { Message } from '../../libs/enums/common.enum';
-import { AuthService } from '../auth/guards/auth.service';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class MemberService {
