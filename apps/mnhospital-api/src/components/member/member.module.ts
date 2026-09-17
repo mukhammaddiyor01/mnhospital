@@ -6,7 +6,7 @@ import ConversationSchema from './schema/Conversation.model';
 import MemberSchema from './schema/Member.model';
 import MessageSchema from './schema/Message.model';
 import RefreshTokenSchema from './schema/RefreshToken.model';
-import { AuthModule } from '../auth/guards/auth.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
 	imports: [
