@@ -12,14 +12,13 @@ import {
 	Min,
 } from 'class-validator';
 import { MemberAuthType, MemberStatus, MemberType } from '../enums/member.enum';
-import { ObjectId } from 'mongoose';
 
 @InputType()
 export class MemberUpdate {
 	@IsMongoId()
 	@IsNotEmpty()
 	@Field(() => String)
-	_id: ObjectId;
+	_id: string;
 
 	@IsOptional()
 	@IsEnum(MemberType)

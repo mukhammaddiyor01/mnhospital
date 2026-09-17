@@ -5,11 +5,12 @@ import { Member } from './dto/member';
 import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
-import { ObjectId } from 'mongoose';
+import { Types } from 'mongoose';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MemberType } from './enums/member.enum';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { MemberUpdate } from './dto/member.update';
+import { shapeIntoMongoObjectId } from '../../libs/config';
 
 @Resolver()
 export class MemberResolver {
@@ -42,22 +43,23 @@ export class MemberResolver {
 		return `Hi ${authMember.memberNick}, you are ${authMember.memberType} ${authMember._id}`;
 	}
 
-	@Query(() => String)
-	public async getMember(): Promise<string> {
-		console.log('Query: getMember');
-		return this.memberService.getMember();
-	}
-
 	// Authenticated
 	@UseGuards(AuthGuard)
 	@Mutation(() => Member)
 	public async updateMember(
 		@Args('input') input: MemberUpdate,
-		@AuthMember('_id') memberId: ObjectId,
+		@AuthMember('_id') memberId: Types.ObjectId,
 	): Promise<Member> {
 		console.log('Mutation: updateMember ');
 		delete input._id;
 		return this.memberService.updateMember(memberId, input);
+	}
+
+	@Query(() => Member)
+	public async getMember(@Args('memberId') input: string): Promise<Member> {
+		console.log('Query: getMember');
+		const targetId = shapeIntoMongoObjectId(input);
+		return this.memberService.getMember(targetId);
 	}
 
 	/* ADMIN */

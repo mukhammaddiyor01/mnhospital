@@ -1,19 +1,13 @@
-import {
-	BadGatewayException,
-	BadRequestException,
-	ConflictException,
-	Injectable,
-	InternalServerErrorException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import * as bcrypt from 'bcryptjs';
+import { Model, Types } from 'mongoose';
 import { LoginInput, MemberInput } from './dto/member.input';
 import { Member } from './dto/member';
 import { MemberStatus } from './enums/member.enum';
 import { Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberUpdate } from './dto/member.update';
+import { T } from '../../libs/types/common';
 
 @Injectable()
 export class MemberService {
@@ -52,7 +46,7 @@ export class MemberService {
 		}
 
 		// TODO: Compare Passwords
-		const isMatch = await this.authService.comparePassword(input.memberPassword, response.memberPassword);
+		const isMatch = await this.authService.comparePassword(memberPassword, response.memberPassword);
 		if (!isMatch) throw new InternalServerErrorException(Message.WRONG_PASSWORD);
 		response.accessToken = await this.authService.createToken(response);
 
@@ -61,9 +55,9 @@ export class MemberService {
 
 	// Authenticated
 
-	public async updateMember(memberId: Object, input: MemberUpdate): Promise<Member> {
+	public async updateMember(memberId: Types.ObjectId, input: MemberUpdate): Promise<Member> {
 		const result: Member = await this.memberModel
-			.findByIdAndUpdate(
+			.findOneAndUpdate(
 				{
 					_id: memberId,
 					memberStatus: MemberStatus.ACTIVE,
@@ -78,8 +72,17 @@ export class MemberService {
 		return result;
 	}
 
-	public async getMember(): Promise<string> {
-		return 'getMember executed';
+	public async getMember(targetId: Types.ObjectId): Promise<Member> {
+		const search: T = {
+			_id: targetId,
+			memberStatus: {
+				$in: [MemberStatus.ACTIVE, MemberStatus.BLOCK],
+			},
+		};
+		const targetMember = await this.memberModel.findOne(search).exec();
+		if (!targetMember) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		return targetMember;
 	}
 
 	/* ADMIN */
