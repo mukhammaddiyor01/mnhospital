@@ -23,6 +23,7 @@ export enum Message {
 	NOT_ALLOWED_REQUEST = 'Not Allowed Request!',
 	PROVIDE_ALLOWED_FORMAT = 'Please provide jpg, jpeg or png images!',
 	SELF_FOLLOW_DENIED = 'You cannot follow yourself!',
+	UPLOAD_FAILED = 'UPLOAD_FAILED',
 }
 
 registerEnumType(Message, { name: 'Message' });
