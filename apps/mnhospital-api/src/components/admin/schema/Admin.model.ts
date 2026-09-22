@@ -29,10 +29,6 @@ const AdminSchema = new Schema(
 			unique: true,
 			lowercase: true,
 		},
-		adminFullName: {
-			type: String,
-			required: true,
-		},
 		adminImage: {
 			type: String,
 			required: true,

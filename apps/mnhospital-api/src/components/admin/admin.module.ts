@@ -4,9 +4,24 @@ import { AdminService } from './admin.service';
 import { AdminResolver } from './admin.resolver';
 import AdminSchema from './schema/Admin.model';
 import { AuthModule } from '../auth/auth.module';
+import MemberSchema from '../member/schema/Member.model';
 
 @Module({
-	imports: [MongooseModule.forFeature([{ name: 'Admin', schema: AdminSchema }]), AuthModule],
+	imports: [
+		MongooseModule.forFeature([
+			{
+				name: 'Admin',
+				schema: AdminSchema,
+			},
+		]),
+		MongooseModule.forFeature([
+			{
+				name: 'Member',
+				schema: MemberSchema,
+			},
+		]),
+		AuthModule,
+	],
 	exports: [MongooseModule],
 	providers: [AdminService, AdminResolver],
 })
