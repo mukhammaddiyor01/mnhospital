@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import DepartmentSchema from './department/schema/Department.model';
+import { DepartmentResolver } from './department/department.resolver';
+import { DepartmentService } from './department/department.service';
 import { DoctorCommentsModule } from './doctor-comments/doctorComments.module';
 import { DoctorFollowsModule } from './doctor-follows/doctorFollows.module';
 import { DoctorLikesModule } from './doctor-likes/doctorLikes.module';
@@ -28,7 +30,7 @@ import { AuthModule } from '../auth/auth.module';
 		DoctorViewsModule,
 		AuthModule,
 	],
-	exports: [MongooseModule],
-	providers: [DoctorResolver, DoctorService],
+	providers: [DoctorResolver, DoctorService, DepartmentResolver, DepartmentService],
+	exports: [MongooseModule, DoctorService, DepartmentService],
 })
 export class DoctorModule {}
