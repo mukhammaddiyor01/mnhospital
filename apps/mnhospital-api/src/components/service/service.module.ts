@@ -5,6 +5,8 @@ import { ServiceResolver } from './service.resolver';
 import ServiceSchema from './schema/Service.model';
 import { AuthModule } from '../auth/auth.module';
 import { ViewModule } from '../view/view.module';
+import { MemberModule } from '../member/member.module';
+import { DoctorModule } from '../doctor/doctor.module';
 
 @Module({
 	imports: [
@@ -16,6 +18,8 @@ import { ViewModule } from '../view/view.module';
 		]),
 		AuthModule,
 		ViewModule,
+		MemberModule,
+		DoctorModule,
 	],
 	exports: [MongooseModule],
 	providers: [ServiceService, ServiceResolver],
