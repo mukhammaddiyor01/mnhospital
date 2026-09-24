@@ -1,8 +1,14 @@
 import { Schema } from 'mongoose';
-import { ServiceRoom, ServiceStatus, ServiceType } from '../enums/service.enum';
+import { ServiceRoom, ServiceRoomName, ServiceStatus, ServiceType } from '../enums/service.enum';
 
 const ServiceSchema = new Schema(
 	{
+		memberId: {
+			type: Schema.Types.ObjectId,
+			ref: 'Doctor',
+			required: true,
+			index: true,
+		},
 		departmentId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Department',
@@ -24,6 +30,11 @@ const ServiceSchema = new Schema(
 			type: String,
 			enum: ServiceStatus,
 			default: ServiceStatus.ACTIVE,
+		},
+		serviceRoomName: {
+			type: String,
+			enum: ServiceRoomName,
+			required: true,
 		},
 		serviceRoom: {
 			type: String,

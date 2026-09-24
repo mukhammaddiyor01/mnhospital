@@ -20,7 +20,7 @@ import { ViewModule } from '../view/view.module';
 		AuthModule,
 		ViewModule,
 	],
-	exports: [MongooseModule],
+	exports: [MongooseModule, MemberService],
 	providers: [MemberService, MemberResolver],
 })
 export class MemberModule {}
