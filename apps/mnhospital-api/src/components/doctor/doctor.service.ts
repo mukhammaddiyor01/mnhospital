@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Doctor, Doctors } from './dto/doctor';
 import { DoctorInput, DoctorLoginInput, DoctorsInquiry } from './dto/doctor.input';
-import { T } from '../../libs/types/common';
+import { StatisticModifier, T } from '../../libs/types/common';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberStatus } from '../member/enums/member.enum';
@@ -74,5 +74,25 @@ export class DoctorService {
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 		return result[0];
+	}
+
+	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
+		const { _id, targetKey, modifier } = input;
+
+		const allowedKeys = ['docPoints', 'docPatients'];
+
+		if (!allowedKeys.includes(targetKey)) {
+			throw new BadRequestException('Invalid doctor statistic key');
+		}
+
+		const result = await this.doctorModel
+			.findOneAndUpdate({ _id, memberStatus: MemberStatus.ACTIVE }, { $inc: { [targetKey]: modifier } }, { new: true })
+			.exec();
+
+		if (!result) {
+			throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		}
+
+		return result;
 	}
 }

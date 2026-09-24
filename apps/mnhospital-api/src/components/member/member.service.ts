@@ -8,7 +8,7 @@ import { MemberStatus, MemberType } from './enums/member.enum';
 import { Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberUpdate } from './dto/member.update';
-import { T } from '../../libs/types/common';
+import { StatisticModifier, T } from '../../libs/types/common';
 import { ViewService } from '../view/view.service';
 import { ViewInput } from '../view/dto/view.input';
 import { ViewGroup } from '../view/enums/view.enum';
@@ -105,5 +105,37 @@ export class MemberService {
 		}
 
 		return targetMember;
+	}
+
+	public async memberStatisticEditor(input: StatisticModifier): Promise<Member> {
+		const { _id, targetKey, modifier } = input;
+
+		const allowedKeys = [
+			'memberConversation',
+			'memberServices',
+			'memberArticles',
+			'memberFollowers',
+			'memberFollowings',
+			'memberLikes',
+			'memberViews',
+			'memberComments',
+			'memberPoints',
+			'memberRank',
+			'memberReports',
+		];
+
+		if (!allowedKeys.includes(targetKey)) {
+			throw new BadRequestException('Invalid statistic key');
+		}
+
+		const result = await this.memberModel
+			.findOneAndUpdate({ _id }, { $inc: { [targetKey]: modifier } }, { new: true })
+			.exec();
+
+		if (!result) {
+			throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		}
+
+		return result;
 	}
 }
