@@ -3,11 +3,16 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Direction, Message } from '../../libs/enums/common.enum';
-import { lookupAuthMemberLiked, lookupFollowerData, lookupFollowingData } from '../../libs/config';
+import {
+	lookupAuthMemberFollowed,
+	lookupAuthMemberLiked,
+	lookupFollowerData,
+	lookupFollowingData,
+} from '../../libs/config';
 import { T } from '../../libs/types/common';
 import { LikeGroup } from '../like/enums/like.enum';
 import { MemberService } from '../member/member.service';
-import { Follower, Followers, Following, Followings, MeFollowed } from './dto/follow';
+import { Follower, Followers, Following, Followings } from './dto/follow';
 import { FollowInquiry } from './dto/follow.input';
 
 @Injectable()
@@ -72,15 +77,6 @@ export class FollowService {
 		return result;
 	}
 
-	public async checkFollowExistence(followerId: ObjectId, followingId: ObjectId): Promise<MeFollowed[]> {
-		if (!followerId) return [];
-
-		const exist = await this.followModel.findOne({ followerId, followingId }).lean().exec();
-		if (!exist) return [];
-
-		return [{ followingId, followerId, myFollowing: true }];
-	}
-
 	public async getMemberFollowings(viewerId: ObjectId, input: FollowInquiry): Promise<Followings> {
 		const { page, limit, search } = input;
 		if (!search?.followerId) {
@@ -100,6 +96,14 @@ export class FollowService {
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
 							...(viewerId ? [lookupAuthMemberLiked(viewerId, '$followingId', LikeGroup.MEMBER)] : []),
+							...(viewerId
+								? [
+										lookupAuthMemberFollowed({
+											followerId: viewerId,
+											followingId: '$followingId',
+										}),
+									]
+								: []),
 							lookupFollowingData,
 							{ $unwind: '$followingData' },
 						],
@@ -109,15 +113,6 @@ export class FollowService {
 			])
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-
-		if (result[0].list?.length) {
-			result[0].list = await Promise.all(
-				result[0].list.map(async (following: Following) => {
-					following.meFollowed = await this.checkFollowExistence(viewerId, following.followingId);
-					return following;
-				}),
-			);
-		}
 
 		return result[0];
 	}
@@ -141,6 +136,14 @@ export class FollowService {
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
 							...(viewerId ? [lookupAuthMemberLiked(viewerId, '$followerId', LikeGroup.MEMBER)] : []),
+							...(viewerId
+								? [
+										lookupAuthMemberFollowed({
+											followerId: viewerId,
+											followingId: '$followerId',
+										}),
+									]
+								: []),
 							lookupFollowerData,
 							{ $unwind: '$followerData' },
 						],
@@ -150,15 +153,6 @@ export class FollowService {
 			])
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-
-		if (result[0].list?.length) {
-			result[0].list = await Promise.all(
-				result[0].list.map(async (follower: Follower) => {
-					follower.meFollowed = await this.checkFollowExistence(viewerId, follower.followerId);
-					return follower;
-				}),
-			);
-		}
 
 		return result[0];
 	}
