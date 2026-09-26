@@ -194,4 +194,22 @@ export class BookingService {
 		if (!result) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 		return result;
 	}
+
+	public async cancelBookingOrder(memberId: ObjectId, bookingOrderId: ObjectId): Promise<BookingOrder> {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const result = await this.bookingOrderModel
+			.findOneAndUpdate(
+				{
+					_id: bookingOrderId,
+					patientId,
+					bookingOrderStatus: { $in: [BookingOrderStatus.PENDING, BookingOrderStatus.CONFIRMED] },
+				},
+				{ $set: { bookingOrderStatus: BookingOrderStatus.CANCELLED, cancelledAt: new Date() } },
+				{ new: true },
+			)
+			.exec();
+
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		return result;
+	}
 }

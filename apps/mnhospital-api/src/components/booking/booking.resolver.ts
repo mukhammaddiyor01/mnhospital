@@ -90,4 +90,15 @@ export class BookingResolver {
 		console.log('Query: getMyBookingOrder');
 		return await this.bookingService.getMyBookingOrder(memberId, shapeIntoMongoObjectId(input));
 	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Mutation(() => BookingOrder)
+	public async cancelBookingOrder(
+		@Args('bookingOrderId') input: string,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<BookingOrder> {
+		console.log('Mutation: cancelBookingOrder');
+		return await this.bookingService.cancelBookingOrder(memberId, shapeIntoMongoObjectId(input));
+	}
 }
