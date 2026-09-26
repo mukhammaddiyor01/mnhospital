@@ -14,7 +14,7 @@ import { ViewModule } from '../view/view.module';
 		DoctorModule,
 		ViewModule,
 	],
-	exports: [MongooseModule],
+	exports: [MongooseModule, ArticleService],
 	providers: [ArticleService, ArticleResolver],
 })
 export class ArticleModule {}

@@ -6,7 +6,6 @@ import CommentSchema from './schema/Comment.model';
 import { AuthModule } from '../auth/auth.module';
 import { MemberModule } from '../member/member.module';
 import { ServiceModule } from '../service/service.module';
-import { DoctorModule } from '../doctor/doctor.module';
 import { ArticleModule } from '../article/article.module';
 
 @Module({
@@ -20,7 +19,6 @@ import { ArticleModule } from '../article/article.module';
 		AuthModule,
 		MemberModule,
 		ServiceModule,
-		DoctorModule,
 		ArticleModule,
 	],
 	exports: [MongooseModule, CommentService],

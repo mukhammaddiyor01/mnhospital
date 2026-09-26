@@ -21,7 +21,7 @@ import { DoctorModule } from '../doctor/doctor.module';
 		MemberModule,
 		DoctorModule,
 	],
-	exports: [MongooseModule],
+	exports: [MongooseModule, ServiceService],
 	providers: [ServiceService, ServiceResolver],
 })
 export class ServiceModule {}
