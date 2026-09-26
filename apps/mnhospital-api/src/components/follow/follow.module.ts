@@ -5,7 +5,7 @@ import { FollowResolver } from './follow.resolver';
 import FollowSchema from './schema/Follow.model';
 import { AuthModule } from '../auth/auth.module';
 import { MemberModule } from '../member/member.module';
-import { DoctorModule } from '../doctor/doctor.module';
+import { LikeModule } from '../like/like.module';
 
 @Module({
 	imports: [
@@ -17,7 +17,7 @@ import { DoctorModule } from '../doctor/doctor.module';
 		]),
 		AuthModule,
 		MemberModule,
-		DoctorModule,
+		LikeModule,
 	],
 	exports: [MongooseModule],
 	providers: [FollowService, FollowResolver],
