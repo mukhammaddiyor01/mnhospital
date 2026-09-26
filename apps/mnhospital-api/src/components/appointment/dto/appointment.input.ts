@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import { IsDate, IsInstance, IsNotEmpty, IsString } from 'class-validator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
+import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
 
 const toObjectId = ({ value }: { value: unknown }) =>
 	typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value;
@@ -57,4 +58,18 @@ export class AppointmentInput {
 	@IsDate()
 	@Field(() => Date)
 	endsAt: Date;
+}
+
+@InputType()
+export class AppointmentInquiry {
+	@IsNotEmpty()
+	@Field(() => Number, { defaultValue: 1 })
+	page: number = 1;
+
+	@IsNotEmpty()
+	@Field(() => Number, { defaultValue: 10 })
+	limit: number = 10;
+
+	@Field(() => AppointmentStatus, { nullable: true })
+	status?: AppointmentStatus;
 }

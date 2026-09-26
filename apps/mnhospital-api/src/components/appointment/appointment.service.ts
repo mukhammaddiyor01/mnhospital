@@ -3,8 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { v4 as uuidv4 } from 'uuid';
-import { Appointment } from './dto/appointment';
-import { AppointmentInput as AppointmentCreateInput } from './dto/appointment.input';
+import { Appointment, Appointments } from './dto/appointment';
+import { AppointmentInput as AppointmentCreateInput, AppointmentInquiry } from './dto/appointment.input';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { Message } from '../../libs/enums/common.enum';
 
@@ -49,5 +49,26 @@ export class AppointmentService {
 		appointment.cancelledAt = new Date();
 
 		return await appointment.save();
+	}
+
+	public async getMyAppointments(memberId: ObjectId, input: AppointmentInquiry): Promise<Appointments> {
+		const { page, limit, status } = input;
+		const match: Record<string, unknown> = { patientId: memberId };
+		if (status) match.appointmentStatus = status;
+
+		const result = await this.appointmentModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { startsAt: 1 } },
+				{
+					$facet: {
+						list: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		return result[0] ?? { list: [], metaCounter: [] };
 	}
 }

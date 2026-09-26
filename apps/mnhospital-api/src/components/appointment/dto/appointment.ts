@@ -2,6 +2,7 @@ import { Field, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
+import { TotalCounter } from '../../member/dto/member';
 
 @ObjectType()
 export class AppointmentStatusHistory {
@@ -82,4 +83,13 @@ export class Appointment {
 
 	@Field(() => Date)
 	updatedAt: Date;
+}
+
+@ObjectType()
+export class Appointments {
+	@Field(() => [Appointment])
+	list: Appointment[];
+
+	@Field(() => [TotalCounter], { nullable: true })
+	metaCounter: TotalCounter[];
 }
