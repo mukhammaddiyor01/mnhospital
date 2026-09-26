@@ -5,7 +5,6 @@ import ObjectId = Types.ObjectId;
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { lookupAuthMemberLiked, lookupFollowerData, lookupFollowingData } from '../../libs/config';
 import { T } from '../../libs/types/common';
-import { LikeService } from '../like/like.service';
 import { LikeGroup } from '../like/enums/like.enum';
 import { MemberService } from '../member/member.service';
 import { Follower, Followers, Following, Followings, MeFollowed } from './dto/follow';
@@ -16,7 +15,6 @@ export class FollowService {
 	constructor(
 		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
 		private readonly memberService: MemberService,
-		private readonly likeService: LikeService,
 	) {}
 
 	public async subscribe(followerId: ObjectId, followingId: ObjectId): Promise<Follower> {

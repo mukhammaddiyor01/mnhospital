@@ -5,7 +5,6 @@ import ObjectId = Types.ObjectId;
 import { Direction, Message } from '../../../libs/enums/common.enum';
 import { lookupAuthMemberLiked } from '../../../libs/config';
 import { T } from '../../../libs/types/common';
-import { LikeService } from '../../like/like.service';
 import { LikeGroup } from '../../like/enums/like.enum';
 import { MemberService } from '../../member/member.service';
 import { DoctorService } from '../doctor.service';
@@ -24,7 +23,6 @@ export class DoctorFollowService {
 		@InjectModel('DoctorFollow') private readonly doctorFollowModel: Model<DoctorFollower | DoctorFollowing>,
 		@Inject(forwardRef(() => DoctorService)) private readonly doctorService: DoctorService,
 		private readonly memberService: MemberService,
-		private readonly likeService: LikeService,
 	) {}
 
 	public async subscribeDoctor(memberId: ObjectId, doctorId: ObjectId): Promise<DoctorFollowing> {
