@@ -84,6 +84,64 @@ export class AdminService {
 		return result[0];
 	}
 
+	public async updateServiceByAdmin(input: ServiceUpdate): Promise<Service> {
+		const { serviceStatus } = input;
+		let deletedAt: Date | undefined;
+		const search: T = {
+			_id: input._id,
+			serviceStatus: { $ne: ServiceStatus.DELETED },
+		};
+
+		const currentService = await this.serviceModel.findOne(search).exec();
+		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		if (serviceStatus !== ServiceStatus.DELETED && input.serviceType && input.serviceType !== currentService.serviceType) {
+			const sameTypeServiceCount = await this.serviceModel
+				.countDocuments({
+					_id: { $ne: currentService._id },
+					memberId: currentService.memberId,
+					serviceType: input.serviceType,
+					serviceStatus: { $ne: ServiceStatus.DELETED },
+				})
+				.exec();
+
+			if (sameTypeServiceCount >= MAX_SERVICES_PER_TYPE) {
+				throw new BadRequestException(Message.SERVICE_TYPE_LIMIT_REACHED);
+			}
+		}
+
+		if (serviceStatus === ServiceStatus.DELETED) deletedAt = moment().toDate();
+
+		const updateData: T = { ...input };
+		delete updateData._id;
+		if (deletedAt) updateData.deletedAt = deletedAt;
+
+		const result = await this.serviceModel
+			.findOneAndUpdate(search, { $set: updateData }, { new: true, runValidators: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		if (serviceStatus === ServiceStatus.DELETED) {
+			try {
+				await this.doctorService.doctorStatisticEditor({
+					_id: currentService.memberId,
+					targetKey: 'docServices',
+					modifier: -1,
+				});
+			} catch (err) {
+				await this.serviceModel
+					.findByIdAndUpdate(currentService._id, {
+						$set: { serviceStatus: currentService.serviceStatus },
+						$unset: { deletedAt: 1 },
+					})
+					.exec();
+				throw err;
+			}
+		}
+
+		return result;
+	}
+
 	private shapeServiceMatchQuery(match: T, search: ServiceSearch): void {
 		const {
 			memberId,

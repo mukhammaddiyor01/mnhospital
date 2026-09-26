@@ -39,4 +39,13 @@ export class AdminResolver {
 		console.log('Mutation: getAllServicesByAdmin');
 		return await this.adminService.getAllServicesByAdmin(input);
 	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Service)
+	public async updateServiceByAdmin(@Args('input') input: ServiceUpdate): Promise<Service> {
+		console.log('Mutation: updateServiceByAdmin');
+		input._id = shapeIntoMongoObjectId(input._id);
+		return await this.adminService.updateServiceByAdmin(input);
+	}
 }
