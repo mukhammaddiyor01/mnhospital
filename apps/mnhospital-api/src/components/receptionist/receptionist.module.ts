@@ -4,13 +4,19 @@ import { ReceptionistService } from './receptionist.service';
 import { ReceptionistResolver } from './receptionist.resolver';
 import ReceptionistSchema from './schema/Receptionist.model';
 import ReceptionTaskSchema from './schema/ReceptionTask.model';
+import AppointmentSchema from '../../libs/schemas/Appointment.model';
+import MemberSchema from '../member/schema/Member.model';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
 	imports: [
 		MongooseModule.forFeature([
 			{ name: 'Receptionist', schema: ReceptionistSchema },
 			{ name: 'ReceptionTask', schema: ReceptionTaskSchema },
+			{ name: 'Appointment', schema: AppointmentSchema },
+			{ name: 'Member', schema: MemberSchema },
 		]),
+		AuthModule,
 	],
 	exports: [MongooseModule],
 	providers: [ReceptionistService, ReceptionistResolver],

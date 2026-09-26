@@ -21,7 +21,13 @@ const ReceptionTaskSchema = new Schema(
 		},
 		receptionistId: {
 			type: Schema.Types.ObjectId,
-			ref: 'Receptionist',
+			ref: 'Member',
+			index: true,
+		},
+		createdByMemberId: {
+			type: Schema.Types.ObjectId,
+			ref: 'Member',
+			required: true,
 		},
 		taskType: {
 			type: String,
