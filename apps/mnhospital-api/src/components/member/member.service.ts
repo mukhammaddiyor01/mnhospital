@@ -28,9 +28,10 @@ export class MemberService {
 	) {}
 
 	public async signup(input: MemberInput): Promise<Member> {
-		if (input.memberType === MemberType.DOCTOR) {
-			throw new BadRequestException(Message.DOCTOR_SIGNUP_REQUIRED);
+		if (input.memberType && input.memberType !== MemberType.PATIENT) {
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 		}
+		input.memberType = MemberType.PATIENT;
 		//TODO: Hash password
 		input.memberPassword = await this.authService.hashPassword(input.memberPassword);
 
@@ -70,13 +71,18 @@ export class MemberService {
 	// Authenticated
 
 	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {
+		const updateData: T = { ...input };
+		delete updateData._id;
+		delete updateData.memberType;
+		delete updateData.memberStatus;
+
 		const result: Member = await this.memberModel
 			.findOneAndUpdate(
 				{
 					_id: memberId,
 					memberStatus: MemberStatus.ACTIVE,
 				},
-				input,
+				updateData,
 				{ new: true },
 			)
 			.exec();
