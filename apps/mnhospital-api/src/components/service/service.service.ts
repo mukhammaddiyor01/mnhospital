@@ -14,7 +14,7 @@ import { ViewGroup } from '../view/enums/view.enum';
 import { ServiceUpdate } from './dto/service.update';
 import { DoctorService } from '../doctor/doctor.service';
 import moment = require('moment');
-import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
+import { lookupAuthMemberLiked, lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../like/dto/like.input';
 import { LikeGroup } from '../like/enums/like.enum';
@@ -195,6 +195,7 @@ export class ServiceService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
+							...(memberId ? [lookupAuthMemberLiked(memberId, '$_id', LikeGroup.SERVICE)] : []),
 							lookupDoctor,
 							{ $unwind: '$memberData' },
 						],
@@ -204,19 +205,6 @@ export class ServiceService {
 			])
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-
-		if (memberId && result[0].list?.length) {
-			result[0].list = await Promise.all(
-				result[0].list.map(async (service: Service) => {
-					service.meLiked = await this.likeService.checkLikeExistence({
-						memberId,
-						likeRefId: service._id,
-						likeGroup: LikeGroup.SERVICE,
-					});
-					return service;
-				}),
-			);
-		}
 
 		return result[0];
 	}
@@ -297,6 +285,7 @@ export class ServiceService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
+							lookupAuthMemberLiked(memberId, '$_id', LikeGroup.SERVICE),
 							lookupDoctor,
 							{ $unwind: '$memberData' },
 						],
@@ -306,19 +295,6 @@ export class ServiceService {
 			])
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-
-		if (memberId && result[0].list?.length) {
-			result[0].list = await Promise.all(
-				result[0].list.map(async (service: Service) => {
-					service.meLiked = await this.likeService.checkLikeExistence({
-						memberId,
-						likeRefId: service._id,
-						likeGroup: LikeGroup.SERVICE,
-					});
-					return service;
-				}),
-			);
-		}
 
 		return result[0];
 	}

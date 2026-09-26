@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Direction, Message } from '../../libs/enums/common.enum';
-import { lookupFollowerData, lookupFollowingData } from '../../libs/config';
+import { lookupAuthMemberLiked, lookupFollowerData, lookupFollowingData } from '../../libs/config';
 import { T } from '../../libs/types/common';
 import { LikeService } from '../like/like.service';
 import { LikeGroup } from '../like/enums/like.enum';
@@ -101,6 +101,7 @@ export class FollowService {
 						list: [
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
+							...(viewerId ? [lookupAuthMemberLiked(viewerId, '$followingId', LikeGroup.MEMBER)] : []),
 							lookupFollowingData,
 							{ $unwind: '$followingData' },
 						],
@@ -114,11 +115,6 @@ export class FollowService {
 		if (result[0].list?.length) {
 			result[0].list = await Promise.all(
 				result[0].list.map(async (following: Following) => {
-					following.meLiked = await this.likeService.checkLikeExistence({
-						memberId: viewerId,
-						likeRefId: following.followingId,
-						likeGroup: LikeGroup.MEMBER,
-					});
 					following.meFollowed = await this.checkFollowExistence(viewerId, following.followingId);
 					return following;
 				}),
@@ -146,6 +142,7 @@ export class FollowService {
 						list: [
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
+							...(viewerId ? [lookupAuthMemberLiked(viewerId, '$followerId', LikeGroup.MEMBER)] : []),
 							lookupFollowerData,
 							{ $unwind: '$followerData' },
 						],
@@ -159,11 +156,6 @@ export class FollowService {
 		if (result[0].list?.length) {
 			result[0].list = await Promise.all(
 				result[0].list.map(async (follower: Follower) => {
-					follower.meLiked = await this.likeService.checkLikeExistence({
-						memberId: viewerId,
-						likeRefId: follower.followerId,
-						likeGroup: LikeGroup.MEMBER,
-					});
 					follower.meFollowed = await this.checkFollowExistence(viewerId, follower.followerId);
 					return follower;
 				}),

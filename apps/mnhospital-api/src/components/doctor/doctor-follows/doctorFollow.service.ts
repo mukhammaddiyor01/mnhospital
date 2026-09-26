@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Direction, Message } from '../../../libs/enums/common.enum';
+import { lookupAuthMemberLiked } from '../../../libs/config';
 import { T } from '../../../libs/types/common';
 import { LikeService } from '../../like/like.service';
 import { LikeGroup } from '../../like/enums/like.enum';
@@ -92,6 +93,7 @@ export class DoctorFollowService {
 						list: [
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
+							...(viewerId ? [lookupAuthMemberLiked(viewerId, '$doctorId', LikeGroup.DOCTOR)] : []),
 							{
 								$lookup: {
 									from: 'doctors',
@@ -112,11 +114,6 @@ export class DoctorFollowService {
 		if (result[0].list?.length) {
 			result[0].list = await Promise.all(
 				result[0].list.map(async (following: DoctorFollowing) => {
-					following.meLiked = await this.likeService.checkLikeExistence({
-						memberId: viewerId,
-						likeRefId: following.doctorId,
-						likeGroup: LikeGroup.DOCTOR,
-					});
 					following.meFollowed = await this.checkDoctorFollowExistence(viewerId, following.doctorId);
 					return following;
 				}),
@@ -140,6 +137,7 @@ export class DoctorFollowService {
 						list: [
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
+							...(viewerId ? [lookupAuthMemberLiked(viewerId, '$memberId', LikeGroup.MEMBER)] : []),
 							{
 								$lookup: {
 									from: 'members',
@@ -160,11 +158,6 @@ export class DoctorFollowService {
 		if (result[0].list?.length) {
 			result[0].list = await Promise.all(
 				result[0].list.map(async (follower: DoctorFollower) => {
-					follower.meLiked = await this.likeService.checkLikeExistence({
-						memberId: viewerId,
-						likeRefId: follower.memberId,
-						likeGroup: LikeGroup.MEMBER,
-					});
 					follower.meFollowed = await this.checkDoctorFollowExistence(viewerId, follower.doctorId);
 					return follower;
 				}),

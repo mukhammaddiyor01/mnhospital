@@ -6,6 +6,7 @@ import { Doctor, Doctors } from './dto/doctor';
 import { DoctorInput, DoctorLoginInput, DoctorsInquiry } from './dto/doctor.input';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { Direction, Message } from '../../libs/enums/common.enum';
+import { lookupAuthMemberLiked } from '../../libs/config';
 import { AuthService } from '../auth/auth.service';
 import { MemberStatus } from '../member/enums/member.enum';
 import { LikeService } from '../like/like.service';
@@ -73,7 +74,11 @@ export class DoctorService {
 				{ $sort: sort },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [
+							{ $skip: (input.page - 1) * input.limit },
+							{ $limit: input.limit },
+							...(memberId ? [lookupAuthMemberLiked(memberId, '$_id', LikeGroup.DOCTOR)] : []),
+						],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
@@ -84,11 +89,6 @@ export class DoctorService {
 		if (memberId && result[0].list?.length) {
 			result[0].list = await Promise.all(
 				result[0].list.map(async (doctor: Doctor) => {
-					doctor.meLiked = await this.likeService.checkLikeExistence({
-						memberId,
-						likeRefId: doctor._id,
-						likeGroup: LikeGroup.DOCTOR,
-					});
 					doctor.meFollowed = await this.checkSubscription(memberId, doctor._id);
 					return doctor;
 				}),

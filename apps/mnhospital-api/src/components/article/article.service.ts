@@ -8,7 +8,7 @@ import { ArticleUpdate } from './dto/article.update';
 import { ArticleStatus } from './enums/article.enum';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
-import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
+import { lookupAuthMemberLiked, lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
 import { ViewGroup } from '../view/enums/view.enum';
 import { ViewService } from '../view/view.service';
 import { DoctorService } from '../doctor/doctor.service';
@@ -152,6 +152,7 @@ export class ArticleService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
+							...(memberId ? [lookupAuthMemberLiked(memberId, '$_id', LikeGroup.ARTICLE)] : []),
 							lookupDoctor,
 							{ $unwind: '$memberData' },
 						],
@@ -163,18 +164,6 @@ export class ArticleService {
 
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
-		if (memberId && result[0].list?.length) {
-			result[0].list = await Promise.all(
-				result[0].list.map(async (article: Article) => {
-					article.meLiked = await this.likeService.checkLikeExistence({
-						memberId,
-						likeRefId: article._id,
-						likeGroup: LikeGroup.ARTICLE,
-					});
-					return article;
-				}),
-			);
-		}
 		return result[0];
 	}
 
