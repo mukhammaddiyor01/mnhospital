@@ -10,7 +10,7 @@ import { shapeIntoMongoObjectId } from '../../libs/config';
 import { MemberType } from '../member/enums/member.enum';
 import { T } from '../../libs/types/common';
 import { Appointment, Appointments } from './dto/appointment';
-import { AppointmentInput, AppointmentInquiry, StaffAppointmentInquiry } from './dto/appointment.input';
+import { AppointmentInput, AppointmentInquiry, AppointmentStatusInput, StaffAppointmentInquiry } from './dto/appointment.input';
 import { AppointmentService } from './appointment.service';
 
 @Resolver()
@@ -60,5 +60,22 @@ export class AppointmentResolver {
 	): Promise<Appointments> {
 		console.log('Query: getAppointments');
 		return await this.appointmentService.getStaffAppointments(authMember._id, authMember.memberType, input);
+	}
+
+	@Roles(MemberType.DOCTOR, MemberType.RECEPTIONIST, MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Appointment)
+	public async updateAppointmentStatus(
+		@Args('input') input: AppointmentStatusInput,
+		@AuthMember() authMember: T,
+	): Promise<Appointment> {
+		console.log('Mutation: updateAppointmentStatus');
+		return await this.appointmentService.updateAppointmentStatus(
+			authMember._id,
+			authMember.memberType,
+			input.appointmentId,
+			input.appointmentStatus,
+			input.reason,
+		);
 	}
 }

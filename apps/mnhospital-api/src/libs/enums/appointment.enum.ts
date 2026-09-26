@@ -3,6 +3,8 @@ import { registerEnumType } from '@nestjs/graphql';
 export enum AppointmentStatus {
 	PENDING = 'PENDING',
 	CONFIRMED = 'CONFIRMED',
+	IN_PROGRESS = 'IN_PROGRESS',
+	ENDED = 'ENDED',
 	COMPLETED = 'COMPLETED',
 	CANCELLED = 'CANCELLED',
 	NO_SHOW = 'NO_SHOW',

@@ -88,3 +88,21 @@ export class StaffAppointmentInquiry extends AppointmentInquiry {
 	@Field(() => String, { nullable: true })
 	patientId?: ObjectId;
 }
+
+@InputType()
+export class AppointmentStatusInput {
+	@Transform(toObjectId)
+	@IsInstance(ObjectId)
+	@IsNotEmpty()
+	@Field(() => String)
+	appointmentId: ObjectId;
+
+	@IsNotEmpty()
+	@Field(() => AppointmentStatus)
+	appointmentStatus: AppointmentStatus;
+
+	@IsString()
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	reason?: string;
+}

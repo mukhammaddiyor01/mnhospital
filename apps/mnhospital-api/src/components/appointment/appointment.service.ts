@@ -98,4 +98,47 @@ export class AppointmentService {
 
 		return result[0] ?? { list: [], metaCounter: [] };
 	}
+
+	public async updateAppointmentStatus(
+		memberId: ObjectId,
+		memberType: MemberType,
+		appointmentId: ObjectId,
+		appointmentStatus: AppointmentStatus,
+		reason?: string,
+	): Promise<Appointment> {
+		const appointment = await this.appointmentModel.findById(appointmentId).exec();
+		if (!appointment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (memberType === MemberType.DOCTOR && appointment.doctorId.toString() !== memberId.toString()) {
+			throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		}
+
+		const allowedStatuses: Record<AppointmentStatus, AppointmentStatus[]> = {
+			[AppointmentStatus.PENDING]: [AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
+			[AppointmentStatus.CONFIRMED]: [AppointmentStatus.IN_PROGRESS, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
+			[AppointmentStatus.IN_PROGRESS]: [AppointmentStatus.ENDED, AppointmentStatus.COMPLETED],
+			[AppointmentStatus.ENDED]: [AppointmentStatus.COMPLETED],
+			[AppointmentStatus.COMPLETED]: [],
+			[AppointmentStatus.CANCELLED]: [],
+			[AppointmentStatus.NO_SHOW]: [],
+		};
+
+		if (!allowedStatuses[appointment.appointmentStatus].includes(appointmentStatus)) {
+			throw new BadRequestException(`Cannot change appointment status from ${appointment.appointmentStatus} to ${appointmentStatus}`);
+		}
+
+		appointment.statusHistory.push({
+			previousStatus: appointment.appointmentStatus,
+			newStatus: appointmentStatus,
+			changedByMemberId: memberId,
+			reason,
+			changedAt: new Date(),
+		} as any);
+		appointment.appointmentStatus = appointmentStatus;
+		if ([AppointmentStatus.ENDED, AppointmentStatus.COMPLETED].includes(appointmentStatus)) {
+			appointment.completedAt = new Date();
+		}
+
+		return await appointment.save();
+	}
 }
