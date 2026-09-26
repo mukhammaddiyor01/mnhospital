@@ -19,6 +19,7 @@ import { PaymentInput } from './dto/payment.input';
 import { PaymentInquiry } from './dto/payment.inquiry';
 import { PaymentStatus } from '../patient/enums/patient.enum';
 import { MemberType } from '../member/enums/member.enum';
+import { StaffBookingOrderInquiry } from './dto/staff-booking-order.input';
 
 @Injectable()
 export class BookingService {
@@ -346,5 +347,33 @@ export class BookingService {
 		const result = await this.paymentModel.findOne({ _id: paymentId, patientId }).exec();
 		if (!result) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 		return result;
+	}
+
+	public async getStaffBookingOrders(
+		memberType: MemberType,
+		input: StaffBookingOrderInquiry,
+	): Promise<BookingOrders> {
+		if (![MemberType.ADMIN, MemberType.RECEPTIONIST].includes(memberType)) {
+			throw new InternalServerErrorException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
+		}
+
+		const match: Record<string, unknown> = {};
+		if (input.status) match.bookingOrderStatus = input.status;
+		if (input.patientId) match.patientId = input.patientId;
+
+		const result = await this.bookingOrderModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		return result[0] ?? { list: [], metaCounter: [] };
 	}
 }
