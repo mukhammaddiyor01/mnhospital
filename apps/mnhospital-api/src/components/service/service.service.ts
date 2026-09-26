@@ -14,7 +14,7 @@ import { ViewGroup } from '../view/enums/view.enum';
 import { ServiceUpdate } from './dto/service.update';
 import { DoctorService } from '../doctor/doctor.service';
 import moment = require('moment');
-import { lookupMember, shapeIntoMongoObjectId } from '../../libs/config';
+import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
 
 @Injectable()
 export class ServiceService {
@@ -86,7 +86,7 @@ export class ServiceService {
 			//meLiked
 		}
 
-		targetService.memberData = await this.memberService.getMember(null, targetService.memberId);
+		targetService.memberData = await this.doctorService.getDoctor(targetService.memberId);
 		return targetService;
 	}
 
@@ -153,6 +153,7 @@ export class ServiceService {
 		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
 
 		this.shapeMatchQuery(match, input);
+		match.serviceStatus = ServiceStatus.ACTIVE;
 
 		const result = await this.serviceModel
 			.aggregate([
@@ -164,7 +165,7 @@ export class ServiceService {
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
 							// meLiked
-							lookupMember,
+					lookupDoctor,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -253,7 +254,7 @@ export class ServiceService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
-							lookupMember,
+							lookupDoctor,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
 import { Doctor, Doctors } from './dto/doctor';
 import { DoctorInput, DoctorLoginInput, DoctorsInquiry } from './dto/doctor.input';
 import { StatisticModifier, T } from '../../libs/types/common';
@@ -76,6 +77,20 @@ export class DoctorService {
 		return result[0];
 	}
 
+	public async getDoctor(targetId: ObjectId): Promise<Doctor> {
+		const doctor = await this.doctorModel
+			.findOne({
+				_id: targetId,
+				memberStatus: { $in: [MemberStatus.ACTIVE, MemberStatus.BLOCK] },
+				deletedAt: { $exists: false },
+			})
+			.lean()
+			.exec();
+
+		if (!doctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		return doctor;
+	}
+
 	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
 		const { _id, targetKey, modifier } = input;
 
@@ -85,8 +100,14 @@ export class DoctorService {
 			throw new BadRequestException('Invalid doctor statistic key');
 		}
 
+		const search: T = { _id };
+		if (targetKey !== 'docServices') search.memberStatus = MemberStatus.ACTIVE;
+
+		const update: T = { $inc: { [targetKey]: modifier } };
+		if (targetKey === 'docServices' && modifier < 0) update.$max = { docServices: 0 };
+
 		const result = await this.doctorModel
-			.findOneAndUpdate({ _id, memberStatus: MemberStatus.ACTIVE }, { $inc: { [targetKey]: modifier } }, { new: true })
+			.findOneAndUpdate(search, update, { new: true })
 			.exec();
 
 		if (!result) {

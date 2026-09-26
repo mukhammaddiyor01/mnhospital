@@ -7,6 +7,10 @@ import { AdminService } from './admin.service';
 import { Member, Members } from '../member/dto/member';
 import { MembersInquiry } from '../member/dto/member.input';
 import { MemberUpdate } from '../member/dto/member.update';
+import { Service, Services } from '../service/dto/service';
+import { ServicesInquiry } from '../service/dto/service.input';
+import { ServiceUpdate } from '../service/dto/service.update';
+import { shapeIntoMongoObjectId } from '../../libs/config';
 
 @Resolver()
 export class AdminResolver {
@@ -26,5 +30,13 @@ export class AdminResolver {
 	public async updateMemberByAdmin(@Args('input') input: MemberUpdate): Promise<Member> {
 		console.log('Mutation: updateMemberByAdmin');
 		return await this.adminService.updateMemberByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Services)
+	public async getAllServicesByAdmin(@Args('input') input: ServicesInquiry): Promise<Services> {
+		console.log('Mutation: getAllServicesByAdmin');
+		return await this.adminService.getAllServicesByAdmin(input);
 	}
 }

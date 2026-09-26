@@ -2,7 +2,8 @@ import { Field, Int, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { ServiceRoom, ServiceRoomName, ServiceStatus, ServiceType } from '../enums/service.enum';
-import { Member, TotalCounter } from '../../member/dto/member';
+import { TotalCounter } from '../../member/dto/member';
+import { Doctor } from '../../doctor/dto/doctor';
 
 @ObjectType()
 export class Service {
@@ -39,7 +40,7 @@ export class Service {
 	@Field(() => Int)
 	serviceLikes: number;
 
-	@Field(() => String)
+	@Field(() => Int)
 	serviceComments: number;
 
 	@Field(() => Int)
@@ -83,8 +84,8 @@ export class Service {
 
 	/** from AGGREGATION */
 
-	@Field(() => Member, { nullable: true })
-	memberData?: Member;
+	@Field(() => Doctor, { nullable: true })
+	memberData?: Doctor;
 }
 
 @ObjectType()

@@ -35,3 +35,12 @@ export const lookupMember = {
 		as: 'memberData',
 	},
 };
+
+export const lookupDoctor = {
+	$lookup: {
+		from: 'doctors',
+		localField: 'memberId',
+		foreignField: '_id',
+		as: 'memberData',
+	},
+};

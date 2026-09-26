@@ -87,6 +87,12 @@ const ServiceSchema = new Schema(
 		deletedAt: {
 			type: Date,
 		},
+		inactiveAt: {
+			type: Date,
+		},
+		unavailabeAt: {
+			type: Date,
+		},
 	},
 	{ timestamps: true, collection: 'services' },
 );
