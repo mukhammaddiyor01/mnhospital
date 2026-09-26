@@ -50,6 +50,24 @@ export const lookupDoctor = {
 	},
 };
 
+export const lookupFavoriteService = {
+	$lookup: {
+		from: 'services',
+		localField: 'likeRefId',
+		foreignField: '_id',
+		as: 'favoriteService',
+	},
+};
+
+export const lookupFavoriteServiceDoctor = {
+	$lookup: {
+		from: 'doctors',
+		localField: 'favoriteService.memberId',
+		foreignField: '_id',
+		as: 'favoriteService.memberData',
+	},
+};
+
 export const lookupFollowingData = {
 	$lookup: {
 		from: 'members',

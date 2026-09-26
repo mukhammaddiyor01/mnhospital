@@ -6,7 +6,7 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Service, Services } from './dto/service';
 import { MemberService } from '../member/member.service';
-import { DoctorServicesInquiry, ServiceInput, ServicesInquiry } from './dto/service.input';
+import { DoctorServicesInquiry, OrdinaryInquiry, ServiceInput, ServicesInquiry } from './dto/service.input';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { MAX_SERVICES_PER_TYPE, ServiceStatus } from './enums/service.enum';
@@ -119,6 +119,10 @@ export class ServiceService {
 
 		targetService.memberData = await this.doctorService.getDoctor(targetService.memberId, memberId);
 		return targetService;
+	}
+
+	public async getFavorites(memberId: ObjectId, input: OrdinaryInquiry): Promise<Services> {
+		return await this.likeService.getFavoriteServices(memberId, input);
 	}
 
 	public async serviceStatsEditor(input: StatisticModifier): Promise<Service> {

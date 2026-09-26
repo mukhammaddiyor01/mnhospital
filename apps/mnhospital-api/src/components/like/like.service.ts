@@ -6,6 +6,10 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Message } from '../../libs/enums/common.enum';
 import { T } from '../../libs/types/common';
+import { LikeGroup } from './enums/like.enum';
+import { Services } from '../service/dto/service';
+import { OrdinaryInquiry } from '../service/dto/service.input';
+import { lookupFavoriteService, lookupFavoriteServiceDoctor } from '../../libs/config';
 
 @Injectable()
 export class LikeService {
@@ -58,5 +62,42 @@ export class LikeService {
 				myFavorite: true,
 			},
 		];
+	}
+
+	public async getFavoriteServices(memberId: ObjectId, input: OrdinaryInquiry): Promise<Services> {
+		const { page, limit } = input;
+		const match: T = { likeGroup: LikeGroup.SERVICE, memberId };
+
+		const data: T[] = await this.likeModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { updatedAt: -1 } },
+				lookupFavoriteService,
+				{ $unwind: '$favoriteService' },
+				{
+					$facet: {
+						list: [
+							{ $skip: (page - 1) * limit },
+							{ $limit: limit },
+							lookupFavoriteServiceDoctor,
+							{
+								$unwind: {
+									path: '$favoriteService.memberData',
+									preserveNullAndEmptyArrays: true,
+								},
+							},
+						],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		const result: Services = {
+			list: data[0]?.list?.map((item: T) => item.favoriteService) ?? [],
+			metaCounter: data[0]?.metaCounter ?? [],
+		};
+
+		return result;
 	}
 }

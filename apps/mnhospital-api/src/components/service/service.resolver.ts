@@ -5,7 +5,7 @@ import { MemberType } from '../member/enums/member.enum';
 import { UseGuards } from '@nestjs/common';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Service, Services } from './dto/service';
-import { DoctorServicesInquiry, ServiceInput, ServicesInquiry } from './dto/service.input';
+import { DoctorServicesInquiry, OrdinaryInquiry, ServiceInput, ServicesInquiry } from './dto/service.input';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -47,6 +47,16 @@ export class ServiceResolver {
 		console.log('Query: getService');
 		const serviceId = shapeIntoMongoObjectId(input);
 		return await this.serviceService.getService(memberId, serviceId);
+	}
+
+	@UseGuards(AuthGuard)
+	@Query(() => Services)
+	public async getFavorites(
+		@Args('input') input: OrdinaryInquiry,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Services> {
+		console.log('Query: getFavorites');
+		return await this.serviceService.getFavorites(memberId, input);
 	}
 
 	@Roles(MemberType.DOCTOR)
