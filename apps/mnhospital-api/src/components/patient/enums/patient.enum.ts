@@ -36,6 +36,7 @@ export enum BookingOrderStatus {
 registerEnumType(BookingOrderStatus, { name: 'BookingOrderStatus' });
 
 export enum PaymentProvider {
+	EXIMBAY = 'EXIMBAY',
 	STRIPE = 'STRIPE',
 	PAYME = 'PAYME',
 	CLICK = 'CLICK',

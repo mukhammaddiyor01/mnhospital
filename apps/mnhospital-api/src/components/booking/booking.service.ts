@@ -20,6 +20,8 @@ import { PaymentInquiry } from './dto/payment.inquiry';
 import { PaymentStatus } from '../patient/enums/patient.enum';
 import { MemberType } from '../member/enums/member.enum';
 import { StaffBookingOrderInquiry } from './dto/staff-booking-order.input';
+import { EximbayService } from './eximbay.service';
+import { Member } from '../member/dto/member';
 
 @Injectable()
 export class BookingService {
@@ -29,7 +31,9 @@ export class BookingService {
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		@InjectModel('BookingOrder') private readonly bookingOrderModel: Model<BookingOrder>,
 		@InjectModel('Payment') private readonly paymentModel: Model<Payment>,
+		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		private readonly patientService: PatientService,
+		private readonly eximbayService: EximbayService,
 	) {}
 
 	public async createCart(memberId: ObjectId, input: CartInput): Promise<Cart> {
@@ -347,6 +351,29 @@ export class BookingService {
 		const result = await this.paymentModel.findOne({ _id: paymentId, patientId }).exec();
 		if (!result) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 		return result;
+	}
+
+	public async prepareEximbayPayment(memberId: ObjectId, paymentId: ObjectId) {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const payment = await this.paymentModel.findOne({ _id: paymentId, patientId }).lean().exec();
+		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (payment.paymentProvider !== 'EXIMBAY') throw new BadRequestException('Payment provider must be EXIMBAY');
+		if (payment.paymentStatus !== PaymentStatus.PENDING) throw new BadRequestException('Payment is no longer pending');
+
+		const order = await this.bookingOrderModel.findOne({ _id: payment.bookingOrderId, patientId }).lean().exec();
+		if (!order || order.bookingOrderStatus === BookingOrderStatus.CANCELLED) {
+			throw new BadRequestException('Booking order is not available for payment');
+		}
+
+		const member = await this.memberModel.findById(memberId).select('memberFullName memberMail').lean().exec();
+		return await this.eximbayService.prepare({
+			paymentId: payment._id.toString(),
+			providerPaymentId: payment.providerPaymentId,
+			currency: payment.paymentCurrency,
+			amount: payment.paymentAmount,
+			buyerName: member?.memberFullName,
+			buyerEmail: member?.memberMail,
+		});
 	}
 
 	public async getStaffBookingOrders(

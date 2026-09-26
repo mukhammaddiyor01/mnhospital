@@ -22,6 +22,8 @@ import { T } from '../../libs/types/common';
 import { Payments } from './dto/payment';
 import { PaymentInquiry } from './dto/payment.inquiry';
 import { StaffBookingOrderInquiry } from './dto/staff-booking-order.input';
+import { EximbayPrepareInput } from './dto/eximbay.prepare.input';
+import { EximbayPrepare } from './dto/eximbay.prepare';
 
 @Resolver()
 export class BookingResolver {
@@ -156,6 +158,17 @@ export class BookingResolver {
 	): Promise<Payment> {
 		console.log('Query: getMyPayment');
 		return await this.bookingService.getMyPayment(memberId, shapeIntoMongoObjectId(input));
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Mutation(() => EximbayPrepare)
+	public async prepareEximbayPayment(
+		@Args('input') input: EximbayPrepareInput,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<EximbayPrepare> {
+		console.log('Mutation: prepareEximbayPayment');
+		return await this.bookingService.prepareEximbayPayment(memberId, input.paymentId);
 	}
 
 	@Roles(MemberType.RECEPTIONIST, MemberType.ADMIN)

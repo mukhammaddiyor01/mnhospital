@@ -21,6 +21,9 @@ export class Payment {
 	@Field(() => String)
 	providerPaymentId: string;
 
+	@Field(() => String, { nullable: true })
+	gatewayTransactionId?: string;
+
 	@Field(() => String)
 	bookingOrderId: ObjectId;
 

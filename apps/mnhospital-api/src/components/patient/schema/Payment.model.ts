@@ -24,6 +24,10 @@ const PaymentSchema = new Schema(
 			required: true,
 			unique: true,
 		},
+		gatewayTransactionId: {
+			type: String,
+			index: true,
+		},
 		bookingOrderId: {
 			type: Schema.Types.ObjectId,
 			ref: 'BookingOrder',
