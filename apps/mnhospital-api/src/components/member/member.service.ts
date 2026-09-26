@@ -15,11 +15,13 @@ import { ViewGroup } from '../view/enums/view.enum';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../like/dto/like.input';
 import { LikeGroup } from '../like/enums/like.enum';
+import { Follower, Following, MeFollowed } from '../follow/dto/follow';
 
 @Injectable()
 export class MemberService {
 	constructor(
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
 		private authService: AuthService,
 		private viewService: ViewService,
 		private likeService: LikeService,
@@ -113,9 +115,15 @@ export class MemberService {
 				likeGroup: LikeGroup.MEMBER,
 			};
 			targetMember.meLiked = await this.likeService.checkLikeExistence(likeInput);
+			targetMember.meFollowed = await this.checkSubscription(memberId, targetId);
 		}
 
 		return targetMember;
+	}
+
+	public async checkSubscription(followerId: ObjectId, followingId: ObjectId): Promise<MeFollowed[]> {
+		const result = await this.followModel.findOne({ followingId: followingId, followerId: followerId }).exec();
+		return result ? [{ followerId: followerId, followingId: followingId, myFollowing: true }] : [];
 	}
 
 	public async memberStatisticEditor(input: StatisticModifier): Promise<Member> {

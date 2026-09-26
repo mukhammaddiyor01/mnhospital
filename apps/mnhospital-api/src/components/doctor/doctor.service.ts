@@ -11,11 +11,13 @@ import { MemberStatus } from '../member/enums/member.enum';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../like/dto/like.input';
 import { LikeGroup } from '../like/enums/like.enum';
+import { Follower, Following, MeFollowed } from '../follow/dto/follow';
 
 @Injectable()
 export class DoctorService {
 	constructor(
 		@InjectModel('Doctor') private readonly doctorModel: Model<Doctor>,
+		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
 		private readonly authService: AuthService,
 		private readonly likeService: LikeService,
 	) {}
@@ -87,6 +89,7 @@ export class DoctorService {
 						likeRefId: doctor._id,
 						likeGroup: LikeGroup.DOCTOR,
 					});
+					doctor.meFollowed = await this.checkSubscription(memberId, doctor._id);
 					return doctor;
 				}),
 			);
@@ -112,8 +115,14 @@ export class DoctorService {
 				likeRefId: targetId,
 				likeGroup: LikeGroup.DOCTOR,
 			});
+			doctor.meFollowed = await this.checkSubscription(memberId, targetId);
 		}
 		return doctor;
+	}
+
+	public async checkSubscription(followerId: ObjectId, followingId: ObjectId): Promise<MeFollowed[]> {
+		const result = await this.followModel.findOne({ followingId: followingId, followerId: followerId }).exec();
+		return result ? [{ followerId: followerId, followingId: followingId, myFollowing: true }] : [];
 	}
 
 	public async likeTargetDoctor(memberId: ObjectId, doctorId: ObjectId): Promise<Doctor> {

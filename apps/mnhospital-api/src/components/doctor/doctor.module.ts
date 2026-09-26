@@ -15,6 +15,7 @@ import { DoctorService } from './doctor.service';
 import DoctorSchema from './schema/Doctor.model';
 import { AuthModule } from '../auth/auth.module';
 import { LikeModule } from '../like/like.module';
+import FollowSchema from '../follow/schema/Follow.model';
 
 @Module({
 	imports: [
@@ -22,6 +23,13 @@ import { LikeModule } from '../like/like.module';
 			{ name: 'Doctor', schema: DoctorSchema },
 			{ name: 'Department', schema: DepartmentSchema },
 			{ name: 'DoctorReport', schema: DoctorReportSchema },
+		]),
+
+		MongooseModule.forFeature([
+			{
+				name: 'Follow',
+				schema: FollowSchema,
+			},
 		]),
 		DoctorCommentsModule,
 		forwardRef(() => DoctorFollowsModule),

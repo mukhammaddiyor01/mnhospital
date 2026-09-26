@@ -4,6 +4,7 @@ import ObjectId = Types.ObjectId;
 import { DoctorSpecialty } from '../enums/doctor.enum';
 import { MemberAuthType, MemberStatus, MemberType } from '../../member/enums/member.enum';
 import { MeLiked } from '../../like/dto/like';
+import { MeFollowed } from '../../follow/dto/follow';
 
 @ObjectType()
 export class Doctor {
@@ -36,6 +37,9 @@ export class Doctor {
 
 	@Field(() => [MeLiked], { nullable: true })
 	meLiked?: MeLiked[];
+
+	@Field(() => [MeFollowed], { nullable: true })
+	meFollowed?: MeFollowed[];
 
 	@Field(() => String, { nullable: true })
 	departmentId?: ObjectId;

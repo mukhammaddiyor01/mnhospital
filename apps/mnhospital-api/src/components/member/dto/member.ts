@@ -3,6 +3,7 @@ import { MemberAuthType, MemberStatus, MemberType } from '../enums/member.enum';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { MeLiked } from '../../like/dto/like';
+import { MeFollowed } from '../../follow/dto/follow';
 
 @ObjectType()
 export class Member {
@@ -70,6 +71,9 @@ export class Member {
 
 	@Field(() => [MeLiked], { nullable: true })
 	meLiked?: MeLiked[];
+
+	@Field(() => [MeFollowed], { nullable: true })
+	meFollowed?: MeFollowed[];
 
 	@Field(() => Int)
 	memberPoints: number;

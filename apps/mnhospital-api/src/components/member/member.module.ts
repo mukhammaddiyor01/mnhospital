@@ -9,6 +9,7 @@ import RefreshTokenSchema from './schema/RefreshToken.model';
 import { AuthModule } from '../auth/auth.module';
 import { ViewModule } from '../view/view.module';
 import { LikeModule } from '../like/like.module';
+import FollowSchema from '../follow/schema/Follow.model';
 
 @Module({
 	imports: [
@@ -17,6 +18,12 @@ import { LikeModule } from '../like/like.module';
 			{ name: 'RefreshToken', schema: RefreshTokenSchema },
 			{ name: 'Conversation', schema: ConversationSchema },
 			{ name: 'Message', schema: MessageSchema },
+		]),
+		MongooseModule.forFeature([
+			{
+				name: 'Follow',
+				schema: FollowSchema,
+			},
 		]),
 		AuthModule,
 		ViewModule,
