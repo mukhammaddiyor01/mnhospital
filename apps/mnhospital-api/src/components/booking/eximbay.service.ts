@@ -40,7 +40,7 @@ export class EximbayService {
 	}
 
 	public getClientUrl(): string {
-		return this.getConfig().clientUrl;
+		return (this.configService.get<string>('CLIENT_URL') ?? 'http://localhost:3000').replace(/\/$/, '');
 	}
 
 	public async prepare(input: {

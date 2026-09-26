@@ -17,7 +17,7 @@ import { ServiceStatus } from '../service/enums/service.enum';
 import { Payment, Payments } from './dto/payment';
 import { PaymentInput } from './dto/payment.input';
 import { PaymentInquiry } from './dto/payment.inquiry';
-import { PaymentStatus } from '../patient/enums/patient.enum';
+import { PaymentProvider, PaymentStatus } from '../patient/enums/patient.enum';
 import { MemberType } from '../member/enums/member.enum';
 import { StaffBookingOrderInquiry } from './dto/staff-booking-order.input';
 import { EximbayService } from './eximbay.service';
@@ -334,7 +334,7 @@ export class BookingService {
 	public async verifyEximbayPayment(paymentId: ObjectId, rawData: string): Promise<{ firstTime: boolean }> {
 		const payment = await this.paymentModel.findById(paymentId).lean().exec();
 		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-		if (payment.paymentProvider !== 'EXIMBAY') throw new BadRequestException('Payment provider must be EXIMBAY');
+		if (payment.paymentProvider !== PaymentProvider.EXIMBAY) throw new BadRequestException('Payment provider must be EXIMBAY');
 
 		const transactionId = new URLSearchParams(rawData).get('transaction_id');
 		if (!transactionId) throw new BadRequestException('Eximbay transaction_id is missing');
@@ -401,7 +401,7 @@ export class BookingService {
 		const patientId = await this.patientService.resolveProfileId(memberId);
 		const payment = await this.paymentModel.findOne({ _id: paymentId, patientId }).lean().exec();
 		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-		if (payment.paymentProvider !== 'EXIMBAY') throw new BadRequestException('Payment provider must be EXIMBAY');
+		if (payment.paymentProvider !== PaymentProvider.EXIMBAY) throw new BadRequestException('Payment provider must be EXIMBAY');
 		if (payment.paymentStatus !== PaymentStatus.PENDING) throw new BadRequestException('Payment is no longer pending');
 
 		const order = await this.bookingOrderModel.findOne({ _id: payment.bookingOrderId, patientId }).lean().exec();
