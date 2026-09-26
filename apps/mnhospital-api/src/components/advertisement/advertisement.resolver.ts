@@ -9,6 +9,7 @@ import { WithoutGuard } from '../auth/guards/without.guard';
 import { MemberType } from '../member/enums/member.enum';
 import { Advertisement, Advertisements } from './dto/advertisement';
 import { AdvertisementInput, AdvertisementsInquiry } from './dto/advertisement.input';
+import { AdvertisementUpdate } from './dto/advertisement.update';
 import { AdvertisementService } from './advertisement.service';
 
 @Resolver()
@@ -31,5 +32,13 @@ export class AdvertisementResolver {
 	public async getAdvertisements(@Args('input') input: AdvertisementsInquiry): Promise<Advertisements> {
 		console.log('Query: getAdvertisements');
 		return await this.advertisementService.getAdvertisements(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Advertisement)
+	public async updateAdvertisement(@Args('input') input: AdvertisementUpdate): Promise<Advertisement> {
+		console.log('Mutation: updateAdvertisement');
+		return await this.advertisementService.updateAdvertisement(input);
 	}
 }

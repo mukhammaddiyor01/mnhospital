@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Advertisement, Advertisements } from './dto/advertisement';
 import { AdvertisementInput, AdvertisementsInquiry } from './dto/advertisement.input';
+import { AdvertisementUpdate } from './dto/advertisement.update';
 import { AdvertisementStatus } from './enums/advertisement.enum';
 import { Message } from '../../libs/enums/common.enum';
 
@@ -40,5 +41,25 @@ export class AdvertisementService {
 
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 		return result[0];
+	}
+
+	public async updateAdvertisement(input: AdvertisementUpdate): Promise<Advertisement> {
+		if (input.advertisementStatus === AdvertisementStatus.ARCHIVED) {
+			throw new BadRequestException('Use removeAdvertisement to archive an advertisement');
+		}
+
+		const updateData = { ...input } as Record<string, unknown>;
+		delete updateData._id;
+
+		const result = await this.advertisementModel
+			.findOneAndUpdate(
+				{ _id: input._id, advertisementStatus: { $ne: AdvertisementStatus.ARCHIVED } },
+				{ $set: updateData },
+				{ new: true, runValidators: true },
+			)
+			.exec();
+
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		return result;
 	}
 }
