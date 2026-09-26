@@ -97,4 +97,25 @@ export class BookingService {
 
 		return item;
 	}
+
+	public async removeCartItem(memberId: ObjectId, cartItemId: ObjectId): Promise<CartItem> {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const cart = await this.cartModel.findOne({ patientId, cartStatus: CartStatus.ACTIVE }).exec();
+		if (!cart) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const item = await this.cartItemModel.findOne({ _id: cartItemId, cartId: cart._id }).exec();
+		if (!item) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		await this.cartItemModel.deleteOne({ _id: item._id, cartId: cart._id }).exec();
+		await this.cartModel
+			.findByIdAndUpdate(cart._id, {
+				$inc: {
+					subtotalAmount: -item.servicePrice,
+					totalAmount: -item.servicePrice,
+				},
+			})
+			.exec();
+
+		return item;
+	}
 }

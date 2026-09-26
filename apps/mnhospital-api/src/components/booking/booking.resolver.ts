@@ -10,6 +10,7 @@ import { Cart } from './dto/cart';
 import { CartInput } from './dto/cart.input';
 import { CartItemInput } from './dto/cart.item.input';
 import { CartItem } from './dto/cart';
+import { shapeIntoMongoObjectId } from '../../libs/config';
 import { BookingService } from './booking.service';
 
 @Resolver()
@@ -44,5 +45,16 @@ export class BookingResolver {
 	): Promise<CartItem> {
 		console.log('Mutation: addCartItem');
 		return await this.bookingService.addCartItem(memberId, input);
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Mutation(() => CartItem)
+	public async removeCartItem(
+		@Args('cartItemId') input: string,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<CartItem> {
+		console.log('Mutation: removeCartItem');
+		return await this.bookingService.removeCartItem(memberId, shapeIntoMongoObjectId(input));
 	}
 }
