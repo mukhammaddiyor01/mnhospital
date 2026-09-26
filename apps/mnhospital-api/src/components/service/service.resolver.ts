@@ -59,6 +59,16 @@ export class ServiceResolver {
 		return await this.serviceService.getFavorites(memberId, input);
 	}
 
+	@UseGuards(AuthGuard)
+	@Query(() => Services)
+	public async getVisited(
+		@Args('input') input: OrdinaryInquiry,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Services> {
+		console.log('Query: getVisited');
+		return await this.serviceService.getVisited(memberId, input);
+	}
+
 	@Roles(MemberType.DOCTOR)
 	@UseGuards(RolesGuard)
 	@Mutation((returns) => Service)

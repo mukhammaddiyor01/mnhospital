@@ -68,6 +68,24 @@ export const lookupFavoriteServiceDoctor = {
 	},
 };
 
+export const lookupVisitedService = {
+	$lookup: {
+		from: 'services',
+		localField: 'viewRefId',
+		foreignField: '_id',
+		as: 'visitedService',
+	},
+};
+
+export const lookupVisitedServiceDoctor = {
+	$lookup: {
+		from: 'doctors',
+		localField: 'visitedService.memberId',
+		foreignField: '_id',
+		as: 'visitedService.memberData',
+	},
+};
+
 export const lookupFollowingData = {
 	$lookup: {
 		from: 'members',

@@ -125,6 +125,10 @@ export class ServiceService {
 		return await this.likeService.getFavoriteServices(memberId, input);
 	}
 
+	public async getVisited(memberId: ObjectId, input: OrdinaryInquiry): Promise<Services> {
+		return await this.viewService.getVisitedServices(memberId, input);
+	}
+
 	public async serviceStatsEditor(input: StatisticModifier): Promise<Service> {
 		const { _id, targetKey, modifier } = input;
 		return await this.serviceModel.findByIdAndUpdate(_id, { $inc: { [targetKey]: modifier } }, { new: true }).exec();
