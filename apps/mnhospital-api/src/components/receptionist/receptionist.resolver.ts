@@ -10,10 +10,75 @@ import { MemberType } from '../member/enums/member.enum';
 import { ReceptionTask, ReceptionTasks } from './dto/reception-task';
 import { ReceptionTaskInput, ReceptionTaskInquiry, ReceptionTaskStatusInput } from './dto/reception-task.input';
 import { ReceptionistService } from './receptionist.service';
+import { Receptionist, Receptionists } from './dto/receptionist';
+import {
+	ReceptionistAdminUpdateInput,
+	ReceptionistInput,
+	ReceptionistInquiry,
+	ReceptionistLoginInput,
+	ReceptionistProfileUpdateInput,
+} from './dto/receptionist.input';
 
 @Resolver()
 export class ReceptionistResolver {
 	constructor(private readonly receptionistService: ReceptionistService) {}
+
+	@Mutation(() => Receptionist)
+	public async loginReceptionist(@Args('input') input: ReceptionistLoginInput): Promise<Receptionist> {
+		console.log('Mutation: loginReceptionist');
+		return await this.receptionistService.loginReceptionist(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Receptionist)
+	public async createReceptionist(@Args('input') input: ReceptionistInput): Promise<Receptionist> {
+		console.log('Mutation: createReceptionist');
+		return await this.receptionistService.createReceptionist(input);
+	}
+
+	@Roles(MemberType.RECEPTIONIST)
+	@UseGuards(RolesGuard)
+	@Query(() => Receptionist)
+	public async getMyReceptionistProfile(@AuthMember('_id') receptionistId: ObjectId): Promise<Receptionist> {
+		console.log('Query: getMyReceptionistProfile');
+		return await this.receptionistService.getMyProfile(receptionistId);
+	}
+
+	@Roles(MemberType.RECEPTIONIST)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Receptionist)
+	public async updateMyReceptionistProfile(
+		@Args('input') input: ReceptionistProfileUpdateInput,
+		@AuthMember('_id') receptionistId: ObjectId,
+	): Promise<Receptionist> {
+		console.log('Mutation: updateMyReceptionistProfile');
+		return await this.receptionistService.updateMyProfile(receptionistId, input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Receptionists)
+	public async getReceptionists(@Args('input') input: ReceptionistInquiry): Promise<Receptionists> {
+		console.log('Query: getReceptionists');
+		return await this.receptionistService.getReceptionists(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Receptionist)
+	public async updateReceptionistByAdmin(@Args('input') input: ReceptionistAdminUpdateInput): Promise<Receptionist> {
+		console.log('Mutation: updateReceptionistByAdmin');
+		return await this.receptionistService.updateByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Receptionist)
+	public async removeReceptionistByAdmin(@Args('receptionistId') receptionistId: string): Promise<Receptionist> {
+		console.log('Mutation: removeReceptionistByAdmin');
+		return await this.receptionistService.removeByAdmin(shapeIntoMongoObjectId(receptionistId));
+	}
 
 	@Roles(MemberType.RECEPTIONIST, MemberType.ADMIN)
 	@UseGuards(RolesGuard)

@@ -4,8 +4,16 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Appointment } from '../appointment/dto/appointment';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
-import { Member } from '../member/dto/member';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
+import { AuthService } from '../auth/auth.service';
+import { Receptionist, Receptionists } from './dto/receptionist';
+import {
+	ReceptionistAdminUpdateInput,
+	ReceptionistInput,
+	ReceptionistInquiry,
+	ReceptionistLoginInput,
+	ReceptionistProfileUpdateInput,
+} from './dto/receptionist.input';
 import { ReceptionTask, ReceptionTasks } from './dto/reception-task';
 import { ReceptionTaskInput, ReceptionTaskInquiry, ReceptionTaskStatusInput } from './dto/reception-task.input';
 import { ReceptionTaskStatus } from './enums/receptionist.enum';
@@ -15,8 +23,106 @@ export class ReceptionistService {
 	constructor(
 		@InjectModel('ReceptionTask') private readonly receptionTaskModel: Model<ReceptionTask>,
 		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
-		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		@InjectModel('Receptionist') private readonly receptionistModel: Model<Receptionist>,
+		private readonly authService: AuthService,
 	) {}
+
+	public async createReceptionist(input: ReceptionistInput): Promise<Receptionist> {
+		const password = await this.authService.hashPassword(input.receptionistPassword);
+		try {
+			return await this.receptionistModel.create({
+				...input,
+				receptionistPassword: password,
+				memberType: MemberType.RECEPTIONIST,
+				memberStatus: MemberStatus.ACTIVE,
+			});
+		} catch (error) {
+			throw new BadRequestException('Receptionist nick, phone, or mail is already used');
+		}
+	}
+
+	public async loginReceptionist(input: ReceptionistLoginInput): Promise<Receptionist> {
+		const receptionist = await this.receptionistModel
+			.findOne({ receptionistNick: input.receptionistNick })
+			.select('+receptionistPassword')
+			.exec();
+		if (!receptionist || receptionist.memberStatus === MemberStatus.DELETE) {
+			throw new InternalServerErrorException('Receptionist was not found');
+		}
+		if (receptionist.memberStatus === MemberStatus.BLOCK) {
+			throw new InternalServerErrorException('Receptionist is blocked');
+		}
+
+		const isMatch = await this.authService.comparePassword(input.receptionistPassword, receptionist.receptionistPassword);
+		if (!isMatch) throw new InternalServerErrorException('Wrong receptionist password');
+		receptionist.accessToken = await this.authService.createToken(receptionist);
+		return receptionist;
+	}
+
+	public async getMyProfile(receptionistId: ObjectId): Promise<Receptionist> {
+		const result = await this.receptionistModel
+			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
+			.exec();
+		if (!result) throw new InternalServerErrorException('Receptionist was not found');
+		return result;
+	}
+
+	public async updateMyProfile(receptionistId: ObjectId, input: ReceptionistProfileUpdateInput): Promise<Receptionist> {
+		const result = await this.receptionistModel
+			.findOneAndUpdate(
+				{ _id: receptionistId, memberType: MemberType.RECEPTIONIST, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } },
+				{ $set: input },
+				{ new: true, runValidators: true },
+			)
+			.exec();
+		if (!result) throw new InternalServerErrorException('Receptionist profile update failed');
+		result.accessToken = await this.authService.createToken(result);
+		return result;
+	}
+
+	public async getReceptionists(input: ReceptionistInquiry): Promise<Receptionists> {
+		const match: Record<string, unknown> = { memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } };
+		if (input.memberStatus) match.memberStatus = input.memberStatus;
+		const result = await this.receptionistModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async updateByAdmin(input: ReceptionistAdminUpdateInput): Promise<Receptionist> {
+		const updateData: Record<string, unknown> = { ...input };
+		delete updateData._id;
+		const result = await this.receptionistModel
+			.findOneAndUpdate(
+				{ _id: input._id, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } },
+				{ $set: updateData },
+				{ new: true, runValidators: true },
+			)
+			.exec();
+		if (!result) throw new InternalServerErrorException('Receptionist update failed');
+		return result;
+	}
+
+	public async removeByAdmin(receptionistId: ObjectId): Promise<Receptionist> {
+		const result = await this.receptionistModel
+			.findOneAndUpdate(
+				{ _id: receptionistId, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } },
+				{ $set: { memberStatus: MemberStatus.DELETE, deletedAt: new Date() } },
+				{ new: true },
+			)
+			.exec();
+		if (!result) throw new InternalServerErrorException('Receptionist removal failed');
+		return result;
+	}
 
 	public async createTask(memberId: ObjectId, memberType: MemberType, input: ReceptionTaskInput): Promise<ReceptionTask> {
 		const appointment = await this.appointmentModel
@@ -117,8 +223,8 @@ export class ReceptionistService {
 	}
 
 	private async ensureReceptionist(receptionistId: ObjectId): Promise<void> {
-		const receptionist = await this.memberModel
-			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST, memberStatus: MemberStatus.ACTIVE })
+		const receptionist = await this.receptionistModel
+			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
 			.select('_id')
 			.lean()
 			.exec();
