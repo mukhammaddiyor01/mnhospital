@@ -15,6 +15,7 @@ import { FollowModule } from './follow/follow.module';
 import { LikeModule } from './like/like.module';
 import { NotificationModule } from './notification/notification.module';
 import { ViewModule } from './view/view.module';
+import { AppointmentModule } from './appointment/appointment.module';
 
 @Module({
 	imports: [
@@ -35,6 +36,7 @@ import { ViewModule } from './view/view.module';
 		LikeModule,
 		NotificationModule,
 		ViewModule,
+		AppointmentModule,
 	],
 	exports: [MongooseModule],
 })
