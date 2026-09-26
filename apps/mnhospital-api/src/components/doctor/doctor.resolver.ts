@@ -38,8 +38,11 @@ export class DoctorResolver {
 
 	@UseGuards(WithoutGuard)
 	@Query(() => Doctors)
-	public async getDoctors(@Args('input') input: DoctorsInquiry): Promise<Doctors> {
+	public async getDoctors(
+		@Args('input') input: DoctorsInquiry,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Doctors> {
 		console.log('Query: getDoctors');
-		return this.doctorService.getDoctors(input);
+		return this.doctorService.getDoctors(input, memberId);
 	}
 }

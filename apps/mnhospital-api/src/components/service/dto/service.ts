@@ -4,6 +4,7 @@ import ObjectId = Types.ObjectId;
 import { ServiceRoom, ServiceRoomName, ServiceStatus, ServiceType } from '../enums/service.enum';
 import { TotalCounter } from '../../member/dto/member';
 import { Doctor } from '../../doctor/dto/doctor';
+import { MeLiked } from '../../like/dto/like';
 
 @ObjectType()
 export class Service {
@@ -42,6 +43,9 @@ export class Service {
 
 	@Field(() => Int)
 	serviceComments: number;
+
+	@Field(() => [MeLiked], { nullable: true })
+	meLiked?: MeLiked[];
 
 	@Field(() => Int)
 	serviceRank: number;

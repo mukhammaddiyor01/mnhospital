@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { TotalCounter } from '../../member/dto/member';
 import { Doctor } from '../../doctor/dto/doctor';
+import { MeLiked } from '../../like/dto/like';
 import { ArticleCategory, ArticleStatus } from '../enums/article.enum';
 
 @ObjectType()
@@ -36,6 +37,9 @@ export class Article {
 
 	@Field(() => Int)
 	articleComments: number;
+
+	@Field(() => [MeLiked], { nullable: true })
+	meLiked?: MeLiked[];
 
 	@Field(() => Date)
 	createdAt: Date;

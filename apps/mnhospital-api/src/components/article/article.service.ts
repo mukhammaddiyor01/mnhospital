@@ -65,9 +65,16 @@ export class ArticleService {
 				await this.articleStatsEditor({ _id: articleId, targetKey: 'articleViews', modifier: 1 });
 				targetArticle.articleViews = (targetArticle.articleViews ?? 0) + 1;
 			}
+
+			const likeInput: LikeInput = {
+				memberId,
+				likeRefId: articleId,
+				likeGroup: LikeGroup.ARTICLE,
+			};
+			targetArticle.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		}
 
-		targetArticle.memberData = await this.doctorService.getDoctor(targetArticle.memberId);
+		targetArticle.memberData = await this.doctorService.getDoctor(targetArticle.memberId, memberId);
 		return targetArticle;
 	}
 
@@ -123,7 +130,7 @@ export class ArticleService {
 		return result;
 	}
 
-	public async getArticles(_memberId: ObjectId, input: ArticlesInquiry): Promise<Articles> {
+	public async getArticles(memberId: ObjectId, input: ArticlesInquiry): Promise<Articles> {
 		const match: T = { articleStatus: ArticleStatus.PUBLISHED };
 		const { memberId: searchMemberId, articleCategoryList, periodsRange, text } = input.search;
 
@@ -155,6 +162,19 @@ export class ArticleService {
 			.exec();
 
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (memberId && result[0].list?.length) {
+			result[0].list = await Promise.all(
+				result[0].list.map(async (article: Article) => {
+					article.meLiked = await this.likeService.checkLikeExistence({
+						memberId,
+						likeRefId: article._id,
+						likeGroup: LikeGroup.ARTICLE,
+					});
+					return article;
+				}),
+			);
+		}
 		return result[0];
 	}
 

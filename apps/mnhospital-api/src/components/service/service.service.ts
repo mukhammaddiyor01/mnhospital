@@ -109,10 +109,15 @@ export class ServiceService {
 				targetService.serviceViews++;
 			}
 
-			//meLiked
+			const likeInput: LikeInput = {
+				memberId,
+				likeRefId: serviceId,
+				likeGroup: LikeGroup.SERVICE,
+			};
+			targetService.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		}
 
-		targetService.memberData = await this.doctorService.getDoctor(targetService.memberId);
+		targetService.memberData = await this.doctorService.getDoctor(targetService.memberId, memberId);
 		return targetService;
 	}
 
@@ -190,8 +195,7 @@ export class ServiceService {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
-							// meLiked
-					lookupDoctor,
+							lookupDoctor,
 							{ $unwind: '$memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],
@@ -200,6 +204,19 @@ export class ServiceService {
 			])
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (memberId && result[0].list?.length) {
+			result[0].list = await Promise.all(
+				result[0].list.map(async (service: Service) => {
+					service.meLiked = await this.likeService.checkLikeExistence({
+						memberId,
+						likeRefId: service._id,
+						likeGroup: LikeGroup.SERVICE,
+					});
+					return service;
+				}),
+			);
+		}
 
 		return result[0];
 	}
@@ -289,6 +306,19 @@ export class ServiceService {
 			])
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (memberId && result[0].list?.length) {
+			result[0].list = await Promise.all(
+				result[0].list.map(async (service: Service) => {
+					service.meLiked = await this.likeService.checkLikeExistence({
+						memberId,
+						likeRefId: service._id,
+						likeGroup: LikeGroup.SERVICE,
+					});
+					return service;
+				}),
+			);
+		}
 
 		return result[0];
 	}

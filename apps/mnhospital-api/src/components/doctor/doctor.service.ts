@@ -50,7 +50,7 @@ export class DoctorService {
 		return doctor;
 	}
 
-	public async getDoctors(input: DoctorsInquiry): Promise<Doctors> {
+	public async getDoctors(input: DoctorsInquiry, memberId?: ObjectId): Promise<Doctors> {
 		const { text } = input.search;
 		const match: T = {
 			memberStatus: MemberStatus.ACTIVE,
@@ -78,10 +78,23 @@ export class DoctorService {
 			])
 			.exec();
 		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (memberId && result[0].list?.length) {
+			result[0].list = await Promise.all(
+				result[0].list.map(async (doctor: Doctor) => {
+					doctor.meLiked = await this.likeService.checkLikeExistence({
+						memberId,
+						likeRefId: doctor._id,
+						likeGroup: LikeGroup.DOCTOR,
+					});
+					return doctor;
+				}),
+			);
+		}
 		return result[0];
 	}
 
-	public async getDoctor(targetId: ObjectId): Promise<Doctor> {
+	public async getDoctor(targetId: ObjectId, memberId?: ObjectId): Promise<Doctor> {
 		const doctor = await this.doctorModel
 			.findOne({
 				_id: targetId,
@@ -92,6 +105,14 @@ export class DoctorService {
 			.exec();
 
 		if (!doctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		if (memberId) {
+			doctor.meLiked = await this.likeService.checkLikeExistence({
+				memberId,
+				likeRefId: targetId,
+				likeGroup: LikeGroup.DOCTOR,
+			});
+		}
 		return doctor;
 	}
 

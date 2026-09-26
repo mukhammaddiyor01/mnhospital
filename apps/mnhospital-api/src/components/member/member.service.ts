@@ -106,6 +106,13 @@ export class MemberService {
 				await this.memberModel.findByIdAndUpdate(targetId, { $inc: { memberViews: 1 } }).exec();
 				targetMember.memberViews++;
 			}
+
+			const likeInput: LikeInput = {
+				memberId,
+				likeRefId: targetId,
+				likeGroup: LikeGroup.MEMBER,
+			};
+			targetMember.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		}
 
 		return targetMember;
