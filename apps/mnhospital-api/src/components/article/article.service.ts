@@ -12,6 +12,9 @@ import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
 import { ViewGroup } from '../view/enums/view.enum';
 import { ViewService } from '../view/view.service';
 import { DoctorService } from '../doctor/doctor.service';
+import { LikeService } from '../like/like.service';
+import { LikeInput } from '../like/dto/like.input';
+import { LikeGroup } from '../like/enums/like.enum';
 
 @Injectable()
 export class ArticleService {
@@ -19,6 +22,7 @@ export class ArticleService {
 		@InjectModel('Article') private readonly articleModel: Model<Article>,
 		private readonly doctorService: DoctorService,
 		private readonly viewService: ViewService,
+		private readonly likeService: LikeService,
 	) {}
 
 	public async createArticle(memberId: ObjectId, input: ArticleInput): Promise<Article> {
@@ -65,6 +69,28 @@ export class ArticleService {
 
 		targetArticle.memberData = await this.doctorService.getDoctor(targetArticle.memberId);
 		return targetArticle;
+	}
+
+	public async likeTargetArticle(memberId: ObjectId, articleId: ObjectId): Promise<Article> {
+		const targetArticle = await this.articleModel
+			.findOne({ _id: articleId, articleStatus: ArticleStatus.PUBLISHED })
+			.exec();
+		if (!targetArticle) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const likeInput: LikeInput = {
+			memberId,
+			likeRefId: articleId,
+			likeGroup: LikeGroup.ARTICLE,
+		};
+		const modifier = await this.likeService.toggleLike(likeInput);
+		const result = await this.articleStatsEditor({
+			_id: articleId,
+			targetKey: 'articleLikes',
+			modifier,
+		});
+
+		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		return result;
 	}
 
 	public async updateArticle(memberId: ObjectId, input: ArticleUpdate): Promise<Article> {

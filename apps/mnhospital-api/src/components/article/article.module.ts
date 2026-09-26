@@ -6,6 +6,7 @@ import ArticleSchema from './schema/Article.model';
 import { AuthModule } from '../auth/auth.module';
 import { DoctorModule } from '../doctor/doctor.module';
 import { ViewModule } from '../view/view.module';
+import { LikeModule } from '../like/like.module';
 
 @Module({
 	imports: [
@@ -13,6 +14,7 @@ import { ViewModule } from '../view/view.module';
 		AuthModule,
 		DoctorModule,
 		ViewModule,
+		LikeModule,
 	],
 	exports: [MongooseModule, ArticleService],
 	providers: [ArticleService, ArticleResolver],

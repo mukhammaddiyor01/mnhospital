@@ -30,6 +30,16 @@ export class ArticleResolver {
 
 	@UseGuards(AuthGuard)
 	@Mutation(() => Article)
+	public async likeTargetArticle(
+		@Args('articleId') input: string,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Article> {
+		console.log('Mutation: likeTargetArticle');
+		return await this.articleService.likeTargetArticle(memberId, shapeIntoMongoObjectId(input));
+	}
+
+	@UseGuards(AuthGuard)
+	@Mutation(() => Article)
 	public async updateArticle(
 		@Args('input') input: ArticleUpdate,
 		@AuthMember('_id') memberId: ObjectId,
