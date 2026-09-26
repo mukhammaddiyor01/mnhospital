@@ -17,6 +17,7 @@ import { ServiceStatus } from '../service/enums/service.enum';
 import { Payment } from './dto/payment';
 import { PaymentInput } from './dto/payment.input';
 import { PaymentStatus } from '../patient/enums/patient.enum';
+import { MemberType } from '../member/enums/member.enum';
 
 @Injectable()
 export class BookingService {
@@ -255,5 +256,57 @@ export class BookingService {
 			paymentMethod: input.paymentMethod,
 			paymentStatus: PaymentStatus.PENDING,
 		});
+	}
+
+	public async updatePaymentStatus(
+		memberId: ObjectId,
+		memberType: MemberType,
+		paymentId: ObjectId,
+		paymentStatus: PaymentStatus,
+	): Promise<Payment> {
+		if (![MemberType.ADMIN, MemberType.RECEPTIONIST].includes(memberType)) {
+			throw new InternalServerErrorException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
+		}
+
+		const payment = await this.paymentModel.findById(paymentId).exec();
+		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const allowedStatuses: Record<PaymentStatus, PaymentStatus[]> = {
+			[PaymentStatus.PENDING]: [PaymentStatus.PAID, PaymentStatus.FAILED, PaymentStatus.CANCELLED],
+			[PaymentStatus.PAID]: [PaymentStatus.REFUNDED],
+			[PaymentStatus.FAILED]: [],
+			[PaymentStatus.REFUNDED]: [],
+			[PaymentStatus.CANCELLED]: [],
+		};
+		if (!allowedStatuses[payment.paymentStatus].includes(paymentStatus)) {
+			throw new BadRequestException(`Cannot change payment status from ${payment.paymentStatus} to ${paymentStatus}`);
+		}
+
+		payment.paymentStatus = paymentStatus;
+		if (paymentStatus === PaymentStatus.PAID) payment.paidAt = new Date();
+		if (paymentStatus === PaymentStatus.REFUNDED) payment.refundedAt = new Date();
+		const result = await payment.save();
+
+		if (paymentStatus === PaymentStatus.PAID) {
+			const order = await this.bookingOrderModel.findById(payment.bookingOrderId).exec();
+			if (order && order.bookingOrderStatus === BookingOrderStatus.PENDING) {
+				const paidPayments = await this.paymentModel
+					.find({ bookingOrderId: order._id, paymentStatus: PaymentStatus.PAID })
+					.select('serviceId doctorId')
+					.lean()
+					.exec();
+				const paidLines = new Set(paidPayments.map((item) => `${item.serviceId.toString()}:${item.doctorId.toString()}`));
+				const allItemsPaid = order.bookingOrderItems.every((item) => paidLines.has(`${item.serviceId}:${item.doctorId}`));
+				if (allItemsPaid) {
+					await this.bookingOrderModel
+						.findByIdAndUpdate(order._id, {
+							$set: { bookingOrderStatus: BookingOrderStatus.CONFIRMED, confirmedAt: new Date() },
+						})
+						.exec();
+				}
+			}
+		}
+
+		return result;
 	}
 }

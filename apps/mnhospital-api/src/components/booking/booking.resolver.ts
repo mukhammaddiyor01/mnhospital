@@ -17,6 +17,8 @@ import { shapeIntoMongoObjectId } from '../../libs/config';
 import { BookingService } from './booking.service';
 import { Payment } from './dto/payment';
 import { PaymentInput } from './dto/payment.input';
+import { PaymentStatusInput } from './dto/payment.status.input';
+import { T } from '../../libs/types/common';
 
 @Resolver()
 export class BookingResolver {
@@ -113,5 +115,21 @@ export class BookingResolver {
 	): Promise<Payment> {
 		console.log('Mutation: createPayment');
 		return await this.bookingService.createPayment(memberId, input);
+	}
+
+	@Roles(MemberType.RECEPTIONIST, MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Payment)
+	public async updatePaymentStatus(
+		@Args('input') input: PaymentStatusInput,
+		@AuthMember() authMember: T,
+	): Promise<Payment> {
+		console.log('Mutation: updatePaymentStatus');
+		return await this.bookingService.updatePaymentStatus(
+			authMember._id,
+			authMember.memberType,
+			input.paymentId,
+			input.paymentStatus,
+		);
 	}
 }
