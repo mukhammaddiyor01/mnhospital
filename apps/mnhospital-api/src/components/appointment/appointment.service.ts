@@ -21,7 +21,12 @@ export class AppointmentService {
 	) {}
 
 	public async createAppointment(memberId: ObjectId, input: AppointmentCreateInput): Promise<Appointment> {
-		if (input.endsAt <= input.startsAt) {
+		const requestedStartsAt = new Date(input.startsAt);
+		const requestedEndsAt = new Date(input.endsAt);
+		if (Number.isNaN(requestedStartsAt.getTime()) || Number.isNaN(requestedEndsAt.getTime())) {
+			throw new BadRequestException('Appointment time must be valid dates');
+		}
+		if (requestedEndsAt <= requestedStartsAt) {
 			throw new BadRequestException('Appointment end time must be after start time');
 		}
 		const patientId = await this.patientService.resolveProfileId(memberId);
@@ -42,6 +47,25 @@ export class AppointmentService {
 			throw new BadRequestException('The booking order contains an invalid appointment time');
 		}
 		const endsAt = new Date(startsAt.getTime() + serviceDuration * 60 * 1000);
+		if (requestedStartsAt.getTime() !== startsAt.getTime() || requestedEndsAt.getTime() !== endsAt.getTime()) {
+			throw new BadRequestException('Appointment time must match the booking order item');
+		}
+
+		const conflict = await this.appointmentModel
+			.findOne({
+				appointmentStatus: {
+					$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
+				},
+				startsAt: { $lt: endsAt },
+				endsAt: { $gt: startsAt },
+				$or: [{ doctorId: input.doctorId }, { patientId }, { roomId: input.roomId }],
+			})
+			.select('_id doctorId patientId roomId startsAt endsAt')
+			.lean()
+			.exec();
+		if (conflict) {
+			throw new BadRequestException('The doctor, patient, or room already has an appointment at this time');
+		}
 
 		const appointment = await this.appointmentModel.create({
 			...input,

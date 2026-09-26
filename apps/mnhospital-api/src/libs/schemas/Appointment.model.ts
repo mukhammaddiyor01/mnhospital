@@ -88,5 +88,6 @@ const AppointmentSchema = new Schema(
 
 AppointmentSchema.index({ doctorId: 1, startsAt: 1, endsAt: 1 });
 AppointmentSchema.index({ patientId: 1, startsAt: -1 });
+AppointmentSchema.index({ roomId: 1, startsAt: 1, endsAt: 1 });
 
 export default AppointmentSchema;
