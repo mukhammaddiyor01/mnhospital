@@ -5,6 +5,9 @@ import CartSchema from './schema/Cart.model';
 import CartItemSchema from './schema/CartItem.model';
 import PatientSchema from './schema/Patient.model';
 import PaymentSchema from './schema/Payment.model';
+import { AuthModule } from '../auth/auth.module';
+import { PatientResolver } from './patient.resolver';
+import { PatientService } from './patient.service';
 
 @Module({
 	imports: [
@@ -15,7 +18,9 @@ import PaymentSchema from './schema/Payment.model';
 			{ name: 'BookingOrder', schema: BookingOrderSchema },
 			{ name: 'Payment', schema: PaymentSchema },
 		]),
+		AuthModule,
 	],
-	exports: [MongooseModule],
+	exports: [MongooseModule, PatientService],
+	providers: [PatientService, PatientResolver],
 })
 export class PatientModule {}

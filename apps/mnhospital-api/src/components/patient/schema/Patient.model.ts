@@ -4,6 +4,13 @@ import { PatientBloodType, PatientGender } from '../enums/patient.enum';
 
 const PatientSchema = new Schema(
 	{
+		memberId: {
+			type: Schema.Types.ObjectId,
+			ref: 'Member',
+			index: true,
+			unique: true,
+			sparse: true,
+		},
 		memberType: {
 			type: String,
 			enum: MemberType,
@@ -31,28 +38,23 @@ const PatientSchema = new Schema(
 		},
 		patientPhone: {
 			type: String,
-			required: true,
-			unique: true,
+			index: { unique: true, sparse: true },
 		},
 		patientMail: {
 			type: String,
-			required: true,
-			unique: true,
+			index: { unique: true, sparse: true },
 			lowercase: true,
 		},
 		patientNick: {
 			type: String,
-			required: true,
-			unique: true,
+			index: { unique: true, sparse: true },
 		},
 		patientPassword: {
 			type: String,
-			required: true,
 			select: false,
 		},
 		patientFullName: {
 			type: String,
-			required: true,
 		},
 		patientBirthDate: {
 			type: Date,
@@ -72,7 +74,6 @@ const PatientSchema = new Schema(
 		},
 		patientAddress: {
 			type: String,
-			required: true,
 		},
 		patientConversation: {
 			type: Number,
