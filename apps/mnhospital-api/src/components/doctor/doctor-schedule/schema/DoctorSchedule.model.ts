@@ -12,6 +12,7 @@ const DoctorScheduleSchema = new Schema(
 		weekday: {
 			type: Number,
 			enum: Weekday,
+			required: true,
 			min: 0,
 			max: 6,
 		},
