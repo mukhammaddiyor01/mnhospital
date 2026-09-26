@@ -19,6 +19,8 @@ import { Payment } from './dto/payment';
 import { PaymentInput } from './dto/payment.input';
 import { PaymentStatusInput } from './dto/payment.status.input';
 import { T } from '../../libs/types/common';
+import { Payments } from './dto/payment';
+import { PaymentInquiry } from './dto/payment.inquiry';
 
 @Resolver()
 export class BookingResolver {
@@ -131,5 +133,27 @@ export class BookingResolver {
 			input.paymentId,
 			input.paymentStatus,
 		);
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Query(() => Payments)
+	public async getMyPayments(
+		@Args('input') input: PaymentInquiry,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Payments> {
+		console.log('Query: getMyPayments');
+		return await this.bookingService.getMyPayments(memberId, input);
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Query(() => Payment)
+	public async getMyPayment(
+		@Args('paymentId') input: string,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Payment> {
+		console.log('Query: getMyPayment');
+		return await this.bookingService.getMyPayment(memberId, shapeIntoMongoObjectId(input));
 	}
 }

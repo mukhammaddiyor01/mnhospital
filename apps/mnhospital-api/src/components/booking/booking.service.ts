@@ -14,8 +14,9 @@ import { BookingOrderInquiry } from './dto/booking-order.input';
 import { BookingOrderStatus } from '../patient/enums/patient.enum';
 import { Service } from '../service/dto/service';
 import { ServiceStatus } from '../service/enums/service.enum';
-import { Payment } from './dto/payment';
+import { Payment, Payments } from './dto/payment';
 import { PaymentInput } from './dto/payment.input';
+import { PaymentInquiry } from './dto/payment.inquiry';
 import { PaymentStatus } from '../patient/enums/patient.enum';
 import { MemberType } from '../member/enums/member.enum';
 
@@ -316,6 +317,34 @@ export class BookingService {
 			}
 		}
 
+		return result;
+	}
+
+	public async getMyPayments(memberId: ObjectId, input: PaymentInquiry): Promise<Payments> {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const match: Record<string, unknown> = { patientId };
+		if (input.status) match.paymentStatus = input.status;
+
+		const result = await this.paymentModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getMyPayment(memberId: ObjectId, paymentId: ObjectId): Promise<Payment> {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const result = await this.paymentModel.findOne({ _id: paymentId, patientId }).exec();
+		if (!result) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 		return result;
 	}
 }

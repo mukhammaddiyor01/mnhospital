@@ -2,6 +2,7 @@ import { Field, Float, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { PaymentMethod, PaymentProvider, PaymentStatus } from '../../patient/enums/patient.enum';
+import { TotalCounter } from '../../member/dto/member';
 
 @ObjectType()
 export class Payment {
@@ -52,4 +53,13 @@ export class Payment {
 
 	@Field(() => Date)
 	updatedAt: Date;
+}
+
+@ObjectType()
+export class Payments {
+	@Field(() => [Payment])
+	list: Payment[];
+
+	@Field(() => [TotalCounter], { nullable: true })
+	metaCounter: TotalCounter[];
 }
