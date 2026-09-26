@@ -8,8 +8,9 @@ import { AuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { MemberType } from '../member/enums/member.enum';
+import { T } from '../../libs/types/common';
 import { Appointment, Appointments } from './dto/appointment';
-import { AppointmentInput, AppointmentInquiry } from './dto/appointment.input';
+import { AppointmentInput, AppointmentInquiry, StaffAppointmentInquiry } from './dto/appointment.input';
 import { AppointmentService } from './appointment.service';
 
 @Resolver()
@@ -48,5 +49,16 @@ export class AppointmentResolver {
 	): Promise<Appointments> {
 		console.log('Query: getMyAppointments');
 		return await this.appointmentService.getMyAppointments(memberId, input);
+	}
+
+	@Roles(MemberType.DOCTOR, MemberType.RECEPTIONIST, MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Appointments)
+	public async getAppointments(
+		@Args('input') input: StaffAppointmentInquiry,
+		@AuthMember() authMember: T,
+	): Promise<Appointments> {
+		console.log('Query: getAppointments');
+		return await this.appointmentService.getStaffAppointments(authMember._id, authMember.memberType, input);
 	}
 }

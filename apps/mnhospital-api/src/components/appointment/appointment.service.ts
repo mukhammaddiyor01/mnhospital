@@ -4,9 +4,10 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { v4 as uuidv4 } from 'uuid';
 import { Appointment, Appointments } from './dto/appointment';
-import { AppointmentInput as AppointmentCreateInput, AppointmentInquiry } from './dto/appointment.input';
+import { AppointmentInput as AppointmentCreateInput, AppointmentInquiry, StaffAppointmentInquiry } from './dto/appointment.input';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { Message } from '../../libs/enums/common.enum';
+import { MemberType } from '../member/enums/member.enum';
 
 @Injectable()
 export class AppointmentService {
@@ -54,6 +55,32 @@ export class AppointmentService {
 	public async getMyAppointments(memberId: ObjectId, input: AppointmentInquiry): Promise<Appointments> {
 		const { page, limit, status } = input;
 		const match: Record<string, unknown> = { patientId: memberId };
+		if (status) match.appointmentStatus = status;
+
+		const result = await this.appointmentModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { startsAt: 1 } },
+				{
+					$facet: {
+						list: [{ $skip: (page - 1) * limit }, { $limit: limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getStaffAppointments(memberId: ObjectId, memberType: MemberType, input: StaffAppointmentInquiry): Promise<Appointments> {
+		const { page, limit, status, doctorId, patientId } = input;
+		const match: Record<string, unknown> = {};
+
+		if (memberType === MemberType.DOCTOR) match.doctorId = memberId;
+		else if (doctorId) match.doctorId = doctorId;
+
+		if (patientId) match.patientId = patientId;
 		if (status) match.appointmentStatus = status;
 
 		const result = await this.appointmentModel

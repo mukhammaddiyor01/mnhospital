@@ -1,6 +1,6 @@
 import { Field, InputType } from '@nestjs/graphql';
 import { Transform, Type } from 'class-transformer';
-import { IsDate, IsInstance, IsNotEmpty, IsString } from 'class-validator';
+import { IsDate, IsInstance, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
@@ -72,4 +72,19 @@ export class AppointmentInquiry {
 
 	@Field(() => AppointmentStatus, { nullable: true })
 	status?: AppointmentStatus;
+}
+
+@InputType()
+export class StaffAppointmentInquiry extends AppointmentInquiry {
+	@Transform(toObjectId)
+	@IsInstance(ObjectId)
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	doctorId?: ObjectId;
+
+	@Transform(toObjectId)
+	@IsInstance(ObjectId)
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	patientId?: ObjectId;
 }
