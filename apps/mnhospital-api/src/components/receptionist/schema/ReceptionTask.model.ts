@@ -21,7 +21,7 @@ const ReceptionTaskSchema = new Schema(
 		},
 		receptionistId: {
 			type: Schema.Types.ObjectId,
-			ref: 'Member',
+			ref: 'Receptionist',
 			index: true,
 		},
 		createdByMemberId: {
