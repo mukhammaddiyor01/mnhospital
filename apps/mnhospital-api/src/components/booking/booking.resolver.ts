@@ -1,0 +1,35 @@
+import { UseGuards } from '@nestjs/common';
+import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
+import { AuthMember } from '../auth/decorators/authMember.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { MemberType } from '../member/enums/member.enum';
+import { Cart } from './dto/cart';
+import { CartInput } from './dto/cart.input';
+import { BookingService } from './booking.service';
+
+@Resolver()
+export class BookingResolver {
+	constructor(private readonly bookingService: BookingService) {}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Cart)
+	public async createCart(
+		@Args('input') input: CartInput,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Cart> {
+		console.log('Mutation: createCart');
+		return await this.bookingService.createCart(memberId, input);
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Query(() => Cart)
+	public async getMyCart(@AuthMember('_id') memberId: ObjectId): Promise<Cart> {
+		console.log('Query: getMyCart');
+		return await this.bookingService.getMyCart(memberId);
+	}
+}

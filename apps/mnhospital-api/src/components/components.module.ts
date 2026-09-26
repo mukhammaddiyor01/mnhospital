@@ -17,6 +17,7 @@ import { NotificationModule } from './notification/notification.module';
 import { ViewModule } from './view/view.module';
 import { AppointmentModule } from './appointment/appointment.module';
 import { AdvertisementModule } from './advertisement/advertisement.module';
+import { BookingModule } from './booking/booking.module';
 
 @Module({
 	imports: [
@@ -39,6 +40,7 @@ import { AdvertisementModule } from './advertisement/advertisement.module';
 		ViewModule,
 		AppointmentModule,
 		AdvertisementModule,
+		BookingModule,
 	],
 	exports: [MongooseModule],
 })
