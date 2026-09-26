@@ -48,4 +48,12 @@ export class AdminResolver {
 		input._id = shapeIntoMongoObjectId(input._id);
 		return await this.adminService.updateServiceByAdmin(input);
 	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Service)
+	public async removeServiceByAdmin(@Args('serviceId') input: string): Promise<Service> {
+		console.log('Mutation: removeServiceByAdmin');
+		return await this.adminService.removeServiceByAdmin(shapeIntoMongoObjectId(input));
+	}
 }

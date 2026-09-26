@@ -142,6 +142,42 @@ export class AdminService {
 		return result;
 	}
 
+	public async removeServiceByAdmin(serviceId: ObjectId): Promise<Service> {
+		const search: T = {
+			_id: serviceId,
+			serviceStatus: { $ne: ServiceStatus.DELETED },
+		};
+		const currentService = await this.serviceModel.findOne(search).exec();
+		if (!currentService) throw new InternalServerErrorException(Message.REMOVE_FAILED);
+
+		const result = await this.serviceModel
+			.findOneAndUpdate(
+				search,
+				{ $set: { serviceStatus: ServiceStatus.DELETED, deletedAt: moment().toDate() } },
+				{ new: true },
+			)
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.REMOVE_FAILED);
+
+		try {
+			await this.doctorService.doctorStatisticEditor({
+				_id: currentService.memberId,
+				targetKey: 'docServices',
+				modifier: -1,
+			});
+		} catch (err) {
+			await this.serviceModel
+				.findByIdAndUpdate(currentService._id, {
+					$set: { serviceStatus: currentService.serviceStatus },
+					$unset: { deletedAt: 1 },
+				})
+				.exec();
+			throw err;
+		}
+
+		return result;
+	}
+
 	private shapeServiceMatchQuery(match: T, search: ServiceSearch): void {
 		const {
 			memberId,
