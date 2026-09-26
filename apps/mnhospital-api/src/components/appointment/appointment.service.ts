@@ -36,6 +36,12 @@ export class AppointmentService {
 		if (!orderItem || orderItem.appointmentId) {
 			throw new BadRequestException('The selected booking order item is not available for appointment creation');
 		}
+		const startsAt = new Date(orderItem.requestedStartAt);
+		const serviceDuration = Number.parseInt(orderItem.serviceDuration, 10);
+		if (Number.isNaN(startsAt.getTime()) || !Number.isFinite(serviceDuration) || serviceDuration <= 0) {
+			throw new BadRequestException('The booking order contains an invalid appointment time');
+		}
+		const endsAt = new Date(startsAt.getTime() + serviceDuration * 60 * 1000);
 
 		const appointment = await this.appointmentModel.create({
 			...input,
@@ -43,6 +49,8 @@ export class AppointmentService {
 			patientId,
 			createdByMemberId: memberId,
 			appointmentStatus: AppointmentStatus.PENDING,
+			startsAt,
+			endsAt,
 		});
 
 		const updatedOrder = await this.bookingOrderModel
