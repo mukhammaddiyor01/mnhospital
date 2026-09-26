@@ -14,14 +14,21 @@ import { Direction, Message } from '../../libs/enums/common.enum';
 import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
 import { T } from '../../libs/types/common';
 import { MemberUpdate } from '../member/dto/member.update';
+import { Article, Articles } from '../article/dto/article';
+import { ArticleSearch, ArticlesInquiry } from '../article/dto/article.input';
+import { ArticleUpdate } from '../article/dto/article.update';
+import { ArticleStatus } from '../article/enums/article.enum';
 
 @Injectable()
 export class AdminService {
 	constructor(
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
+		@InjectModel('Article') private readonly articleModel: Model<Article>,
 		private readonly doctorService: DoctorService,
 	) {}
+
+	/** MEMBERS */
 
 	public async getAllMembersByAdmin(input: MembersInquiry): Promise<Members> {
 		const { memberStatus, memberType, text } = input?.search;
@@ -56,6 +63,8 @@ export class AdminService {
 
 		return result;
 	}
+
+	/** SERVICES */
 
 	public async getAllServicesByAdmin(input: ServicesInquiry): Promise<Services> {
 		const match: T = {};
@@ -95,7 +104,11 @@ export class AdminService {
 		const currentService = await this.serviceModel.findOne(search).exec();
 		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
 
-		if (serviceStatus !== ServiceStatus.DELETED && input.serviceType && input.serviceType !== currentService.serviceType) {
+		if (
+			serviceStatus !== ServiceStatus.DELETED &&
+			input.serviceType &&
+			input.serviceType !== currentService.serviceType
+		) {
 			const sameTypeServiceCount = await this.serviceModel
 				.countDocuments({
 					_id: { $ne: currentService._id },
@@ -203,6 +216,107 @@ export class AdminService {
 		if (text) {
 			const searchRegex = new RegExp(text, 'i');
 			match.$or = [{ serviceName: searchRegex }, { serviceTitle: searchRegex }, { serviceDesc: searchRegex }];
+		}
+	}
+
+	/** ARTICLES */
+
+	public async getAllArticlesByAdmin(input: ArticlesInquiry): Promise<Articles> {
+		const match: T = {};
+		this.shapeArticleMatchQuery(match, input.search);
+
+		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+		const result = await this.articleModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: sort },
+				{
+					$facet: {
+						list: [
+							{ $skip: (input.page - 1) * input.limit },
+							{ $limit: input.limit },
+							lookupDoctor,
+							{ $unwind: { path: '$memberData', preserveNullAndEmptyArrays: true } },
+						],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		return result[0];
+	}
+
+	public async updateArticleByAdmin(input: ArticleUpdate): Promise<Article> {
+		const { _id, articleStatus } = input;
+		const search: T = { _id, articleStatus: { $ne: ArticleStatus.ARCHIVED } };
+		const currentArticle = await this.articleModel.findOne(search).exec();
+		if (!currentArticle) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		const updateData: T = { ...input };
+		delete updateData._id;
+		const result = await this.articleModel
+			.findOneAndUpdate(search, { $set: updateData }, { new: true, runValidators: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		if (articleStatus === ArticleStatus.ARCHIVED) {
+			try {
+				await this.doctorService.doctorStatisticEditor({
+					_id: currentArticle.memberId,
+					targetKey: 'docArticles',
+					modifier: -1,
+				});
+			} catch (err) {
+				await this.articleModel
+					.findByIdAndUpdate(currentArticle._id, { $set: { articleStatus: currentArticle.articleStatus } })
+					.exec();
+				throw err;
+			}
+		}
+
+		return result;
+	}
+
+	public async removeArticleByAdmin(articleId: ObjectId): Promise<Article> {
+		const currentArticle = await this.articleModel.findById(articleId).exec();
+		if (!currentArticle) throw new InternalServerErrorException(Message.REMOVE_FAILED);
+		if (currentArticle.articleStatus === ArticleStatus.ARCHIVED) return currentArticle;
+
+		const search: T = { _id: articleId, articleStatus: { $ne: ArticleStatus.ARCHIVED } };
+
+		const result = await this.articleModel
+			.findOneAndUpdate(search, { $set: { articleStatus: ArticleStatus.ARCHIVED } }, { new: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.REMOVE_FAILED);
+
+		try {
+			await this.doctorService.doctorStatisticEditor({
+				_id: currentArticle.memberId,
+				targetKey: 'docArticles',
+				modifier: -1,
+			});
+		} catch (err) {
+			await this.articleModel
+				.findByIdAndUpdate(currentArticle._id, { $set: { articleStatus: currentArticle.articleStatus } })
+				.exec();
+			throw err;
+		}
+
+		return result;
+	}
+
+	private shapeArticleMatchQuery(match: T, search: ArticleSearch): void {
+		const { memberId, articleStatus, articleCategoryList, periodsRange, text } = search;
+
+		if (memberId) match.memberId = shapeIntoMongoObjectId(memberId);
+		if (articleStatus) match.articleStatus = articleStatus;
+		if (articleCategoryList) match.articleCategory = { $in: articleCategoryList };
+		if (periodsRange) match.createdAt = { $gte: periodsRange.start, $lte: periodsRange.end };
+		if (text) {
+			const searchRegex = new RegExp(text, 'i');
+			match.$or = [{ articleTitle: searchRegex }, { articleContent: searchRegex }];
 		}
 	}
 }

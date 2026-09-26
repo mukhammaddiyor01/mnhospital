@@ -79,6 +79,11 @@ export class ArticleSearch {
 	articleCategoryList?: ArticleCategory[];
 
 	@IsOptional()
+	@IsEnum(ArticleStatus)
+	@Field(() => ArticleStatus, { nullable: true })
+	articleStatus?: ArticleStatus;
+
+	@IsOptional()
 	@ValidateNested()
 	@Type(() => ArticlePeriodsRange)
 	@Field(() => ArticlePeriodsRange, { nullable: true })

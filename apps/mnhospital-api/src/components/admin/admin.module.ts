@@ -7,6 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import MemberSchema from '../member/schema/Member.model';
 import ServiceSchema from '../service/schema/Service.model';
 import { DoctorModule } from '../doctor/doctor.module';
+import ArticleSchema from '../article/schema/Article.model';
 
 @Module({
 	imports: [
@@ -24,6 +25,10 @@ import { DoctorModule } from '../doctor/doctor.module';
 			{
 				name: 'Service',
 				schema: ServiceSchema,
+			},
+			{
+				name: 'Article',
+				schema: ArticleSchema,
 			},
 		]),
 		AuthModule,
