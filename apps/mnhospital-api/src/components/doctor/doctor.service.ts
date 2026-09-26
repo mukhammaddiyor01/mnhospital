@@ -94,7 +94,7 @@ export class DoctorService {
 	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
 		const { _id, targetKey, modifier } = input;
 
-		const allowedKeys = ['docPoints', 'docPatients', 'docServices'];
+		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles'];
 
 		if (!allowedKeys.includes(targetKey)) {
 			throw new BadRequestException('Invalid doctor statistic key');
@@ -103,12 +103,17 @@ export class DoctorService {
 		const search: T = { _id };
 		if (targetKey !== 'docServices') search.memberStatus = MemberStatus.ACTIVE;
 
-		const update: T = { $inc: { [targetKey]: modifier } };
-		if (targetKey === 'docServices' && modifier < 0) update.$max = { docServices: 0 };
+		if (['docServices', 'docArticles'].includes(targetKey) && modifier < 0) {
+			search[targetKey] = { $gte: Math.abs(modifier) };
+		}
 
-		const result = await this.doctorModel
-			.findOneAndUpdate(search, update, { new: true })
+		let result = await this.doctorModel
+			.findOneAndUpdate(search, { $inc: { [targetKey]: modifier } }, { new: true })
 			.exec();
+
+		if (!result && ['docServices', 'docArticles'].includes(targetKey) && modifier < 0) {
+			result = await this.doctorModel.findOne({ _id }).exec();
+		}
 
 		if (!result) {
 			throw new InternalServerErrorException(Message.NO_DATA_FOUND);

@@ -5,7 +5,7 @@ const ArticleSchema = new Schema(
 	{
 		memberId: {
 			type: Schema.Types.ObjectId,
-			ref: 'Member',
+			ref: 'Doctor',
 			required: true,
 			index: true,
 		},
