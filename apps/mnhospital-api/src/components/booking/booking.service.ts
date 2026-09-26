@@ -10,6 +10,7 @@ import { CartStatus } from '../patient/enums/patient.enum';
 import { CartInput } from './dto/cart.input';
 import { CartItemInput } from './dto/cart.item.input';
 import { BookingOrder, BookingOrders } from './dto/booking-order';
+import { BookingOrderInquiry } from './dto/booking-order.input';
 import { BookingOrderStatus } from '../patient/enums/patient.enum';
 import { Service } from '../service/dto/service';
 import { ServiceStatus } from '../service/enums/service.enum';
@@ -164,5 +165,33 @@ export class BookingService {
 		}
 
 		return order;
+	}
+
+	public async getMyBookingOrders(memberId: ObjectId, input: BookingOrderInquiry): Promise<BookingOrders> {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const match: Record<string, unknown> = { patientId };
+		if (input.status) match.bookingOrderStatus = input.status;
+
+		const result = await this.bookingOrderModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getMyBookingOrder(memberId: ObjectId, bookingOrderId: ObjectId): Promise<BookingOrder> {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const result = await this.bookingOrderModel.findOne({ _id: bookingOrderId, patientId }).exec();
+		if (!result) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		return result;
 	}
 }

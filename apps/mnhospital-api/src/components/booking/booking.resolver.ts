@@ -11,6 +11,8 @@ import { CartInput } from './dto/cart.input';
 import { CartItemInput } from './dto/cart.item.input';
 import { CartItem } from './dto/cart';
 import { BookingOrder } from './dto/booking-order';
+import { BookingOrders } from './dto/booking-order';
+import { BookingOrderInquiry } from './dto/booking-order.input';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { BookingService } from './booking.service';
 
@@ -65,5 +67,27 @@ export class BookingResolver {
 	public async createBookingOrder(@AuthMember('_id') memberId: ObjectId): Promise<BookingOrder> {
 		console.log('Mutation: createBookingOrder');
 		return await this.bookingService.createBookingOrder(memberId);
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Query(() => BookingOrders)
+	public async getMyBookingOrders(
+		@Args('input') input: BookingOrderInquiry,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<BookingOrders> {
+		console.log('Query: getMyBookingOrders');
+		return await this.bookingService.getMyBookingOrders(memberId, input);
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Query(() => BookingOrder)
+	public async getMyBookingOrder(
+		@Args('bookingOrderId') input: string,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<BookingOrder> {
+		console.log('Query: getMyBookingOrder');
+		return await this.bookingService.getMyBookingOrder(memberId, shapeIntoMongoObjectId(input));
 	}
 }
