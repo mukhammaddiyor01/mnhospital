@@ -4,8 +4,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { MemberType } from '../member/enums/member.enum';
 import { UseGuards } from '@nestjs/common';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Service } from './dto/service';
-import { ServiceInput } from './dto/service.input';
+import { Service, Services } from './dto/service';
+import { ServiceInput, ServicesInquiry } from './dto/service.input';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -48,5 +48,15 @@ export class ServiceResolver {
 		console.log('Mutation: updateService');
 		input._id = shapeIntoMongoObjectId(input._id);
 		return await this.serviceService.updateService(memberId, input);
+	}
+
+	@UseGuards(WithoutGuard)
+	@Query((returns) => Services)
+	public async getServices(
+		@Args('input') input: ServicesInquiry,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Services> {
+		console.log('Query: getServices');
+		return await this.serviceService.getServices(memberId, input);
 	}
 }

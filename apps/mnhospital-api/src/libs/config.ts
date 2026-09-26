@@ -7,6 +7,15 @@ import ObjectId = Types.ObjectId;
 export const availabeDoctorSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews', 'memberRank'];
 export const availableMemberSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews'];
 
+export const availableServiceSorts = [
+	'createdAt',
+	'updatedAt',
+	'serviceLikes',
+	'serviceViews',
+	'serviceRank',
+	'servicePrice',
+];
+
 // IMAGE CONFIGURATION (config.js)
 export const validMimeTypes = ['image/png', 'image/jpg', 'image/jpeg'];
 export const getSerialForImage = (filename: string) => {
@@ -16,4 +25,13 @@ export const getSerialForImage = (filename: string) => {
 
 export const shapeIntoMongoObjectId = (target: string | ObjectId): ObjectId => {
 	return typeof target === 'string' ? new ObjectId(target) : target;
+};
+
+export const lookupMember = {
+	$lookup: {
+		from: 'members',
+		localField: 'memberId',
+		foreignField: '_id',
+		as: 'memberData',
+	},
 };

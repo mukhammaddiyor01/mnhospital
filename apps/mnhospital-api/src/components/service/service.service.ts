@@ -4,16 +4,17 @@ import { AuthService } from '../auth/auth.service';
 import { ViewService } from '../view/view.service';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { Service } from './dto/service';
+import { Service, Services } from './dto/service';
 import { MemberService } from '../member/member.service';
-import { ServiceInput } from './dto/service.input';
-import { Message } from '../../libs/enums/common.enum';
+import { ServiceInput, ServicesInquiry } from './dto/service.input';
+import { Direction, Message } from '../../libs/enums/common.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { MAX_SERVICES_PER_TYPE, ServiceStatus } from './enums/service.enum';
 import { ViewGroup } from '../view/enums/view.enum';
 import { ServiceUpdate } from './dto/service.update';
 import { DoctorService } from '../doctor/doctor.service';
 import moment = require('moment');
+import { lookupMember, shapeIntoMongoObjectId } from '../../libs/config';
 
 @Injectable()
 export class ServiceService {
@@ -145,5 +146,90 @@ export class ServiceService {
 		}
 
 		return result;
+	}
+
+	public async getServices(memberId: ObjectId, input: ServicesInquiry): Promise<Services> {
+		const match: T = { serviceStatus: ServiceStatus.ACTIVE };
+		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+
+		this.shapeMatchQuery(match, input);
+
+		const result = await this.serviceModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: sort },
+				{
+					$facet: {
+						list: [
+							{ $skip: (input.page - 1) * input.limit },
+							{ $limit: input.limit },
+							// meLiked
+							lookupMember,
+							{ $unwind: '$memberData' },
+						],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		return result[0];
+	}
+
+	private shapeMatchQuery(match: T, input: ServicesInquiry): void {
+		const {
+			memberId,
+			departmentId,
+			serviceTypeList,
+			serviceStatusList,
+			serviceRoomNameList,
+			serviceRoomList,
+			periodsRange,
+			priceRange,
+			text,
+		} = input.search;
+
+		if (memberId) match.memberId = shapeIntoMongoObjectId(memberId);
+
+		if (departmentId) {
+			match.departmentId = shapeIntoMongoObjectId(departmentId);
+		}
+
+		if (serviceTypeList) {
+			match.serviceType = { $in: serviceTypeList };
+		}
+
+		if (serviceStatusList) {
+			match.serviceStatus = { $in: serviceStatusList };
+		}
+
+		if (serviceRoomNameList) {
+			match.serviceRoomName = { $in: serviceRoomNameList };
+		}
+
+		if (serviceRoomList) {
+			match.serviceRoom = { $in: serviceRoomList };
+		}
+
+		if (priceRange) {
+			match.servicePrice = {
+				$gte: priceRange.start,
+				$lte: priceRange.end,
+			};
+		}
+
+		if (periodsRange) {
+			match.createdAt = {
+				$gte: periodsRange.start,
+				$lte: periodsRange.end,
+			};
+		}
+
+		if (text) {
+			const searchRegex = new RegExp(text, 'i');
+
+			match.$or = [{ serviceName: searchRegex }, { serviceTitle: searchRegex }, { serviceDesc: searchRegex }];
+		}
 	}
 }
