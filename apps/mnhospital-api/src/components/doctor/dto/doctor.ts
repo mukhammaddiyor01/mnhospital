@@ -21,6 +21,9 @@ export class Doctor {
 	@Field(() => String, { nullable: true })
 	servicesId?: ObjectId;
 
+	@Field(() => Int)
+	docServices: number;
+
 	@Field(() => String, { nullable: true })
 	departmentId?: ObjectId;
 

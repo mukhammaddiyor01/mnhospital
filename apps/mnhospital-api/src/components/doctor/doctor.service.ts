@@ -79,7 +79,7 @@ export class DoctorService {
 	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
 		const { _id, targetKey, modifier } = input;
 
-		const allowedKeys = ['docPoints', 'docPatients'];
+		const allowedKeys = ['docPoints', 'docPatients', 'docServices'];
 
 		if (!allowedKeys.includes(targetKey)) {
 			throw new BadRequestException('Invalid doctor statistic key');

@@ -22,8 +22,12 @@ registerEnumType(ServiceType, { name: 'ServiceType' });
 
 export enum ServiceStatus {
 	ACTIVE = 'ACTIVE',
+	RESERVED = 'RESERVED',
+	STARTED = 'STARTED',
+	ENDED = 'ENDED',
 	INACTIVE = 'INACTIVE',
 	UNAVAILABLE = 'UNAVAILABLE',
+	DELETED = 'DELETED',
 }
 registerEnumType(ServiceStatus, { name: 'ServiceStatus' });
 

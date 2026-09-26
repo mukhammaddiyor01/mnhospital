@@ -11,6 +11,7 @@ import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { WithoutGuard } from '../auth/guards/without.guard';
 import { shapeIntoMongoObjectId } from '../../libs/config';
+import { ServiceUpdate } from './dto/service.update';
 
 @Resolver()
 export class ServiceResolver {
@@ -35,5 +36,17 @@ export class ServiceResolver {
 		console.log('Query: getService');
 		const serviceId = shapeIntoMongoObjectId(input);
 		return await this.serviceService.getService(memberId, serviceId);
+	}
+
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Mutation((returns) => Service)
+	public async updateService(
+		@Args('input') input: ServiceUpdate,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Service> {
+		console.log('Mutation: updateService');
+		input._id = shapeIntoMongoObjectId(input._id);
+		return await this.serviceService.updateService(memberId, input);
 	}
 }

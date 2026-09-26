@@ -11,12 +11,16 @@ import { Message } from '../../libs/enums/common.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { MAX_SERVICES_PER_TYPE, ServiceStatus } from './enums/service.enum';
 import { ViewGroup } from '../view/enums/view.enum';
+import { ServiceUpdate } from './dto/service.update';
+import { DoctorService } from '../doctor/doctor.service';
+import moment = require('moment');
 
 @Injectable()
 export class ServiceService {
 	constructor(
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		private memberService: MemberService,
+		private doctorService: DoctorService,
 		private authService: AuthService,
 		private viewService: ViewService,
 	) {}
@@ -26,11 +30,15 @@ export class ServiceService {
 			if (!input.memberId) {
 				throw new BadRequestException('Doctor id is required');
 			}
+			if (input.serviceStatus === ServiceStatus.DELETED) {
+				throw new BadRequestException('A new service cannot be created as deleted');
+			}
 
 			const sameTypeServiceCount = await this.serviceModel
 				.countDocuments({
 					memberId: input.memberId,
 					serviceType: input.serviceType,
+					serviceStatus: { $ne: ServiceStatus.DELETED },
 				})
 				.exec();
 
@@ -39,6 +47,16 @@ export class ServiceService {
 			}
 
 			const result = await this.serviceModel.create(input);
+			try {
+				await this.doctorService.doctorStatisticEditor({
+					_id: input.memberId,
+					targetKey: 'docServices',
+					modifier: 1,
+				});
+			} catch (err) {
+				await this.serviceModel.deleteOne({ _id: result._id }).exec();
+				throw err;
+			}
 			return result;
 		} catch (err) {
 			console.error('Error, ServiceService.createService:', err);
@@ -74,5 +92,58 @@ export class ServiceService {
 	public async serviceStatsEditor(input: StatisticModifier): Promise<Service> {
 		const { _id, targetKey, modifier } = input;
 		return await this.serviceModel.findByIdAndUpdate(_id, { $inc: { [targetKey]: modifier } }, { new: true }).exec();
+	}
+
+	public async updateService(memberId: ObjectId, input: ServiceUpdate): Promise<Service> {
+		let { serviceStatus, inactiveAt, unavailabeAt } = input;
+		let deletedAt: Date | undefined;
+		const search: T = {
+			_id: input._id,
+			memberId,
+			serviceStatus: ServiceStatus.ACTIVE,
+		};
+
+		const currentService = await this.serviceModel.findOne(search).exec();
+		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		if (input.serviceType && input.serviceType !== currentService.serviceType) {
+			const sameTypeServiceCount = await this.serviceModel
+				.countDocuments({
+					_id: { $ne: currentService._id },
+					memberId: currentService.memberId,
+					serviceType: input.serviceType,
+					serviceStatus: { $ne: ServiceStatus.DELETED },
+				})
+				.exec();
+
+			if (sameTypeServiceCount >= MAX_SERVICES_PER_TYPE) {
+				throw new BadRequestException(Message.SERVICE_TYPE_LIMIT_REACHED);
+			}
+		}
+
+		if (serviceStatus === ServiceStatus.DELETED) deletedAt = moment().toDate();
+		else if (serviceStatus === ServiceStatus.INACTIVE) inactiveAt = moment().toDate();
+		else if (serviceStatus === ServiceStatus.UNAVAILABLE) unavailabeAt = moment().toDate();
+
+		const updateData: T = { ...input };
+		delete updateData._id;
+		if (deletedAt) updateData.deletedAt = deletedAt;
+		else if (inactiveAt) updateData.inactiveAt = inactiveAt;
+		else if (unavailabeAt) updateData.unavailabeAt = unavailabeAt;
+
+		const result = await this.serviceModel
+			.findOneAndUpdate(search, { $set: updateData }, { new: true, runValidators: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+
+		if (serviceStatus === ServiceStatus.DELETED) {
+			await this.doctorService.doctorStatisticEditor({
+				_id: currentService.memberId,
+				targetKey: 'docServices',
+				modifier: -1,
+			});
+		}
+
+		return result;
 	}
 }

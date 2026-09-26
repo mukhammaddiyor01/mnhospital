@@ -46,7 +46,7 @@ const ServiceSchema = new Schema(
 			required: true,
 		},
 		servicePrice: {
-			type: String,
+			type: Number,
 			required: true,
 		},
 		serviceLikes: {
@@ -82,6 +82,9 @@ const ServiceSchema = new Schema(
 			type: Date,
 		},
 		closedAt: {
+			type: Date,
+		},
+		deletedAt: {
 			type: Date,
 		},
 	},

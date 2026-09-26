@@ -9,6 +9,12 @@ export class Service {
 	@Field(() => String)
 	_id: ObjectId;
 
+	@Field(() => String)
+	serviceName: string;
+
+	@Field(() => String)
+	departmentId: ObjectId;
+
 	@Field(() => ServiceType)
 	serviceType: ServiceType;
 
@@ -22,7 +28,7 @@ export class Service {
 	serviceRoom: ServiceRoom;
 
 	@Field(() => String)
-	serviceTitle: String;
+	serviceTitle: string;
 
 	@Field(() => Number)
 	servicePrice: number;
@@ -34,7 +40,7 @@ export class Service {
 	serviceLikes: number;
 
 	@Field(() => String)
-	serviceComments: String;
+	serviceComments: number;
 
 	@Field(() => Int)
 	serviceRank: number;
@@ -56,6 +62,15 @@ export class Service {
 
 	@Field(() => Date, { nullable: true })
 	endedAt?: Date;
+
+	@Field(() => String, { nullable: true })
+	serviceDuration?: string;
+
+	@Field(() => Date, { nullable: true })
+	openedAt?: Date;
+
+	@Field(() => Date, { nullable: true })
+	closedAt?: Date;
 
 	@Field(() => Date)
 	createdAt: Date;
