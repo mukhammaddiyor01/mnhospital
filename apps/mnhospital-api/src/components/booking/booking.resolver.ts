@@ -8,6 +8,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { MemberType } from '../member/enums/member.enum';
 import { Cart } from './dto/cart';
 import { CartInput } from './dto/cart.input';
+import { CartItemInput } from './dto/cart.item.input';
+import { CartItem } from './dto/cart';
 import { BookingService } from './booking.service';
 
 @Resolver()
@@ -31,5 +33,16 @@ export class BookingResolver {
 	public async getMyCart(@AuthMember('_id') memberId: ObjectId): Promise<Cart> {
 		console.log('Query: getMyCart');
 		return await this.bookingService.getMyCart(memberId);
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Mutation(() => CartItem)
+	public async addCartItem(
+		@Args('input') input: CartItemInput,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<CartItem> {
+		console.log('Mutation: addCartItem');
+		return await this.bookingService.addCartItem(memberId, input);
 	}
 }
