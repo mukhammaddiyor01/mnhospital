@@ -236,7 +236,16 @@ export class BookingService {
 		if (!orderItem) throw new BadRequestException('The selected service is not included in this booking order');
 
 		const existingPayment = await this.paymentModel.findOne({ idempotencyKey: input.idempotencyKey }).exec();
-		if (existingPayment) return existingPayment;
+		if (existingPayment) {
+			const samePatient = existingPayment.patientId.toString() === patientId.toString();
+			const sameOrder = existingPayment.bookingOrderId.toString() === input.bookingOrderId.toString();
+			const sameService = existingPayment.serviceId.toString() === input.serviceId.toString();
+			const sameDoctor = existingPayment.doctorId.toString() === input.doctorId.toString();
+			if (!samePatient || !sameOrder || !sameService || !sameDoctor) {
+				throw new BadRequestException('The idempotency key is already used for another payment');
+			}
+			return existingPayment;
+		}
 
 		const paymentAmount = Number(orderItem.servicePrice);
 		if (!Number.isFinite(paymentAmount) || paymentAmount < 0) {
