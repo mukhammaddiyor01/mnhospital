@@ -7,6 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ViewModule } from '../view/view.module';
 import { MemberModule } from '../member/member.module';
 import { DoctorModule } from '../doctor/doctor.module';
+import { LikeModule } from '../like/like.module';
 
 @Module({
 	imports: [
@@ -20,6 +21,7 @@ import { DoctorModule } from '../doctor/doctor.module';
 		ViewModule,
 		MemberModule,
 		DoctorModule,
+		LikeModule,
 	],
 	exports: [MongooseModule, ServiceService],
 	providers: [ServiceService, ServiceResolver],

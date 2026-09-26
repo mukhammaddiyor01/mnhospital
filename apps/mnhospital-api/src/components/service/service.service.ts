@@ -15,6 +15,9 @@ import { ServiceUpdate } from './dto/service.update';
 import { DoctorService } from '../doctor/doctor.service';
 import moment = require('moment');
 import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
+import { LikeService } from '../like/like.service';
+import { LikeInput } from '../like/dto/like.input';
+import { LikeGroup } from '../like/enums/like.enum';
 
 @Injectable()
 export class ServiceService {
@@ -24,6 +27,7 @@ export class ServiceService {
 		private doctorService: DoctorService,
 		private authService: AuthService,
 		private viewService: ViewService,
+		private likeService: LikeService,
 	) {}
 
 	public async createService(input: ServiceInput): Promise<Service> {
@@ -64,6 +68,28 @@ export class ServiceService {
 			if (err instanceof HttpException) throw err;
 			throw new BadRequestException(Message.CREATE_FAILED);
 		}
+	}
+
+	public async likeTargetService(memberId: ObjectId, serviceId: ObjectId): Promise<Service> {
+		const targetService = await this.serviceModel
+			.findOne({ _id: serviceId, serviceStatus: ServiceStatus.ACTIVE })
+			.exec();
+		if (!targetService) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const likeInput: LikeInput = {
+			memberId,
+			likeRefId: serviceId,
+			likeGroup: LikeGroup.SERVICE,
+		};
+		const modifier = await this.likeService.toggleLike(likeInput);
+		const result = await this.serviceStatsEditor({
+			_id: serviceId,
+			targetKey: 'serviceLikes',
+			modifier,
+		});
+
+		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		return result;
 	}
 
 	public async getService(memberId: ObjectId, serviceId: ObjectId): Promise<Service> {

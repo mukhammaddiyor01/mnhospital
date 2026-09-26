@@ -10,6 +10,7 @@ import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { WithoutGuard } from '../auth/guards/without.guard';
+import { AuthGuard } from '../auth/guards/auth.guard';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { ServiceUpdate } from './dto/service.update';
 
@@ -28,6 +29,16 @@ export class ServiceResolver {
 		input.memberId = memberId;
 
 		return await this.serviceService.createService(input);
+	}
+
+	@UseGuards(AuthGuard)
+	@Mutation(() => Service)
+	public async likeTargetService(
+		@Args('serviceId') input: string,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Service> {
+		console.log('Mutation: likeTargetService');
+		return await this.serviceService.likeTargetService(memberId, shapeIntoMongoObjectId(input));
 	}
 
 	@UseGuards(WithoutGuard)
