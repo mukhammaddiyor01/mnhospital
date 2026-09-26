@@ -15,6 +15,8 @@ import { BookingOrders } from './dto/booking-order';
 import { BookingOrderInquiry } from './dto/booking-order.input';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { BookingService } from './booking.service';
+import { Payment } from './dto/payment';
+import { PaymentInput } from './dto/payment.input';
 
 @Resolver()
 export class BookingResolver {
@@ -100,5 +102,16 @@ export class BookingResolver {
 	): Promise<BookingOrder> {
 		console.log('Mutation: cancelBookingOrder');
 		return await this.bookingService.cancelBookingOrder(memberId, shapeIntoMongoObjectId(input));
+	}
+
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Payment)
+	public async createPayment(
+		@Args('input') input: PaymentInput,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Payment> {
+		console.log('Mutation: createPayment');
+		return await this.bookingService.createPayment(memberId, input);
 	}
 }

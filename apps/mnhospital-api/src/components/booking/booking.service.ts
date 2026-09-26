@@ -14,6 +14,9 @@ import { BookingOrderInquiry } from './dto/booking-order.input';
 import { BookingOrderStatus } from '../patient/enums/patient.enum';
 import { Service } from '../service/dto/service';
 import { ServiceStatus } from '../service/enums/service.enum';
+import { Payment } from './dto/payment';
+import { PaymentInput } from './dto/payment.input';
+import { PaymentStatus } from '../patient/enums/patient.enum';
 
 @Injectable()
 export class BookingService {
@@ -22,6 +25,7 @@ export class BookingService {
 		@InjectModel('CartItem') private readonly cartItemModel: Model<CartItem>,
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		@InjectModel('BookingOrder') private readonly bookingOrderModel: Model<BookingOrder>,
+		@InjectModel('Payment') private readonly paymentModel: Model<Payment>,
 		private readonly patientService: PatientService,
 	) {}
 
@@ -211,5 +215,45 @@ export class BookingService {
 
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
 		return result;
+	}
+
+	public async createPayment(memberId: ObjectId, input: PaymentInput): Promise<Payment> {
+		const patientId = await this.patientService.resolveProfileId(memberId);
+		const order = await this.bookingOrderModel
+			.findOne({
+				_id: input.bookingOrderId,
+				patientId,
+				bookingOrderStatus: { $in: [BookingOrderStatus.PENDING, BookingOrderStatus.CONFIRMED] },
+			})
+			.lean()
+			.exec();
+		if (!order) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const orderItem = order.bookingOrderItems.find(
+			(item) => item.serviceId === input.serviceId.toString() && item.doctorId === input.doctorId.toString(),
+		);
+		if (!orderItem) throw new BadRequestException('The selected service is not included in this booking order');
+
+		const existingPayment = await this.paymentModel.findOne({ idempotencyKey: input.idempotencyKey }).exec();
+		if (existingPayment) return existingPayment;
+
+		const paymentAmount = Number(orderItem.servicePrice);
+		if (!Number.isFinite(paymentAmount) || paymentAmount < 0) {
+			throw new BadRequestException('Booking order contains an invalid payment amount');
+		}
+
+		return await this.paymentModel.create({
+			serviceId: input.serviceId,
+			patientId,
+			doctorId: input.doctorId,
+			providerPaymentId: `PAY-${uuidv4()}`,
+			bookingOrderId: order._id,
+			paymentProvider: input.paymentProvider,
+			idempotencyKey: input.idempotencyKey,
+			paymentAmount,
+			paymentCurrency: order.bookingOrderCurrency,
+			paymentMethod: input.paymentMethod,
+			paymentStatus: PaymentStatus.PENDING,
+		});
 	}
 }
