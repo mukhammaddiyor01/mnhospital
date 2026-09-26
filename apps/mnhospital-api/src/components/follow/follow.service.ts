@@ -85,7 +85,9 @@ export class FollowService {
 
 	public async getMemberFollowings(viewerId: ObjectId, input: FollowInquiry): Promise<Followings> {
 		const { page, limit, search } = input;
-		if (!search?.followerId) throw new InternalServerErrorException(Message.BAD_REQUEST);
+		if (!search?.followerId) {
+			throw new InternalServerErrorException(Message.BAD_REQUEST);
+		}
 
 		const match: T = { followerId: search.followerId };
 		console.log('match:', match);
@@ -128,7 +130,9 @@ export class FollowService {
 
 	public async getMemberFollowers(viewerId: ObjectId, input: FollowInquiry): Promise<Followers> {
 		const { page, limit, search } = input;
-		if (!search?.followingId) throw new InternalServerErrorException(Message.BAD_REQUEST);
+		if (!search?.followingId) {
+			throw new InternalServerErrorException(Message.BAD_REQUEST);
+		}
 
 		const match: T = { followingId: search.followingId };
 		console.log('match:', match);

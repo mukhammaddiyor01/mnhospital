@@ -45,6 +45,11 @@ const DoctorSchema = new Schema(
 			default: 0,
 			min: 0,
 		},
+		docFollowings: {
+			type: Number,
+			default: 0,
+			min: 0,
+		},
 		departmentId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Department',
