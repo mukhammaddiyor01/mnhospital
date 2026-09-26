@@ -1,7 +1,24 @@
 import { Schema } from 'mongoose';
+import { MemberAuthType, MemberStatus, MemberType } from '../../member/enums/member.enum';
 
 const ReceptionistSchema = new Schema(
 	{
+		memberType: {
+			type: String,
+			enum: MemberType,
+			default: MemberType.RECEPTIONIST,
+			immutable: true,
+		},
+		memberStatus: {
+			type: String,
+			enum: MemberStatus,
+			default: MemberStatus.ACTIVE,
+		},
+		memberAuthType: {
+			type: String,
+			enum: MemberAuthType,
+			default: MemberAuthType.PHONE,
+		},
 		receptionistNick: {
 			type: String,
 			required: true,
@@ -29,13 +46,16 @@ const ReceptionistSchema = new Schema(
 		},
 		receptionistImage: {
 			type: String,
-			required: true,
+			default: '',
 		},
 		receptionistAddress: {
 			type: String,
 		},
 		receptionistDesc: {
 			type: String,
+		},
+		deletedAt: {
+			type: Date,
 		},
 	},
 	{ timestamps: true, collection: 'receptionist' },
