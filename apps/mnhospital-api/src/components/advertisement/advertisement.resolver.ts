@@ -7,6 +7,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { WithoutGuard } from '../auth/guards/without.guard';
 import { MemberType } from '../member/enums/member.enum';
+import { shapeIntoMongoObjectId } from '../../libs/config';
 import { Advertisement, Advertisements } from './dto/advertisement';
 import { AdvertisementInput, AdvertisementsInquiry } from './dto/advertisement.input';
 import { AdvertisementUpdate } from './dto/advertisement.update';
@@ -40,5 +41,13 @@ export class AdvertisementResolver {
 	public async updateAdvertisement(@Args('input') input: AdvertisementUpdate): Promise<Advertisement> {
 		console.log('Mutation: updateAdvertisement');
 		return await this.advertisementService.updateAdvertisement(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Advertisement)
+	public async removeAdvertisement(@Args('advertisementId') input: string): Promise<Advertisement> {
+		console.log('Mutation: removeAdvertisement');
+		return await this.advertisementService.removeAdvertisement(shapeIntoMongoObjectId(input));
 	}
 }

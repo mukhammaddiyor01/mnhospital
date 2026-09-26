@@ -62,4 +62,21 @@ export class AdvertisementService {
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
 		return result;
 	}
+
+	public async removeAdvertisement(advertisementId: ObjectId): Promise<Advertisement> {
+		const currentAdvertisement = await this.advertisementModel.findById(advertisementId).exec();
+		if (!currentAdvertisement) throw new InternalServerErrorException(Message.REMOVE_FAILED);
+		if (currentAdvertisement.advertisementStatus === AdvertisementStatus.ARCHIVED) return currentAdvertisement;
+
+		const result = await this.advertisementModel
+			.findOneAndUpdate(
+				{ _id: advertisementId, advertisementStatus: { $ne: AdvertisementStatus.ARCHIVED } },
+				{ $set: { advertisementStatus: AdvertisementStatus.ARCHIVED } },
+				{ new: true },
+			)
+			.exec();
+
+		if (!result) throw new InternalServerErrorException(Message.REMOVE_FAILED);
+		return result;
+	}
 }
