@@ -6,7 +6,7 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Service, Services } from './dto/service';
 import { MemberService } from '../member/member.service';
-import { ServiceInput, ServicesInquiry } from './dto/service.input';
+import { DoctorServicesInquiry, ServiceInput, ServicesInquiry } from './dto/service.input';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { MAX_SERVICES_PER_TYPE, ServiceStatus } from './enums/service.enum';
@@ -231,5 +231,38 @@ export class ServiceService {
 
 			match.$or = [{ serviceName: searchRegex }, { serviceTitle: searchRegex }, { serviceDesc: searchRegex }];
 		}
+	}
+
+	public async getDoctorServices(memberId: ObjectId, input: DoctorServicesInquiry): Promise<Services> {
+		const serviceStatus = input.search?.serviceStatus;
+		if ([ServiceStatus.DELETED, ServiceStatus.INACTIVE, ServiceStatus.UNAVAILABLE].includes(serviceStatus))
+			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+
+		const match: T = {
+			memberId: memberId,
+			serviceStatus: serviceStatus ?? { $ne: ServiceStatus.DELETED },
+		};
+		const sort: T = { [input?.sort ?? 'createdAt']: input?.direction ?? Direction.DESC };
+
+		const result = await this.serviceModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: sort },
+				{
+					$facet: {
+						list: [
+							{ $skip: (input.page - 1) * input.limit },
+							{ $limit: input.limit },
+							lookupMember,
+							{ $unwind: '$memberData' },
+						],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		if (!result.length) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		return result[0];
 	}
 }

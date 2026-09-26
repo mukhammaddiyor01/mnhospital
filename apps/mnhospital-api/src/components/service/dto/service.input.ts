@@ -211,3 +211,41 @@ export class ServicesInquiry {
 	@Field(() => ServiceSearch)
 	search: ServiceSearch;
 }
+
+@InputType()
+class DoctorServiceSearch {
+	@IsOptional()
+	@IsEnum(ServiceStatus)
+	@Field(() => ServiceStatus, { nullable: true })
+	serviceStatus?: ServiceStatus;
+}
+
+@InputType()
+export class DoctorServicesInquiry {
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 1 })
+	page: number = 1;
+
+	@IsInt()
+	@Min(1)
+	@Max(100)
+	@Field(() => Int, { defaultValue: 10 })
+	limit: number = 10;
+
+	@IsOptional()
+	@IsIn(availableServiceSorts)
+	@Field(() => String, { nullable: true })
+	sort?: string;
+
+	@IsOptional()
+	@IsEnum(Direction)
+	@Field(() => Direction, { nullable: true })
+	direction?: Direction;
+
+	@IsOptional()
+	@ValidateNested()
+	@Type(() => DoctorServiceSearch)
+	@Field(() => DoctorServiceSearch, { nullable: true })
+	search?: DoctorServiceSearch;
+}

@@ -5,7 +5,7 @@ import { MemberType } from '../member/enums/member.enum';
 import { UseGuards } from '@nestjs/common';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Service, Services } from './dto/service';
-import { ServiceInput, ServicesInquiry } from './dto/service.input';
+import { DoctorServicesInquiry, ServiceInput, ServicesInquiry } from './dto/service.input';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -58,5 +58,16 @@ export class ServiceResolver {
 	): Promise<Services> {
 		console.log('Query: getServices');
 		return await this.serviceService.getServices(memberId, input);
+	}
+
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Query((returns) => Services)
+	public async getDoctorServices(
+		@Args('input') input: DoctorServicesInquiry,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Services> {
+		console.log('Query, getDoctorServices');
+		return await this.serviceService.getDoctorServices(memberId, input);
 	}
 }
