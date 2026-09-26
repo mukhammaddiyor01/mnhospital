@@ -145,7 +145,7 @@ export class DoctorService {
 	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
 		const { _id, targetKey, modifier } = input;
 
-		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles', 'docLikes'];
+		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles', 'docLikes', 'docFollowers'];
 
 		if (!allowedKeys.includes(targetKey)) {
 			throw new BadRequestException('Invalid doctor statistic key');
@@ -154,7 +154,7 @@ export class DoctorService {
 		const search: T = { _id };
 		if (targetKey !== 'docServices') search.memberStatus = MemberStatus.ACTIVE;
 
-		if (['docServices', 'docArticles', 'docLikes'].includes(targetKey) && modifier < 0) {
+		if (['docServices', 'docArticles', 'docLikes', 'docFollowers'].includes(targetKey) && modifier < 0) {
 			search[targetKey] = { $gte: Math.abs(modifier) };
 		}
 
@@ -162,7 +162,7 @@ export class DoctorService {
 			.findOneAndUpdate(search, { $inc: { [targetKey]: modifier } }, { new: true })
 			.exec();
 
-		if (!result && ['docServices', 'docArticles', 'docLikes'].includes(targetKey) && modifier < 0) {
+		if (!result && ['docServices', 'docArticles', 'docLikes', 'docFollowers'].includes(targetKey) && modifier < 0) {
 			result = await this.doctorModel.findOne({ _id }).exec();
 		}
 

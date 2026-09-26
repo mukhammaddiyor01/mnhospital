@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import DepartmentSchema from './department/schema/Department.model';
 import { DepartmentResolver } from './department/department.resolver';
@@ -24,7 +24,7 @@ import { LikeModule } from '../like/like.module';
 			{ name: 'DoctorReport', schema: DoctorReportSchema },
 		]),
 		DoctorCommentsModule,
-		DoctorFollowsModule,
+		forwardRef(() => DoctorFollowsModule),
 		DoctorLikesModule,
 		DoctorMessageModule,
 		DoctorScheduleModule,
