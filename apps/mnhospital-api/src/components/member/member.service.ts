@@ -12,6 +12,9 @@ import { StatisticModifier, T } from '../../libs/types/common';
 import { ViewService } from '../view/view.service';
 import { ViewInput } from '../view/dto/view.input';
 import { ViewGroup } from '../view/enums/view.enum';
+import { LikeService } from '../like/like.service';
+import { LikeInput } from '../like/dto/like.input';
+import { LikeGroup } from '../like/enums/like.enum';
 
 @Injectable()
 export class MemberService {
@@ -19,6 +22,7 @@ export class MemberService {
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		private authService: AuthService,
 		private viewService: ViewService,
+		private likeService: LikeService,
 	) {}
 
 	public async signup(input: MemberInput): Promise<Member> {
@@ -136,6 +140,31 @@ export class MemberService {
 			throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 		}
 
+		return result;
+	}
+
+	/** Compatibility wrapper for existing status-editor calls. */
+	public async memberStatusEditor(input: StatisticModifier): Promise<Member> {
+		return this.memberStatisticEditor(input);
+	}
+
+	/** LIKE Part */
+
+	public async likeTargetMember(memberId: ObjectId, likeRefId: ObjectId): Promise<Member> {
+		const target: Member = await this.memberModel.findOne({ _id: likeRefId, memberStatus: MemberStatus.ACTIVE }).exec();
+		if (!target) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const input: LikeInput = {
+			memberId: memberId,
+			likeRefId: likeRefId,
+			likeGroup: LikeGroup.MEMBER,
+		};
+
+		// LIKE TOGGLE - like bo'lsa -1, bo'lmasa +1
+		const modifier: number = await this.likeService.toggleLike(input);
+		const result = await this.memberStatisticEditor({ _id: likeRefId, targetKey: 'memberLikes', modifier: modifier });
+
+		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
 		return result;
 	}
 }

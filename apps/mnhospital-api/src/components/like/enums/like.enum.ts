@@ -5,3 +5,11 @@ export enum LikeAction {
 	UNLIKE = 'UNLIKE',
 }
 registerEnumType(LikeAction, { name: 'LikeAction' });
+
+export enum LikeGroup {
+	MEMBER = 'MEMBER',
+	SERVICE = 'SERVICE',
+	ARTICLE = 'ARTICLE',
+}
+
+registerEnumType(LikeGroup, { name: 'LikeGroup' });

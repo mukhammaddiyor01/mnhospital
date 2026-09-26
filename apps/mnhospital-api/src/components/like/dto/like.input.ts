@@ -3,7 +3,7 @@ import { Transform } from 'class-transformer';
 import { IsEnum, IsInstance, IsNotEmpty } from 'class-validator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { ReferenceGroup } from '../../../libs/enums/reference.enum';
+import { LikeGroup } from '../enums/like.enum';
 
 @InputType()
 export class LikeInput {
@@ -13,10 +13,10 @@ export class LikeInput {
 	@Field(() => String)
 	likeRefId: ObjectId;
 
-	@IsEnum(ReferenceGroup)
+	@IsEnum(LikeGroup)
 	@IsNotEmpty()
-	@Field(() => ReferenceGroup)
-	likeGroup: ReferenceGroup;
+	@Field(() => LikeGroup)
+	likeGroup: LikeGroup;
 
 	/** Set from the authenticated member, not from GraphQL input. */
 	memberId?: ObjectId;

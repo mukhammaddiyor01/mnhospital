@@ -1,5 +1,5 @@
 import { Schema } from 'mongoose';
-import { ReferenceGroup } from '../../../libs/enums/reference.enum';
+import { LikeGroup } from '../enums/like.enum';
 
 const LikeSchema = new Schema(
 	{
@@ -16,7 +16,7 @@ const LikeSchema = new Schema(
 		},
 		likeGroup: {
 			type: String,
-			enum: ReferenceGroup,
+			enum: LikeGroup,
 			required: true,
 		},
 	},

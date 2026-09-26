@@ -1,7 +1,7 @@
 import { Field, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { ReferenceGroup } from '../../../libs/enums/reference.enum';
+import { LikeGroup } from '../enums/like.enum';
 
 @ObjectType()
 export class MeLiked {
@@ -20,8 +20,8 @@ export class Like {
 	@Field(() => String)
 	_id: ObjectId;
 
-	@Field(() => ReferenceGroup)
-	likeGroup: ReferenceGroup;
+	@Field(() => LikeGroup)
+	likeGroup: LikeGroup;
 
 	@Field(() => String)
 	likeRefId: ObjectId;
