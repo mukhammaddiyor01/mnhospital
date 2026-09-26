@@ -91,5 +91,5 @@ export class ServiceInput {
 	@IsDate()
 	@Field(() => Date, { nullable: true })
 	closedAt?: Date;
-	memberId: import('mongoose').Schema.Types.ObjectId;
+	memberId: ObjectId;
 }

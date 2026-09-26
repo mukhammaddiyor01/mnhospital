@@ -88,4 +88,6 @@ const ServiceSchema = new Schema(
 	{ timestamps: true, collection: 'services' },
 );
 
+ServiceSchema.index({ memberId: 1, serviceType: 1 });
+
 export default ServiceSchema;

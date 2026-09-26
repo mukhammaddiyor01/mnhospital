@@ -1,4 +1,5 @@
-import { ObjectId } from 'mongoose';
+import { Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
 
 export interface T {
 	[key: string]: any;

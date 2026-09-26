@@ -1,11 +1,14 @@
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { Query, UseGuards } from '@nestjs/common';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { MemberType } from '../../member/enums/member.enum';
 import { Department } from './dto/department';
 import { DepartmentInput } from './dto/department.input';
 import { DepartmentService } from './department.service';
+import { WithoutGuard } from '../../auth/guards/without.guard';
+import { Service } from '../../service/dto/service';
+import { shapeIntoMongoObjectId } from '../../../libs/config';
 
 @Resolver()
 export class DepartmentResolver {

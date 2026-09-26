@@ -27,6 +27,8 @@ export enum ServiceStatus {
 }
 registerEnumType(ServiceStatus, { name: 'ServiceStatus' });
 
+export const MAX_SERVICES_PER_TYPE = 4;
+
 export enum ServiceRoomName {
 	CLINIC = 'CLINIC',
 	CONSULTATION = 'CONSULTATION',

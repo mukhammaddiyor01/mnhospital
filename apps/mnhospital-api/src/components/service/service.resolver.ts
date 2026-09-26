@@ -1,4 +1,4 @@
-import { Args, Mutation, Resolver } from '@nestjs/graphql';
+import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { ServiceService } from './service.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MemberType } from '../member/enums/member.enum';
@@ -7,7 +7,10 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Service } from './dto/service';
 import { ServiceInput } from './dto/service.input';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
-import { ObjectId } from 'mongoose';
+import { Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
+import { WithoutGuard } from '../auth/guards/without.guard';
+import { shapeIntoMongoObjectId } from '../../libs/config';
 
 @Resolver()
 export class ServiceResolver {
@@ -24,5 +27,13 @@ export class ServiceResolver {
 		input.memberId = memberId;
 
 		return await this.serviceService.createService(input);
+	}
+
+	@UseGuards(WithoutGuard)
+	@Query(() => Service)
+	public async getService(@Args('serviceId') input: string, @AuthMember('_id') memberId: ObjectId): Promise<Service> {
+		console.log('Query: getService');
+		const serviceId = shapeIntoMongoObjectId(input);
+		return await this.serviceService.getService(memberId, serviceId);
 	}
 }

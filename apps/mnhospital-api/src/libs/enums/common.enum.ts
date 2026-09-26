@@ -7,6 +7,7 @@ export enum Message {
 	UPDATE_FAILED = 'Update is failed!',
 	REMOVE_FAILED = 'Remove failed!',
 	BAD_REQUEST = 'Bad Request',
+	SERVICE_TYPE_LIMIT_REACHED = 'You can create up to 4 services of the same type!',
 
 	USED_MEMBER_NICK_OR_PHONE = 'Already used member nick or phone!',
 	USED_DOCTOR_NICK_PHONE_OR_MAIL = 'Doctor nick, phone or email is already in use!',
