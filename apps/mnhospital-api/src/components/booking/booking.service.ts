@@ -303,26 +303,70 @@ export class BookingService {
 		const result = await payment.save();
 
 		if (paymentStatus === PaymentStatus.PAID) {
-			const order = await this.bookingOrderModel.findById(payment.bookingOrderId).exec();
-			if (order && order.bookingOrderStatus === BookingOrderStatus.PENDING) {
-				const paidPayments = await this.paymentModel
-					.find({ bookingOrderId: order._id, paymentStatus: PaymentStatus.PAID })
-					.select('serviceId doctorId')
-					.lean()
-					.exec();
-				const paidLines = new Set(paidPayments.map((item) => `${item.serviceId.toString()}:${item.doctorId.toString()}`));
-				const allItemsPaid = order.bookingOrderItems.every((item) => paidLines.has(`${item.serviceId}:${item.doctorId}`));
-				if (allItemsPaid) {
-					await this.bookingOrderModel
-						.findByIdAndUpdate(order._id, {
-							$set: { bookingOrderStatus: BookingOrderStatus.CONFIRMED, confirmedAt: new Date() },
-						})
-						.exec();
-				}
-			}
+			await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
 		}
 
 		return result;
+	}
+
+	private async confirmBookingOrderIfAllPaymentsPaid(bookingOrderId: ObjectId): Promise<void> {
+		const order = await this.bookingOrderModel.findById(bookingOrderId).exec();
+		if (!order || order.bookingOrderStatus !== BookingOrderStatus.PENDING) return;
+
+		const paidPayments = await this.paymentModel
+			.find({ bookingOrderId: order._id, paymentStatus: PaymentStatus.PAID })
+			.select('serviceId doctorId')
+			.lean()
+			.exec();
+		const paidLines = new Set(paidPayments.map((item) => `${item.serviceId.toString()}:${item.doctorId.toString()}`));
+		const allItemsPaid = order.bookingOrderItems.every((item) => paidLines.has(`${item.serviceId}:${item.doctorId}`));
+
+		if (allItemsPaid) {
+			await this.bookingOrderModel
+				.findOneAndUpdate(
+					{ _id: order._id, bookingOrderStatus: BookingOrderStatus.PENDING },
+					{ $set: { bookingOrderStatus: BookingOrderStatus.CONFIRMED, confirmedAt: new Date() } },
+				)
+				.exec();
+		}
+	}
+
+	public async verifyEximbayPayment(paymentId: ObjectId, rawData: string): Promise<{ firstTime: boolean }> {
+		const payment = await this.paymentModel.findById(paymentId).lean().exec();
+		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (payment.paymentProvider !== 'EXIMBAY') throw new BadRequestException('Payment provider must be EXIMBAY');
+
+		const transactionId = new URLSearchParams(rawData).get('transaction_id');
+		if (!transactionId) throw new BadRequestException('Eximbay transaction_id is missing');
+
+		await this.eximbayService.verify(rawData);
+		const retrieved = await this.eximbayService.retrieve({
+			providerPaymentId: payment.providerPaymentId,
+			currency: payment.paymentCurrency,
+			amount: payment.paymentAmount,
+			transactionId,
+		});
+
+		const paidAmount = Number.parseFloat(retrieved.payment?.amount ?? '0');
+		if (!Number.isFinite(paidAmount) || Math.abs(paidAmount - payment.paymentAmount) > 0.001) {
+			throw new BadRequestException(
+				`Eximbay amount mismatch: expected ${payment.paymentAmount}, received ${retrieved.payment?.amount ?? '0'}`,
+			);
+		}
+		if (retrieved.payment?.order_id && retrieved.payment.order_id !== payment.providerPaymentId) {
+			throw new BadRequestException('Eximbay order_id does not match the payment');
+		}
+
+		const updated = await this.paymentModel
+			.findOneAndUpdate(
+				{ _id: payment._id, paymentStatus: PaymentStatus.PENDING },
+				{ $set: { paymentStatus: PaymentStatus.PAID, gatewayTransactionId: transactionId, paidAt: new Date() } },
+				{ new: true },
+			)
+			.exec();
+
+		if (updated) await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
+		return { firstTime: Boolean(updated) };
 	}
 
 	public async getMyPayments(memberId: ObjectId, input: PaymentInquiry): Promise<Payments> {

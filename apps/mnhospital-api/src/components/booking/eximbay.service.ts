@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface EximbayReadyPayload {
@@ -37,6 +37,10 @@ export class EximbayService {
 			Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`,
 			'Content-Type': 'application/json',
 		};
+	}
+
+	public getClientUrl(): string {
+		return this.getConfig().clientUrl;
 	}
 
 	public async prepare(input: {
@@ -93,5 +97,54 @@ export class EximbayService {
 			buyer: payload.buyer,
 			url: payload.url,
 		};
+	}
+
+	public async verify(rawData: string): Promise<void> {
+		const config = this.getConfig();
+		const response = await fetch(`${config.baseUrl}/v1/payments/verify`, {
+			method: 'POST',
+			headers: this.getHeaders(config.apiKey),
+			body: JSON.stringify({ data: rawData }),
+		});
+		const data = (await response.json()) as { rescode?: string; resmsg?: string };
+
+		if (!response.ok || data.rescode !== '0000') {
+			throw new BadRequestException(`Eximbay verify failed: ${data.resmsg || response.statusText}`);
+		}
+	}
+
+	public async retrieve(input: {
+		providerPaymentId: string;
+		currency: string;
+		amount: number;
+		transactionId: string;
+	}) {
+		const config = this.getConfig();
+		const response = await fetch(`${config.baseUrl}/v1/payments/retrieve`, {
+			method: 'POST',
+			headers: this.getHeaders(config.apiKey),
+			body: JSON.stringify({
+				mid: config.mid,
+				key_field: 'transaction_id',
+				payment: {
+					order_id: input.providerPaymentId,
+					currency: input.currency,
+					amount: String(input.amount),
+					transaction_id: input.transactionId,
+					lang: 'EN',
+				},
+			}),
+		});
+		const data = (await response.json()) as {
+			rescode?: string;
+			resmsg?: string;
+			payment?: { order_id?: string; amount?: string; transaction_id?: string };
+		};
+
+		if (!response.ok || data.rescode !== '0000') {
+			throw new BadRequestException(`Eximbay retrieve failed: ${data.resmsg || response.statusText}`);
+		}
+
+		return data;
 	}
 }
