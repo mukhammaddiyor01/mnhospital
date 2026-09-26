@@ -18,6 +18,7 @@ import { Article, Articles } from '../article/dto/article';
 import { ArticleSearch, ArticlesInquiry } from '../article/dto/article.input';
 import { ArticleUpdate } from '../article/dto/article.update';
 import { ArticleStatus } from '../article/enums/article.enum';
+import { Comment } from '../comment/dto/comment';
 
 @Injectable()
 export class AdminService {
@@ -25,6 +26,7 @@ export class AdminService {
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		@InjectModel('Article') private readonly articleModel: Model<Article>,
+		@InjectModel('Comment') private readonly commentModel: Model<Comment>,
 		private readonly doctorService: DoctorService,
 	) {}
 
@@ -318,5 +320,13 @@ export class AdminService {
 			const searchRegex = new RegExp(text, 'i');
 			match.$or = [{ articleTitle: searchRegex }, { articleContent: searchRegex }];
 		}
+	}
+
+	/** COMMENT */
+
+	public async removeCommentByAdmin(input: ObjectId): Promise<Comment> {
+		const result = await this.commentModel.findByIdAndDelete(input);
+		if (!result) throw new InternalServerErrorException(Message.REMOVE_FAILED);
+		return result;
 	}
 }

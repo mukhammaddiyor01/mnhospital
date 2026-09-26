@@ -8,6 +8,7 @@ import MemberSchema from '../member/schema/Member.model';
 import ServiceSchema from '../service/schema/Service.model';
 import { DoctorModule } from '../doctor/doctor.module';
 import ArticleSchema from '../article/schema/Article.model';
+import CommentSchema from '../comment/schema/Comment.model';
 
 @Module({
 	imports: [
@@ -29,6 +30,14 @@ import ArticleSchema from '../article/schema/Article.model';
 			{
 				name: 'Article',
 				schema: ArticleSchema,
+			},
+			{
+				name: 'Comment',
+				schema: CommentSchema,
+			},
+			{
+				name: 'Comment',
+				schema: CommentSchema,
 			},
 		]),
 		AuthModule,
