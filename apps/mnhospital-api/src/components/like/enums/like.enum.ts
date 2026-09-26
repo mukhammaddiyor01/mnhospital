@@ -8,6 +8,7 @@ registerEnumType(LikeAction, { name: 'LikeAction' });
 
 export enum LikeGroup {
 	MEMBER = 'MEMBER',
+	DOCTOR = 'DOCTOR',
 	SERVICE = 'SERVICE',
 	ARTICLE = 'ARTICLE',
 }

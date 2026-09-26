@@ -14,6 +14,7 @@ import { DoctorResolver } from './doctor.resolver';
 import { DoctorService } from './doctor.service';
 import DoctorSchema from './schema/Doctor.model';
 import { AuthModule } from '../auth/auth.module';
+import { LikeModule } from '../like/like.module';
 
 @Module({
 	imports: [
@@ -29,6 +30,7 @@ import { AuthModule } from '../auth/auth.module';
 		DoctorScheduleModule,
 		DoctorViewsModule,
 		AuthModule,
+		LikeModule,
 	],
 	providers: [DoctorResolver, DoctorService, DepartmentResolver, DepartmentService],
 	exports: [MongooseModule, DoctorService, DepartmentService],

@@ -8,12 +8,16 @@ import { StatisticModifier, T } from '../../libs/types/common';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberStatus } from '../member/enums/member.enum';
+import { LikeService } from '../like/like.service';
+import { LikeInput } from '../like/dto/like.input';
+import { LikeGroup } from '../like/enums/like.enum';
 
 @Injectable()
 export class DoctorService {
 	constructor(
 		@InjectModel('Doctor') private readonly doctorModel: Model<Doctor>,
 		private readonly authService: AuthService,
+		private readonly likeService: LikeService,
 	) {}
 
 	public async signupDoctor(input: DoctorInput): Promise<Doctor> {
@@ -91,10 +95,36 @@ export class DoctorService {
 		return doctor;
 	}
 
+	public async likeTargetDoctor(memberId: ObjectId, doctorId: ObjectId): Promise<Doctor> {
+		const targetDoctor = await this.doctorModel
+			.findOne({
+				_id: doctorId,
+				memberStatus: MemberStatus.ACTIVE,
+				deletedAt: { $exists: false },
+			})
+			.exec();
+		if (!targetDoctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const likeInput: LikeInput = {
+			memberId,
+			likeRefId: doctorId,
+			likeGroup: LikeGroup.DOCTOR,
+		};
+		const modifier = await this.likeService.toggleLike(likeInput);
+		const result = await this.doctorStatisticEditor({
+			_id: doctorId,
+			targetKey: 'docLikes',
+			modifier,
+		});
+
+		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		return result;
+	}
+
 	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
 		const { _id, targetKey, modifier } = input;
 
-		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles'];
+		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles', 'docLikes'];
 
 		if (!allowedKeys.includes(targetKey)) {
 			throw new BadRequestException('Invalid doctor statistic key');
@@ -103,7 +133,7 @@ export class DoctorService {
 		const search: T = { _id };
 		if (targetKey !== 'docServices') search.memberStatus = MemberStatus.ACTIVE;
 
-		if (['docServices', 'docArticles'].includes(targetKey) && modifier < 0) {
+		if (['docServices', 'docArticles', 'docLikes'].includes(targetKey) && modifier < 0) {
 			search[targetKey] = { $gte: Math.abs(modifier) };
 		}
 
@@ -111,7 +141,7 @@ export class DoctorService {
 			.findOneAndUpdate(search, { $inc: { [targetKey]: modifier } }, { new: true })
 			.exec();
 
-		if (!result && ['docServices', 'docArticles'].includes(targetKey) && modifier < 0) {
+		if (!result && ['docServices', 'docArticles', 'docLikes'].includes(targetKey) && modifier < 0) {
 			result = await this.doctorModel.findOne({ _id }).exec();
 		}
 
