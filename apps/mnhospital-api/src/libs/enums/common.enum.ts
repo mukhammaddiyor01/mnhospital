@@ -15,7 +15,7 @@ export enum Message {
 	TOKEN_CREATION_FAILED = 'Token creation error!',
 	NO_MEMBER_NICK = 'no member with that member nick!',
 	NO_DOCTOR_NICK = 'No doctor with that doctor nick!',
-	DOCTOR_SIGNUP_REQUIRED = 'Doctors must register through signupDoctor!',
+	DOCTOR_SIGNUP_REQUIRED = 'Doctor profiles must be created by an admin!',
 	BLOCKED_USER = 'You have been blocked, contact MNHospital!',
 	WRONG_PASSWORD = 'Wrong password entered, please try again!',
 	NOT_AUTHENTICATED = 'You are not authenticated, Please login first!',

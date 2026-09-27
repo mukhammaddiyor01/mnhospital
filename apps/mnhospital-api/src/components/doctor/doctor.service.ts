@@ -23,15 +23,18 @@ export class DoctorService {
 		private readonly likeService: LikeService,
 	) {}
 
-	public async signupDoctor(input: DoctorInput): Promise<Doctor> {
-		input.docPassword = await this.authService.hashPassword(input.docPassword);
+	public async createDoctorByAdmin(input: DoctorInput): Promise<Doctor> {
+		const createData: DoctorInput = {
+			...input,
+			docPassword: await this.authService.hashPassword(input.docPassword),
+		};
 
 		try {
-			const doctor = await this.doctorModel.create(input);
+			const doctor = await this.doctorModel.create(createData);
 			doctor.accessToken = await this.authService.createToken(doctor);
 			return doctor;
 		} catch (err) {
-			console.log('Error, DoctorService.signupDoctor:', err.message);
+			console.log('Error, DoctorService.createDoctorByAdmin:', err.message);
 			throw new BadRequestException(Message.USED_DOCTOR_NICK_PHONE_OR_MAIL);
 		}
 	}
