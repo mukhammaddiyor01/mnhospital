@@ -7,6 +7,8 @@ const ReceptionTaskSchema = new Schema(
 		appointmentId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Appointment',
+			required: true,
+			index: true,
 		},
 		patientId: {
 			type: Schema.Types.ObjectId,
