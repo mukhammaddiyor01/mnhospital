@@ -121,6 +121,52 @@ export class ServiceService {
 		return targetService;
 	}
 
+	public async getRecommendedServices(serviceId: ObjectId, limit = 6): Promise<Services> {
+		const currentService = await this.serviceModel
+			.findOne({ _id: serviceId, serviceStatus: ServiceStatus.ACTIVE })
+			.select('_id departmentId serviceType')
+			.lean()
+			.exec();
+		if (!currentService) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
+		const safeLimit = Math.min(Math.max(limit, 1), 20);
+		const result = await this.serviceModel
+			.aggregate([
+				{
+					$match: {
+						_id: { $ne: currentService._id },
+						serviceStatus: ServiceStatus.ACTIVE,
+					},
+				},
+				{
+					$addFields: {
+						recommendationScore: {
+							$add: [
+								{ $cond: [{ $eq: ['$departmentId', currentService.departmentId] }, 3, 0] },
+								{ $cond: [{ $eq: ['$serviceType', currentService.serviceType] }, 2, 0] },
+							],
+						},
+					},
+				},
+				{
+					$sort: {
+						recommendationScore: -1,
+						serviceRank: -1,
+						serviceLikes: -1,
+						serviceViews: -1,
+						createdAt: -1,
+					},
+				},
+				{ $limit: safeLimit },
+				lookupDoctor,
+				{ $unwind: { path: '$memberData', preserveNullAndEmptyArrays: true } },
+				{ $project: { recommendationScore: 0 } },
+			])
+			.exec();
+
+		return { list: result, metaCounter: [{ total: result.length }] };
+	}
+
 	public async getFavorites(memberId: ObjectId, input: OrdinaryInquiry): Promise<Services> {
 		return await this.likeService.getFavoriteServices(memberId, input);
 	}

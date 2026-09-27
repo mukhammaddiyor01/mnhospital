@@ -1,4 +1,4 @@
-import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { ServiceService } from './service.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MemberType } from '../member/enums/member.enum';
@@ -47,6 +47,16 @@ export class ServiceResolver {
 		console.log('Query: getService');
 		const serviceId = shapeIntoMongoObjectId(input);
 		return await this.serviceService.getService(memberId, serviceId);
+	}
+
+	@UseGuards(WithoutGuard)
+	@Query(() => Services)
+	public async getRecommendedServices(
+		@Args('serviceId') serviceId: string,
+		@Args('limit', { type: () => Int, defaultValue: 6 }) limit: number,
+	): Promise<Services> {
+		console.log('Query: getRecommendedServices');
+		return this.serviceService.getRecommendedServices(shapeIntoMongoObjectId(serviceId), limit);
 	}
 
 	@UseGuards(AuthGuard)
