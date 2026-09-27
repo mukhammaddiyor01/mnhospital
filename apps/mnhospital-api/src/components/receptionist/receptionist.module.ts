@@ -7,6 +7,7 @@ import ReceptionTaskSchema from './schema/ReceptionTask.model';
 import AppointmentSchema from '../../libs/schemas/Appointment.model';
 import MemberSchema from '../member/schema/Member.model';
 import { AuthModule } from '../auth/auth.module';
+import { DoctorReportsModule } from '../doctor/doctor-reports/doctorReports.module';
 
 @Module({
 	imports: [
@@ -17,6 +18,7 @@ import { AuthModule } from '../auth/auth.module';
 			{ name: 'Member', schema: MemberSchema },
 		]),
 		AuthModule,
+		DoctorReportsModule,
 	],
 	exports: [MongooseModule],
 	providers: [ReceptionistService, ReceptionistResolver],

@@ -13,12 +13,14 @@ import {
 	ReceptionistInquiry,
 	ReceptionistLoginInput,
 	ReceptionistProfileUpdateInput,
+	ReceptionistReportInquiry,
 	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
 import { ReceptionTask, ReceptionTasks } from './dto/reception-task';
 import { ReceptionTaskInput, ReceptionTaskInquiry, ReceptionTaskStatusInput } from './dto/reception-task.input';
 import { ReceptionTaskStatus } from './enums/receptionist.enum';
 import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
+import { DoctorReport, DoctorReports } from '../doctor/doctor-reports/dto/doctor-report';
 
 @Injectable()
 export class ReceptionistService {
@@ -26,6 +28,7 @@ export class ReceptionistService {
 		@InjectModel('ReceptionTask') private readonly receptionTaskModel: Model<ReceptionTask>,
 		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
 		@InjectModel('Receptionist') private readonly receptionistModel: Model<Receptionist>,
+		@InjectModel('DoctorReport') private readonly doctorReportModel: Model<DoctorReport>,
 		private readonly authService: AuthService,
 	) {}
 
@@ -129,6 +132,32 @@ export class ReceptionistService {
 			completedTaskCount,
 			cancelledTaskCount,
 		};
+	}
+
+	public async getMyReports(receptionistId: ObjectId, input: ReceptionistReportInquiry): Promise<DoctorReports> {
+		const taskMatch: Record<string, unknown> = {
+			receptionistId,
+			taskStatus: { $ne: ReceptionTaskStatus.CANCELLED },
+		};
+		if (input.patientId) taskMatch.patientId = input.patientId;
+
+		const tasks = await this.receptionTaskModel.find(taskMatch).select('appointmentId').lean().exec();
+		const appointmentIds = tasks.map((task) => task.appointmentId).filter(Boolean);
+		if (!appointmentIds.length) return { list: [], metaCounter: [] };
+
+		const result = await this.doctorReportModel
+			.aggregate([
+				{ $match: { appointmentId: { $in: appointmentIds } } },
+				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
 	}
 
 	public async updateByAdmin(input: ReceptionistAdminUpdateInput): Promise<Receptionist> {

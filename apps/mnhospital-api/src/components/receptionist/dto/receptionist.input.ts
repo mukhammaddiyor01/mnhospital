@@ -133,6 +133,25 @@ export class ReceptionistStatusUpdateInput {
 }
 
 @InputType()
+export class ReceptionistReportInquiry {
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 1 })
+	page = 1;
+
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 10 })
+	limit = 10;
+
+	@Transform(({ value }) => (typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value))
+	@IsInstance(ObjectId)
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	patientId?: ObjectId;
+}
+
+@InputType()
 export class ReceptionistInquiry {
 	@IsInt()
 	@Min(1)

@@ -17,9 +17,11 @@ import {
 	ReceptionistInquiry,
 	ReceptionistLoginInput,
 	ReceptionistProfileUpdateInput,
+	ReceptionistReportInquiry,
 	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
 import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
+import { DoctorReports } from '../doctor/doctor-reports/dto/doctor-report';
 
 @Resolver()
 export class ReceptionistResolver {
@@ -74,6 +76,17 @@ export class ReceptionistResolver {
 	): Promise<ReceptionistDashboardStats> {
 		console.log('Query: getMyReceptionistDashboardStats');
 		return this.receptionistService.getDashboardStats(receptionistId);
+	}
+
+	@Roles(MemberType.RECEPTIONIST)
+	@UseGuards(RolesGuard)
+	@Query(() => DoctorReports)
+	public async getMyReceptionistReports(
+		@Args('input') input: ReceptionistReportInquiry,
+		@AuthMember('_id') receptionistId: ObjectId,
+	): Promise<DoctorReports> {
+		console.log('Query: getMyReceptionistReports');
+		return this.receptionistService.getMyReports(receptionistId, input);
 	}
 
 	@Roles(MemberType.ADMIN)
