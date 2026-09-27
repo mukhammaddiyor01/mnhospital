@@ -4,6 +4,8 @@ import NoticeSchema from './schema/Notice.model';
 import NotificationSchema from './schema/Notification.model';
 import { NotificationService } from './notification.service';
 import { NotificationResolver } from './notification.resolver';
+import { NoticeService } from './notice.service';
+import { NoticeResolver } from './notice.resolver';
 
 @Module({
 	imports: [
@@ -13,6 +15,6 @@ import { NotificationResolver } from './notification.resolver';
 		]),
 	],
 	exports: [MongooseModule, NotificationService],
-	providers: [NotificationService, NotificationResolver],
+	providers: [NotificationService, NotificationResolver, NoticeService, NoticeResolver],
 })
 export class NotificationModule {}
