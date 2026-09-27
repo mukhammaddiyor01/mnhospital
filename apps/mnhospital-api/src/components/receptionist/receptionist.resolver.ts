@@ -19,6 +19,7 @@ import {
 	ReceptionistProfileUpdateInput,
 	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
+import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
 
 @Resolver()
 export class ReceptionistResolver {
@@ -63,6 +64,26 @@ export class ReceptionistResolver {
 	public async getReceptionists(@Args('input') input: ReceptionistInquiry): Promise<Receptionists> {
 		console.log('Query: getReceptionists');
 		return await this.receptionistService.getReceptionists(input);
+	}
+
+	@Roles(MemberType.RECEPTIONIST)
+	@UseGuards(RolesGuard)
+	@Query(() => ReceptionistDashboardStats)
+	public async getMyReceptionistDashboardStats(
+		@AuthMember('_id') receptionistId: ObjectId,
+	): Promise<ReceptionistDashboardStats> {
+		console.log('Query: getMyReceptionistDashboardStats');
+		return this.receptionistService.getDashboardStats(receptionistId);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => ReceptionistDashboardStats)
+	public async getReceptionistDashboardStatsByAdmin(
+		@Args('receptionistId') receptionistId: string,
+	): Promise<ReceptionistDashboardStats> {
+		console.log('Query: getReceptionistDashboardStatsByAdmin');
+		return this.receptionistService.getDashboardStats(shapeIntoMongoObjectId(receptionistId));
 	}
 
 	@Roles(MemberType.ADMIN)

@@ -18,6 +18,7 @@ import {
 import { ReceptionTask, ReceptionTasks } from './dto/reception-task';
 import { ReceptionTaskInput, ReceptionTaskInquiry, ReceptionTaskStatusInput } from './dto/reception-task.input';
 import { ReceptionTaskStatus } from './enums/receptionist.enum';
+import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
 
 @Injectable()
 export class ReceptionistService {
@@ -97,6 +98,37 @@ export class ReceptionistService {
 			])
 			.exec();
 		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getDashboardStats(receptionistId: ObjectId): Promise<ReceptionistDashboardStats> {
+		const receptionist = await this.receptionistModel
+			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } })
+			.select('_id memberStatus')
+			.lean()
+			.exec();
+		if (!receptionist) throw new InternalServerErrorException('Receptionist was not found');
+
+		const taskMatch = { receptionistId };
+		const [taskCount, pendingTaskCount, acceptedTaskCount, inProgressTaskCount, completedTaskCount, cancelledTaskCount] =
+			await Promise.all([
+				this.receptionTaskModel.countDocuments(taskMatch).exec(),
+				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.PENDING }).exec(),
+				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.ACCEPTED }).exec(),
+				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.IN_PROGRESS }).exec(),
+				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.COMPLETED }).exec(),
+				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.CANCELLED }).exec(),
+			]);
+
+		return {
+			receptionistId: receptionist._id,
+			memberStatus: receptionist.memberStatus,
+			taskCount,
+			pendingTaskCount,
+			acceptedTaskCount,
+			inProgressTaskCount,
+			completedTaskCount,
+			cancelledTaskCount,
+		};
 	}
 
 	public async updateByAdmin(input: ReceptionistAdminUpdateInput): Promise<Receptionist> {
