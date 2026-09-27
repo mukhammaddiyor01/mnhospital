@@ -43,6 +43,22 @@ export class PatientService {
 		return result;
 	}
 
+	public async updateStatusByAdmin(patientId: ObjectId, memberStatus: MemberStatus): Promise<Patient> {
+		const patient = await this.patientModel
+			.findOne({ _id: patientId, memberType: MemberType.PATIENT, deletedAt: { $exists: false } })
+			.exec();
+		if (!patient) throw new InternalServerErrorException('Patient was not found');
+
+		const updateData: Record<string, unknown> = { memberStatus };
+		if (memberStatus === MemberStatus.DELETE) updateData.deletedAt = new Date();
+
+		const result = await this.patientModel
+			.findOneAndUpdate({ _id: patientId, memberType: MemberType.PATIENT }, { $set: updateData }, { new: true, runValidators: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException('Patient status update failed');
+		return result;
+	}
+
 	public async resolveProfileId(memberId: ObjectId): Promise<ObjectId> {
 		const patient = await this.patientModel
 			.findOne({ memberId, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })

@@ -7,7 +7,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { MemberType } from '../member/enums/member.enum';
 import { Patient } from './dto/patient';
-import { PatientProfileInput } from './dto/patient.input';
+import { PatientProfileInput, PatientStatusUpdateInput } from './dto/patient.input';
 import { PatientService } from './patient.service';
 
 @Resolver()
@@ -42,5 +42,13 @@ export class PatientResolver {
 	): Promise<Patient> {
 		console.log('Mutation: updateMyPatientProfile');
 		return await this.patientService.updateMyProfile(memberId, input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Patient)
+	public async updatePatientStatusByAdmin(@Args('input') input: PatientStatusUpdateInput): Promise<Patient> {
+		console.log('Mutation: updatePatientStatusByAdmin');
+		return await this.patientService.updateStatusByAdmin(input._id, input.memberStatus);
 	}
 }
