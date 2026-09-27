@@ -4,13 +4,17 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import moment = require('moment');
 import { Member, Members } from '../member/dto/member';
+import { Admin } from './dto/admin';
+import { AdminLoginInput } from './dto/admin.input';
 import { MembersInquiry } from '../member/dto/member.input';
 import { Service, Services } from '../service/dto/service';
 import { ServiceSearch, ServicesInquiry } from '../service/dto/service.input';
 import { ServiceUpdate } from '../service/dto/service.update';
 import { ServiceStatus, MAX_SERVICES_PER_TYPE } from '../service/enums/service.enum';
 import { DoctorService } from '../doctor/doctor.service';
+import { AuthService } from '../auth/auth.service';
 import { Direction, Message } from '../../libs/enums/common.enum';
+import { MemberType } from '../member/enums/member.enum';
 import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
 import { T } from '../../libs/types/common';
 import { MemberUpdate } from '../member/dto/member.update';
@@ -23,12 +27,34 @@ import { Comment } from '../comment/dto/comment';
 @Injectable()
 export class AdminService {
 	constructor(
+		@InjectModel('Admin') private readonly adminModel: Model<Admin>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		@InjectModel('Article') private readonly articleModel: Model<Article>,
 		@InjectModel('Comment') private readonly commentModel: Model<Comment>,
 		private readonly doctorService: DoctorService,
+		private readonly authService: AuthService,
 	) {}
+
+	public async loginAdmin(input: AdminLoginInput): Promise<Admin> {
+		const admin = await this.adminModel.findOne({ adminNick: input.adminNick }).select('+adminPassword').exec();
+		if (!admin || admin.deletedAt) throw new InternalServerErrorException('Admin was not found');
+
+		const isMatch = await this.authService.comparePassword(input.adminPassword, admin.adminPassword);
+		if (!isMatch) throw new InternalServerErrorException(Message.WRONG_PASSWORD);
+
+		admin.memberType = MemberType.ADMIN;
+		admin.accessToken = await this.authService.createToken(admin);
+		return admin;
+	}
+
+	public async getMyProfile(adminId: ObjectId): Promise<Admin> {
+		const admin = await this.adminModel
+			.findOne({ _id: adminId, memberType: MemberType.ADMIN, deletedAt: { $exists: false } })
+			.exec();
+		if (!admin) throw new InternalServerErrorException('Admin was not found');
+		return admin;
+	}
 
 	/** MEMBERS */
 

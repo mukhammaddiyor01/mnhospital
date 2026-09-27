@@ -2,15 +2,15 @@ import { Field, Int, ObjectType } from '@nestjs/graphql';
 
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { AdminType } from '../enums/admin.enum';
+import { MemberType } from '../../member/enums/member.enum';
 
 @ObjectType()
 export class Admin {
 	@Field(() => String)
 	_id: ObjectId;
 
-	@Field(() => AdminType)
-	adminType: AdminType;
+	@Field(() => MemberType)
+	memberType: MemberType;
 
 	@Field(() => String)
 	adminNick: string;

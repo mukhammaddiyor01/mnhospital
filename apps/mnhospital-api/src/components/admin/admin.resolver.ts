@@ -15,10 +15,29 @@ import { Article, Articles } from '../article/dto/article';
 import { ArticlesInquiry } from '../article/dto/article.input';
 import { ArticleUpdate } from '../article/dto/article.update';
 import { Comment } from '../comment/dto/comment';
+import { Admin } from './dto/admin';
+import { AdminLoginInput } from './dto/admin.input';
+import { AuthMember } from '../auth/decorators/authMember.decorator';
+import { Types } from 'mongoose';
+import ObjectId = Types.ObjectId;
 
 @Resolver()
 export class AdminResolver {
 	constructor(private readonly adminService: AdminService) {}
+
+	@Mutation(() => Admin)
+	public async loginAdmin(@Args('input') input: AdminLoginInput): Promise<Admin> {
+		console.log('Mutation: loginAdmin');
+		return this.adminService.loginAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Admin)
+	public async getMyAdminProfile(@AuthMember('_id') adminId: ObjectId): Promise<Admin> {
+		console.log('Query: getMyAdminProfile');
+		return this.adminService.getMyProfile(adminId);
+	}
 	/** MEMBER */
 	@Roles(MemberType.ADMIN)
 	@UseGuards(RolesGuard)

@@ -1,12 +1,13 @@
 import { Schema } from 'mongoose';
-import { AdminType } from '../enums/admin.enum';
+import { MemberType } from '../../member/enums/member.enum';
 
 const AdminSchema = new Schema(
 	{
 		memberType: {
 			type: String,
-			enum: AdminType,
-			default: AdminType.ADMIN,
+			enum: MemberType,
+			default: MemberType.ADMIN,
+			immutable: true,
 		},
 		adminNick: {
 			type: String,
