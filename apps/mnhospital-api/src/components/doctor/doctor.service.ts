@@ -13,12 +13,21 @@ import { LikeService } from '../like/like.service';
 import { LikeInput } from '../like/dto/like.input';
 import { LikeGroup } from '../like/enums/like.enum';
 import { Follower, Following, MeFollowed } from '../follow/dto/follow';
+import { Service } from '../service/dto/service';
+import { Appointment } from '../appointment/dto/appointment';
+import { DoctorReport } from './doctor-reports/dto/doctor-report';
+import { ServiceStatus } from '../service/enums/service.enum';
+import { AppointmentStatus } from '../../libs/enums/appointment.enum';
+import { DoctorDashboardStats } from './dto/doctor-dashboard';
 
 @Injectable()
 export class DoctorService {
 	constructor(
 		@InjectModel('Doctor') private readonly doctorModel: Model<Doctor>,
 		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
+		@InjectModel('Service') private readonly serviceModel: Model<Service>,
+		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
+		@InjectModel('DoctorReport') private readonly doctorReportModel: Model<DoctorReport>,
 		private readonly authService: AuthService,
 		private readonly likeService: LikeService,
 	) {}
@@ -73,6 +82,46 @@ export class DoctorService {
 			.exec();
 		if (!result) throw new InternalServerErrorException('Doctor status update failed');
 		return result;
+	}
+
+	public async getDashboardStats(doctorId: ObjectId): Promise<DoctorDashboardStats> {
+		const doctor = await this.doctorModel
+			.findOne({ _id: doctorId, memberType: MemberType.DOCTOR, deletedAt: { $exists: false } })
+			.select('_id memberStatus')
+			.lean()
+			.exec();
+		if (!doctor) throw new InternalServerErrorException('Doctor was not found');
+
+		const [serviceCount, appointmentCount, completedAppointmentCount, reportCount, patientCounter] = await Promise.all([
+			this.serviceModel.countDocuments({ memberId: doctorId, serviceStatus: { $ne: ServiceStatus.DELETED } }).exec(),
+			this.appointmentModel.countDocuments({ doctorId }).exec(),
+			this.appointmentModel
+				.countDocuments({ doctorId, appointmentStatus: { $in: [AppointmentStatus.ENDED, AppointmentStatus.COMPLETED] } })
+				.exec(),
+			this.doctorReportModel.countDocuments({ doctorId }).exec(),
+			this.appointmentModel
+				.aggregate([
+					{
+						$match: {
+							doctorId,
+							appointmentStatus: { $nin: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
+						},
+					},
+					{ $group: { _id: '$patientId' } },
+					{ $count: 'total' },
+				])
+				.exec(),
+		]);
+
+		return {
+			doctorId: doctor._id,
+			memberStatus: doctor.memberStatus,
+			serviceCount,
+			patientCount: patientCounter[0]?.total ?? 0,
+			appointmentCount,
+			completedAppointmentCount,
+			reportCount,
+		};
 	}
 
 	public async getDoctors(input: DoctorsInquiry, memberId?: ObjectId): Promise<Doctors> {

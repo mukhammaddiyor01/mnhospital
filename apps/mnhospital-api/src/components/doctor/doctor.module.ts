@@ -16,6 +16,9 @@ import DoctorSchema from './schema/Doctor.model';
 import { AuthModule } from '../auth/auth.module';
 import { LikeModule } from '../like/like.module';
 import FollowSchema from '../follow/schema/Follow.model';
+import ServiceSchema from '../service/schema/Service.model';
+import AppointmentSchema from '../../libs/schemas/Appointment.model';
+import DoctorReportSchema from './doctor-reports/schema/DoctorReport.model';
 
 @Module({
 	imports: [
@@ -29,6 +32,9 @@ import FollowSchema from '../follow/schema/Follow.model';
 				name: 'Follow',
 				schema: FollowSchema,
 			},
+			{ name: 'Service', schema: ServiceSchema },
+			{ name: 'Appointment', schema: AppointmentSchema },
+			{ name: 'DoctorReport', schema: DoctorReportSchema },
 		]),
 		DoctorCommentsModule,
 		forwardRef(() => DoctorFollowsModule),

@@ -12,6 +12,7 @@ import { shapeIntoMongoObjectId } from '../../libs/config';
 import { DoctorService } from './doctor.service';
 import { Doctor, Doctors } from './dto/doctor';
 import { DoctorInput, DoctorLoginInput, DoctorStatusUpdateInput, DoctorsInquiry } from './dto/doctor.input';
+import { DoctorDashboardStats } from './dto/doctor-dashboard';
 
 @Resolver()
 export class DoctorResolver {
@@ -37,6 +38,22 @@ export class DoctorResolver {
 	public async updateDoctorStatusByAdmin(@Args('input') input: DoctorStatusUpdateInput): Promise<Doctor> {
 		console.log('Mutation: updateDoctorStatusByAdmin');
 		return this.doctorService.updateStatusByAdmin(input._id, input.memberStatus);
+	}
+
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Query(() => DoctorDashboardStats)
+	public async getMyDoctorDashboardStats(@AuthMember('_id') doctorId: ObjectId): Promise<DoctorDashboardStats> {
+		console.log('Query: getMyDoctorDashboardStats');
+		return this.doctorService.getDashboardStats(doctorId);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => DoctorDashboardStats)
+	public async getDoctorDashboardStatsByAdmin(@Args('doctorId') doctorId: string): Promise<DoctorDashboardStats> {
+		console.log('Query: getDoctorDashboardStatsByAdmin');
+		return this.doctorService.getDashboardStats(shapeIntoMongoObjectId(doctorId));
 	}
 
 	@UseGuards(AuthGuard)
