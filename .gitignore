@@ -43,16 +43,26 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.local
+.envrc
+.direnv/
+.vercel/
 
 # Local credentials and certificates
 secrets*.json
 credentials*.json
 service-account*.json
+*.credentials.json
 *.pem
 *.key
 *.crt
+*.cer
+*.der
 *.p12
 *.pfx
+*.jks
+*.keystore
+.npmrc.local
+.yarnrc.local
 
 # temp directory
 .temp
