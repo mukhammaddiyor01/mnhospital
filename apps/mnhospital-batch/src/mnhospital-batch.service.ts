@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { Connection } from 'mongoose';
-import { BATCH_ROLLBACK, BATCH_TOP_AGENTS, BATCH_TOP_PROPERTIES } from './batch.constants';
 
 @Injectable()
 export class MnhospitalBatchService {
@@ -10,69 +8,52 @@ export class MnhospitalBatchService {
 
 	constructor(@InjectConnection() private readonly connection: Connection) {}
 
-	@Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, { name: BATCH_ROLLBACK })
 	public async batchRollback(): Promise<void> {
 		const [services, doctors] = await Promise.all([
 			this.connection.collection('services').updateMany(
 				{
-					$or: [
-						{ serviceStatus: { $in: ['INACTIVE', 'UNAVAILABLE', 'DELETED'] } },
-						{ deletedAt: { $exists: true } },
-					],
+					serviceStatus: 'ACTIVE',
+					deletedAt: { $exists: false },
 				},
 				{ $set: { serviceRank: 0 } },
 			),
 			this.connection.collection('doctors').updateMany(
 				{
-					$or: [
-						{ memberStatus: { $in: ['BLOCK', 'DELETE'] } },
-						{ deletedAt: { $exists: true } },
-					],
+					memberStatus: 'ACTIVE',
+					deletedAt: { $exists: false },
 				},
 				{ $set: { docPoints: 0 } },
 			),
 		]);
 
-		this.logger.log(`${BATCH_ROLLBACK} finished: services=${services.modifiedCount}, doctors=${doctors.modifiedCount}`);
+		this.logger.log(`Batch rollback finished: services=${services.modifiedCount}, doctors=${doctors.modifiedCount}`);
 	}
 
-	@Cron('0 5 * * *', { name: BATCH_TOP_PROPERTIES })
-	public async batchProperties(): Promise<void> {
+	public async batchTopProperties(): Promise<void> {
 		const services = await this.connection
 			.collection('services')
-			.aggregate([
-				{ $match: { serviceStatus: 'ACTIVE', deletedAt: { $exists: false } } },
-				{
-					$project: {
-						_id: 1,
-						serviceRank: {
-							$add: [
-								{ $multiply: [{ $ifNull: ['$serviceLikes', 0] }, 3] },
-								{ $multiply: [{ $ifNull: ['$serviceComments', 0] }, 2] },
-								{ $ifNull: ['$serviceViews', 0] },
-							],
-						},
-					},
-				},
-			])
+			.find({ serviceStatus: 'ACTIVE', serviceRank: 0, deletedAt: { $exists: false } })
+			.project({ _id: 1, serviceLikes: 1, serviceViews: 1, serviceComments: 1 })
 			.toArray();
 
-		if (services.length) {
-			await this.connection.collection('services').bulkWrite(
-				services.map((service) => ({
-					updateOne: {
-						filter: { _id: service._id, serviceStatus: 'ACTIVE', deletedAt: { $exists: false } },
-						update: { $set: { serviceRank: service.serviceRank } },
-					},
-				})),
-			);
-		}
+		await Promise.all(
+			services.map((service) => {
+				const serviceRank =
+					Number(service.serviceLikes ?? 0) * 3 +
+					Number(service.serviceViews ?? 0) +
+					Number(service.serviceComments ?? 0) * 2;
 
-		this.logger.log(`${BATCH_TOP_PROPERTIES} finished: services=${services.length}`);
+				return this.connection.collection('services').updateOne(
+					{ _id: service._id, serviceStatus: 'ACTIVE', serviceRank: 0, deletedAt: { $exists: false } },
+					{ $set: { serviceRank } },
+				);
+			}),
+		);
+
+		this.logger.log(`Batch top properties finished: services=${services.length}`);
 	}
 
-	@Cron('0 10 * * *', { name: BATCH_TOP_AGENTS })
-	public async batchAgents(): Promise<void> {
+	public async batchTopAgents(): Promise<void> {
 		const [serviceCounters, patientCounters, doctors] = await Promise.all([
 			this.connection
 				.collection('services')
@@ -96,7 +77,7 @@ export class MnhospitalBatchService {
 				.toArray(),
 			this.connection
 				.collection('doctors')
-				.find({ memberStatus: 'ACTIVE', deletedAt: { $exists: false } })
+				.find({ memberType: 'DOCTOR', memberStatus: 'ACTIVE', docPoints: 0, deletedAt: { $exists: false } })
 				.project({ _id: 1, docLikes: 1, docFollowers: 1, docArticles: 1 })
 				.toArray(),
 		]);
@@ -126,7 +107,7 @@ export class MnhospitalBatchService {
 			);
 		}
 
-		this.logger.log(`${BATCH_TOP_AGENTS} finished: doctors=${doctors.length}`);
+		this.logger.log(`Batch top agents finished: doctors=${doctors.length}`);
 	}
 
 	getHello(): string {
