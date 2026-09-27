@@ -29,6 +29,7 @@ import { Doctor } from '../doctor/dto/doctor';
 import { Receptionist } from '../receptionist/dto/receptionist';
 import { BookingOrder } from '../booking/dto/booking-order';
 import { Appointment } from '../appointment/dto/appointment';
+import { PatientActivity } from './dto/patient-activity';
 
 @Injectable()
 export class AdminService {
@@ -93,6 +94,29 @@ export class AdminService {
 			totalBookings,
 			totalAppointments,
 		};
+	}
+
+	public async getPatientActivityByAdmin(patientId: ObjectId): Promise<PatientActivity> {
+		const patient = await this.patientModel.findOne({ _id: patientId }).lean().exec();
+		if (!patient) throw new InternalServerErrorException('Patient was not found');
+
+		const [bookingOrders, appointments] = await Promise.all([
+			this.bookingOrderModel.find({ patientId }).sort({ createdAt: -1 }).lean().exec(),
+			this.appointmentModel.find({ patientId }).sort({ startsAt: -1 }).lean().exec(),
+		]);
+
+		const serviceIds = [
+			...bookingOrders.flatMap((order) => order.bookingOrderItems?.map((item) => item.serviceId) ?? []),
+			...appointments.map((appointment) => appointment.serviceId?.toString()),
+		]
+			.filter((serviceId): serviceId is string => Boolean(serviceId) && Types.ObjectId.isValid(serviceId))
+			.map((serviceId) => new ObjectId(serviceId));
+		const uniqueServiceIds = [...new Map(serviceIds.map((serviceId) => [serviceId.toString(), serviceId])).values()];
+		const services = uniqueServiceIds.length
+			? await this.serviceModel.find({ _id: { $in: uniqueServiceIds } }).sort({ createdAt: -1 }).lean().exec()
+			: [];
+
+		return { patient, bookingOrders, services, appointments };
 	}
 
 	/** MEMBERS */

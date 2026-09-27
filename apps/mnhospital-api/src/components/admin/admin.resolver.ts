@@ -21,6 +21,7 @@ import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { AdminDashboardStats } from './dto/admin-dashboard';
+import { PatientActivity } from './dto/patient-activity';
 
 @Resolver()
 export class AdminResolver {
@@ -46,6 +47,14 @@ export class AdminResolver {
 	public async getAdminDashboardStats(): Promise<AdminDashboardStats> {
 		console.log('Query: getAdminDashboardStats');
 		return this.adminService.getDashboardStats();
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => PatientActivity)
+	public async getPatientActivityByAdmin(@Args('patientId') patientId: string): Promise<PatientActivity> {
+		console.log('Query: getPatientActivityByAdmin');
+		return this.adminService.getPatientActivityByAdmin(shapeIntoMongoObjectId(patientId));
 	}
 	/** MEMBER */
 	@Roles(MemberType.ADMIN)
