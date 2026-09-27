@@ -40,10 +40,6 @@ import AppointmentSchema from '../../libs/schemas/Appointment.model';
 				name: 'Comment',
 				schema: CommentSchema,
 			},
-			{
-				name: 'Comment',
-				schema: CommentSchema,
-			},
 			{ name: 'Patient', schema: PatientSchema },
 			{ name: 'Doctor', schema: DoctorSchema },
 			{ name: 'Receptionist', schema: ReceptionistSchema },
