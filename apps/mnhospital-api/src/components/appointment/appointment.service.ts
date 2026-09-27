@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -11,12 +11,15 @@ import { MemberType } from '../member/enums/member.enum';
 import { PatientService } from '../patient/patient.service';
 import { BookingOrder } from '../booking/dto/booking-order';
 import { BookingOrderStatus } from '../patient/enums/patient.enum';
+import { ReceptionTask } from '../receptionist/dto/reception-task';
+import { ReceptionTaskStatus } from '../receptionist/enums/receptionist.enum';
 
 @Injectable()
 export class AppointmentService {
 	constructor(
 		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
 		@InjectModel('BookingOrder') private readonly bookingOrderModel: Model<BookingOrder>,
+		@InjectModel('ReceptionTask') private readonly receptionTaskModel: Model<ReceptionTask>,
 		private readonly patientService: PatientService,
 	) {}
 
@@ -184,6 +187,21 @@ export class AppointmentService {
 
 		if (memberType === MemberType.DOCTOR && appointment.doctorId.toString() !== memberId.toString()) {
 			throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		}
+		if (memberType === MemberType.RECEPTIONIST) {
+			const assignedTask = await this.receptionTaskModel
+				.findOne({
+					appointmentId,
+					receptionistId: memberId,
+					taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] },
+				})
+				.select('_id')
+				.lean()
+				.exec();
+			if (!assignedTask) throw new ForbiddenException('This appointment is not assigned to you');
+			if (![AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS, AppointmentStatus.NO_SHOW].includes(appointmentStatus)) {
+				throw new ForbiddenException('Receptionist cannot apply this appointment status');
+			}
 		}
 
 		const allowedStatuses: Record<AppointmentStatus, AppointmentStatus[]> = {

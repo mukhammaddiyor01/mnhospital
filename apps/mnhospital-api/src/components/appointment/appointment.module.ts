@@ -5,9 +5,18 @@ import { AppointmentResolver } from './appointment.resolver';
 import AppointmentSchema from '../../libs/schemas/Appointment.model';
 import { AuthModule } from '../auth/auth.module';
 import { PatientModule } from '../patient/patient.module';
+import ReceptionTaskSchema from '../receptionist/schema/ReceptionTask.model';
 
 @Module({
-	imports: [MongooseModule.forFeature([{ name: 'Appointment', schema: AppointmentSchema }]), AuthModule, PatientModule],
+	imports: [
+		MongooseModule.forFeature([
+			{ name: 'Appointment', schema: AppointmentSchema },
+			{ name: 'ReceptionTask', schema: ReceptionTaskSchema },
+		]),
+		AuthModule,
+		PatientModule,
+	],
 	providers: [AppointmentService, AppointmentResolver],
+	exports: [AppointmentService],
 })
 export class AppointmentModule {}
