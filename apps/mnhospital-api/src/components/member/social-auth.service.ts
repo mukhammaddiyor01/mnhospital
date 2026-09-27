@@ -42,10 +42,13 @@ export class SocialAuthService {
 	}
 
 	private validateRedirectUri(redirectUri: string) {
-		const configured = this.config.get<string>('OAUTH_REDIRECT_URI')?.trim();
+		const configured = [
+			...(this.config.get<string>('OAUTH_REDIRECT_URIS') ?? '').split(','),
+			this.config.get<string>('OAUTH_REDIRECT_URI') ?? '',
+		].map((uri) => uri.trim()).filter(Boolean);
 		const clientUrl = (this.config.get<string>('CLIENT_URL') ?? 'http://localhost:3000').replace(/\/$/, '');
-		const allowed = configured || `${clientUrl}/account/oauth/callback`;
-		if (redirectUri !== allowed) throw new BadRequestException('OAuth redirect URI is not allowed.');
+		const allowed = configured.length ? configured : [`${clientUrl}/account/oauth/callback`];
+		if (!allowed.includes(redirectUri)) throw new BadRequestException('OAuth redirect URI is not allowed.');
 	}
 
 	private async authenticateGoogle(input: SocialAuthInput): Promise<SocialProfile> {
