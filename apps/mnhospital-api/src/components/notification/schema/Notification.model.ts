@@ -1,6 +1,6 @@
 import { Schema } from 'mongoose';
-import { ReferenceGroup } from '../../../libs/enums/reference.enum';
-import { NotificationStatus, NotificationType } from '../enums/notification.enum';
+import { MemberType } from '../../member/enums/member.enum';
+import { NotificationGroup, NotificationStatus, NotificationType } from '../enums/notification.enum';
 
 const NotificationSchema = new Schema(
 	{
@@ -16,7 +16,7 @@ const NotificationSchema = new Schema(
 		},
 		notificationGroup: {
 			type: String,
-			enum: ReferenceGroup,
+			enum: NotificationGroup,
 			required: true,
 		},
 		notificationTitle: {
@@ -29,14 +29,23 @@ const NotificationSchema = new Schema(
 		},
 		authorId: {
 			type: Schema.Types.ObjectId,
-			ref: 'Member',
+			required: true,
+			index: true,
+		},
+		authorType: {
+			type: String,
+			enum: MemberType,
 			required: true,
 		},
 		receiverId: {
 			type: Schema.Types.ObjectId,
-			ref: 'Member',
 			required: true,
 			index: true,
+		},
+		receiverType: {
+			type: String,
+			enum: MemberType,
+			required: true,
 		},
 		notificationRefId: {
 			type: Schema.Types.ObjectId,
@@ -46,6 +55,6 @@ const NotificationSchema = new Schema(
 	{ timestamps: true, collection: 'notification' },
 );
 
-NotificationSchema.index({ receiverId: 1, notificationStatus: 1, createdAt: -1 });
+NotificationSchema.index({ receiverId: 1, receiverType: 1, notificationStatus: 1, createdAt: -1 });
 
 export default NotificationSchema;
