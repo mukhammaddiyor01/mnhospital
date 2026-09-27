@@ -45,6 +45,9 @@ lerna-debug.log*
 .env.local
 
 # Local credentials and certificates
+secrets*.json
+credentials*.json
+service-account*.json
 *.pem
 *.key
 *.crt
