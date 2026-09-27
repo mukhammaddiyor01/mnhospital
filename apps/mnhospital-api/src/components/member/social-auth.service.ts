@@ -18,7 +18,7 @@ export class SocialAuthService {
 	constructor(private readonly http: HttpService, private readonly config: ConfigService) {}
 
 	public async authenticate(input: SocialAuthInput): Promise<SocialProfile> {
-		if (![MemberAuthType.GOOGLE, MemberAuthType.NAVER, MemberAuthType.LINE].includes(input.provider)) {
+		if (![MemberAuthType.GOOGLE, MemberAuthType.NAVER, MemberAuthType.KAKAO].includes(input.provider)) {
 			throw new BadRequestException('Unsupported social authentication provider.');
 		}
 		this.validateRedirectUri(input.redirectUri);
@@ -27,7 +27,7 @@ export class SocialAuthService {
 			switch (input.provider) {
 				case MemberAuthType.GOOGLE: return await this.authenticateGoogle(input);
 				case MemberAuthType.NAVER: return await this.authenticateNaver(input);
-				case MemberAuthType.LINE: return await this.authenticateLine(input);
+				case MemberAuthType.KAKAO: return await this.authenticateKakao(input);
 			}
 		} catch (error) {
 			if (error instanceof BadRequestException || error instanceof ServiceUnavailableException || error instanceof UnauthorizedException) throw error;
@@ -97,25 +97,27 @@ export class SocialAuthService {
 		};
 	}
 
-	private async authenticateLine(input: SocialAuthInput): Promise<SocialProfile> {
-		if (!input.codeVerifier) throw new BadRequestException('LINE PKCE verifier is required.');
-		const channelId = this.value('LINE_CHANNEL_ID');
+	private async authenticateKakao(input: SocialAuthInput): Promise<SocialProfile> {
+		const restApiKey = this.value('KAKAO_REST_API_KEY');
 		const body = new URLSearchParams({
 			grant_type: 'authorization_code', code: input.authorizationCode, redirect_uri: input.redirectUri,
-			client_id: channelId, client_secret: this.value('LINE_CHANNEL_SECRET'), code_verifier: input.codeVerifier,
+			client_id: restApiKey, client_secret: this.value('KAKAO_CLIENT_SECRET'),
 		});
-		const tokenResponse = await firstValueFrom(this.http.post('https://api.line.me/oauth2/v2.1/token', body.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }));
+		const tokenResponse = await firstValueFrom(this.http.post('https://kauth.kakao.com/oauth/token', body.toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' } }));
 		const accessToken = tokenResponse.data?.access_token as string | undefined;
-		if (!accessToken) throw new UnauthorizedException('LINE did not return an access token.');
-		const validation = await firstValueFrom(this.http.get('https://api.line.me/oauth2/v2.1/verify', { params: { access_token: accessToken } }));
-		if (String(validation.data?.client_id) !== channelId || Number(validation.data?.expires_in ?? 0) <= 0) throw new UnauthorizedException('LINE access token is invalid.');
-		const response = await firstValueFrom(this.http.get('https://api.line.me/v2/profile', { headers: { Authorization: `Bearer ${accessToken}` } }));
-		if (!response.data?.userId) throw new UnauthorizedException('LINE profile is missing an identifier.');
+		if (!accessToken) throw new UnauthorizedException('Kakao did not return an access token.');
+		const validation = await firstValueFrom(this.http.get('https://kapi.kakao.com/v1/user/access_token_info', { headers: { Authorization: `Bearer ${accessToken}` } }));
+		if (!validation.data?.id || Number(validation.data?.expires_in ?? 0) <= 0) throw new UnauthorizedException('Kakao access token is invalid.');
+		const response = await firstValueFrom(this.http.get('https://kapi.kakao.com/v2/user/me', { params: { secure_resource: true }, headers: { Authorization: `Bearer ${accessToken}` } }));
+		if (!response.data?.id || String(response.data.id) !== String(validation.data.id)) throw new UnauthorizedException('Kakao profile is missing an identifier.');
+		const account = response.data.kakao_account;
+		const profile = account?.profile;
 		return {
-			provider: MemberAuthType.LINE,
-			subject: String(response.data.userId),
-			fullName: response.data.displayName,
-			image: response.data.pictureUrl,
+			provider: MemberAuthType.KAKAO,
+			subject: String(response.data.id),
+			fullName: profile?.nickname,
+			email: account?.is_email_valid && account?.is_email_verified ? account.email?.toLowerCase() : undefined,
+			image: profile?.profile_image_url || profile?.thumbnail_image_url,
 		};
 	}
 }

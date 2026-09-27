@@ -99,7 +99,7 @@ export class MemberService {
 
 		if (member.memberStatus === MemberStatus.DELETE) throw new InternalServerErrorException(Message.NO_MEMBER_NICK);
 		if (member.memberStatus === MemberStatus.BLOCK) throw new InternalServerErrorException(Message.BLOCKED_USER);
-		if (![MemberAuthType.GOOGLE, MemberAuthType.NAVER, MemberAuthType.LINE].includes(member.memberAuthType)) {
+		if (![MemberAuthType.GOOGLE, MemberAuthType.NAVER, MemberAuthType.KAKAO].includes(member.memberAuthType)) {
 			throw new BadRequestException('This account is not linked to the selected provider.');
 		}
 		member.accessToken = await this.authService.createToken(member);
