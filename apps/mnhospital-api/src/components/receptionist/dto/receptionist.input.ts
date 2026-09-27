@@ -171,6 +171,20 @@ export class ReceptionistAppointmentQueueInquiry {
 }
 
 @InputType()
+export class ReceptionistCheckInInput {
+	@Transform(({ value }) => (typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value))
+	@IsInstance(ObjectId)
+	@IsNotEmpty()
+	@Field(() => String)
+	appointmentId: ObjectId;
+
+	@IsString()
+	@IsOptional()
+	@Field(() => String, { nullable: true })
+	reason?: string;
+}
+
+@InputType()
 export class ReceptionistInquiry {
 	@IsInt()
 	@Min(1)

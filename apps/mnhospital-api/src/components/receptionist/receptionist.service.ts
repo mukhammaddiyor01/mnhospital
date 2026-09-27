@@ -22,6 +22,7 @@ import { ReceptionTaskInput, ReceptionTaskInquiry, ReceptionTaskStatusInput } fr
 import { ReceptionTaskStatus } from './enums/receptionist.enum';
 import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
 import { DoctorReport, DoctorReports } from '../doctor/doctor-reports/dto/doctor-report';
+import { AppointmentService } from '../appointment/appointment.service';
 
 @Injectable()
 export class ReceptionistService {
@@ -31,6 +32,7 @@ export class ReceptionistService {
 		@InjectModel('Receptionist') private readonly receptionistModel: Model<Receptionist>,
 		@InjectModel('DoctorReport') private readonly doctorReportModel: Model<DoctorReport>,
 		private readonly authService: AuthService,
+		private readonly appointmentService: AppointmentService,
 	) {}
 
 	public async createReceptionist(input: ReceptionistInput): Promise<Receptionist> {
@@ -200,6 +202,29 @@ export class ReceptionistService {
 			])
 			.exec();
 		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async checkInAppointment(receptionistId: ObjectId, appointmentId: ObjectId, reason?: string): Promise<Appointment> {
+		const task = await this.receptionTaskModel
+			.findOne({ appointmentId, receptionistId, taskStatus: ReceptionTaskStatus.ACCEPTED })
+			.select('_id')
+			.exec();
+		if (!task) throw new ForbiddenException('Appointment requires an accepted reception task');
+
+		const appointment = await this.appointmentService.updateAppointmentStatus(
+			receptionistId,
+			MemberType.RECEPTIONIST,
+			appointmentId,
+			AppointmentStatus.IN_PROGRESS,
+			reason,
+		);
+
+		await this.updateTask(receptionistId, MemberType.RECEPTIONIST, {
+			taskId: task._id,
+			taskStatus: ReceptionTaskStatus.IN_PROGRESS,
+			reason,
+		});
+		return appointment;
 	}
 
 	public async updateByAdmin(input: ReceptionistAdminUpdateInput): Promise<Receptionist> {

@@ -18,12 +18,13 @@ import {
 	ReceptionistLoginInput,
 	ReceptionistProfileUpdateInput,
 	ReceptionistAppointmentQueueInquiry,
+	ReceptionistCheckInInput,
 	ReceptionistReportInquiry,
 	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
 import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
 import { DoctorReports } from '../doctor/doctor-reports/dto/doctor-report';
-import { Appointments } from '../appointment/dto/appointment';
+import { Appointment, Appointments } from '../appointment/dto/appointment';
 
 @Resolver()
 export class ReceptionistResolver {
@@ -108,6 +109,17 @@ export class ReceptionistResolver {
 	): Promise<Appointments> {
 		console.log('Query: getMyReceptionistAppointmentQueue');
 		return this.receptionistService.getMyAppointmentQueue(receptionistId, input);
+	}
+
+	@Roles(MemberType.RECEPTIONIST)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Appointment)
+	public async checkInReceptionistAppointment(
+		@Args('input') input: ReceptionistCheckInInput,
+		@AuthMember('_id') receptionistId: ObjectId,
+	): Promise<Appointment> {
+		console.log('Mutation: checkInReceptionistAppointment');
+		return this.receptionistService.checkInAppointment(receptionistId, input.appointmentId, input.reason);
 	}
 
 	@Roles(MemberType.ADMIN)
