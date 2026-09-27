@@ -103,6 +103,14 @@ export class ReceptionistService {
 		return result[0] ?? { list: [], metaCounter: [] };
 	}
 
+	public async getReceptionistByAdmin(receptionistId: ObjectId): Promise<Receptionist> {
+		const receptionist = await this.receptionistModel
+			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST })
+			.exec();
+		if (!receptionist) throw new InternalServerErrorException('Receptionist was not found');
+		return receptionist;
+	}
+
 	public async getDashboardStats(receptionistId: ObjectId): Promise<ReceptionistDashboardStats> {
 		const receptionist = await this.receptionistModel
 			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } })

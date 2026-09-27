@@ -68,6 +68,14 @@ export class ReceptionistResolver {
 		return await this.receptionistService.getReceptionists(input);
 	}
 
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Receptionist)
+	public async getReceptionistByAdmin(@Args('receptionistId') receptionistId: string): Promise<Receptionist> {
+		console.log('Query: getReceptionistByAdmin');
+		return this.receptionistService.getReceptionistByAdmin(shapeIntoMongoObjectId(receptionistId));
+	}
+
 	@Roles(MemberType.RECEPTIONIST)
 	@UseGuards(RolesGuard)
 	@Query(() => ReceptionistDashboardStats)
