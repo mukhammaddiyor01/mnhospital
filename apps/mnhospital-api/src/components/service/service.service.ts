@@ -282,19 +282,19 @@ export class ServiceService {
 			match.departmentId = shapeIntoMongoObjectId(departmentId);
 		}
 
-		if (serviceTypeList) {
+		if (serviceTypeList && serviceTypeList.length) {
 			match.serviceType = { $in: serviceTypeList };
 		}
 
-		if (serviceStatusList) {
+		if (serviceStatusList && serviceStatusList.length) {
 			match.serviceStatus = { $in: serviceStatusList };
 		}
 
-		if (serviceRoomNameList) {
+		if (serviceRoomNameList && serviceRoomNameList.length) {
 			match.serviceRoomName = { $in: serviceRoomNameList };
 		}
 
-		if (serviceRoomList) {
+		if (serviceRoomList && serviceRoomList.length) {
 			match.serviceRoom = { $in: serviceRoomList };
 		}
 
