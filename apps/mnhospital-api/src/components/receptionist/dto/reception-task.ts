@@ -27,8 +27,8 @@ export class ReceptionTask {
 	@Field(() => String)
 	_id: ObjectId;
 
-	@Field(() => String, { nullable: true })
-	appointmentId?: ObjectId;
+	@Field(() => String)
+	appointmentId: ObjectId;
 
 	@Field(() => String)
 	patientId: ObjectId;
