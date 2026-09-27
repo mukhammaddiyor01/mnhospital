@@ -37,10 +37,19 @@ lerna-debug.log*
 
 # dotenv environment variable files
 .env
+.env.*
+!.env.example
 .env.development.local
 .env.test.local
 .env.production.local
 .env.local
+
+# Local credentials and certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
 
 # temp directory
 .temp
