@@ -91,4 +91,14 @@ export class DoctorResolver {
 		console.log('Query: getDoctors');
 		return this.doctorService.getDoctors(input, memberId);
 	}
+
+	@UseGuards(WithoutGuard)
+	@Query(() => Doctor)
+	public async getDoctor(
+		@Args('doctorId') doctorId: string,
+		@AuthMember('_id') memberId: ObjectId,
+	): Promise<Doctor> {
+		console.log('Query: getDoctor');
+		return this.doctorService.getDoctor(shapeIntoMongoObjectId(doctorId), memberId);
+	}
 }
