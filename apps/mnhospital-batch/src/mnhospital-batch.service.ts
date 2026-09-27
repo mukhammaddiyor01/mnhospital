@@ -38,7 +38,37 @@ export class MnhospitalBatchService {
 
 	@Cron('0 5 * * *', { name: BATCH_TOP_PROPERTIES })
 	public async batchProperties(): Promise<void> {
-		this.logger.log(`${BATCH_TOP_PROPERTIES} started`);
+		const services = await this.connection
+			.collection('services')
+			.aggregate([
+				{ $match: { serviceStatus: 'ACTIVE', deletedAt: { $exists: false } } },
+				{
+					$project: {
+						_id: 1,
+						serviceRank: {
+							$add: [
+								{ $multiply: [{ $ifNull: ['$serviceLikes', 0] }, 3] },
+								{ $multiply: [{ $ifNull: ['$serviceComments', 0] }, 2] },
+								{ $ifNull: ['$serviceViews', 0] },
+							],
+						},
+					},
+				},
+			])
+			.toArray();
+
+		if (services.length) {
+			await this.connection.collection('services').bulkWrite(
+				services.map((service) => ({
+					updateOne: {
+						filter: { _id: service._id, serviceStatus: 'ACTIVE', deletedAt: { $exists: false } },
+						update: { $set: { serviceRank: service.serviceRank } },
+					},
+				})),
+			);
+		}
+
+		this.logger.log(`${BATCH_TOP_PROPERTIES} finished: services=${services.length}`);
 	}
 
 	@Cron('0 10 * * *', { name: BATCH_TOP_AGENTS })
