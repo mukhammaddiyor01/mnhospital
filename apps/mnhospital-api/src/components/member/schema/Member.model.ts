@@ -24,7 +24,6 @@ const MemberSchema = new Schema(
 				unique: true,
 				sparse: true,
 			},
-			required: true,
 		},
 		memberMail: {
 			type: String,
@@ -45,7 +44,13 @@ const MemberSchema = new Schema(
 		memberPassword: {
 			type: String,
 			select: false,
-			required: true,
+		},
+		memberSocialId: {
+			type: String,
+			index: {
+				unique: true,
+				sparse: true,
+			},
 		},
 		memberFullName: {
 			type: String,

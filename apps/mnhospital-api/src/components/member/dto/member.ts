@@ -19,8 +19,8 @@ export class Member {
 	@Field(() => MemberAuthType)
 	memberAuthType: MemberAuthType;
 
-	@Field(() => String)
-	memberPhone: string;
+	@Field(() => String, { nullable: true })
+	memberPhone?: string;
 
 	@Field(() => String, { nullable: true })
 	memberMail?: string;
@@ -29,6 +29,8 @@ export class Member {
 	memberNick: string;
 
 	memberPassword?: string;
+
+	memberSocialId?: string;
 
 	@Field(() => String, { nullable: true })
 	memberFullName?: string;

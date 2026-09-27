@@ -1,6 +1,6 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { MemberService } from './member.service';
-import { LoginInput, MemberInput } from './dto/member.input';
+import { LoginInput, MemberInput, SocialAuthInput } from './dto/member.input';
 import { Member } from './dto/member';
 import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/guards/auth.guard';
@@ -31,6 +31,12 @@ export class MemberResolver {
 	public async login(@Args('input') input: LoginInput): Promise<Member> {
 		console.log('Mutation: login');
 		return this.memberService.login(input);
+	}
+
+	@Mutation(() => Member)
+	public async socialAuthenticate(@Args('input') input: SocialAuthInput): Promise<Member> {
+		console.log('Mutation: social authenticate');
+		return this.memberService.socialAuthenticate(input);
 	}
 
 	@UseGuards(AuthGuard)

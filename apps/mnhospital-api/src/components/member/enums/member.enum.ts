@@ -20,6 +20,7 @@ export enum MemberAuthType {
 	EMAIL = 'EMAIL',
 	NAVER = 'NAVER',
 	GOOGLE = 'GOOGLE',
+	LINE = 'LINE',
 }
 registerEnumType(MemberAuthType, { name: 'MemberAuthType' });
 

@@ -1,5 +1,5 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsEmail, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Length, Matches, Min } from 'class-validator';
+import { IsEmail, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, Length, Matches, Min } from 'class-validator';
 import { MemberAuthType, MemberStatus, MemberType } from '../enums/member.enum';
 import { availableMemberSorts } from '../../../libs/config';
 import { Direction } from '../../../libs/enums/common.enum';
@@ -80,6 +80,33 @@ export class LoginInput {
 	@Length(5, 12)
 	@Field(() => String)
 	memberPassword: string;
+}
+
+@InputType()
+export class SocialAuthInput {
+	@IsEnum(MemberAuthType)
+	@Field(() => MemberAuthType)
+	provider: MemberAuthType;
+
+	@IsString()
+	@Length(6, 4096)
+	@Field(() => String)
+	authorizationCode: string;
+
+	@IsUrl({ require_protocol: true, require_tld: false, protocols: ['http', 'https'] })
+	@Field(() => String)
+	redirectUri: string;
+
+	@IsString()
+	@Length(16, 256)
+	@Field(() => String)
+	state: string;
+
+	@IsOptional()
+	@IsString()
+	@Length(43, 128)
+	@Field(() => String, { nullable: true })
+	codeVerifier?: string;
 }
 
 /** ADMIN */

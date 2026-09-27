@@ -2,9 +2,9 @@ import { BadRequestException, Injectable, InternalServerErrorException } from '@
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { LoginInput, MemberInput } from './dto/member.input';
+import { LoginInput, MemberInput, SocialAuthInput } from './dto/member.input';
 import { Member } from './dto/member';
-import { MemberStatus, MemberType } from './enums/member.enum';
+import { MemberAuthType, MemberStatus, MemberType } from './enums/member.enum';
 import { Message } from '../../libs/enums/common.enum';
 import { AuthService } from '../auth/auth.service';
 import { MemberUpdate } from './dto/member.update';
@@ -16,6 +16,8 @@ import { LikeService } from '../like/like.service';
 import { LikeInput } from '../like/dto/like.input';
 import { LikeGroup } from '../like/enums/like.enum';
 import { Follower, Following, MeFollowed } from '../follow/dto/follow';
+import { SocialAuthService } from './social-auth.service';
+import { createHash } from 'crypto';
 
 @Injectable()
 export class MemberService {
@@ -25,6 +27,7 @@ export class MemberService {
 		private authService: AuthService,
 		private viewService: ViewService,
 		private likeService: LikeService,
+		private socialAuthService: SocialAuthService,
 	) {}
 
 	public async signup(input: MemberInput): Promise<Member> {
@@ -66,6 +69,41 @@ export class MemberService {
 		response.accessToken = await this.authService.createToken(response);
 
 		return response;
+	}
+
+	public async socialAuthenticate(input: SocialAuthInput): Promise<Member> {
+		const profile = await this.socialAuthService.authenticate(input);
+		const memberSocialId = `${profile.provider}:${profile.subject}`;
+		let member = await this.memberModel.findOne({ memberSocialId }).exec();
+
+		if (!member) {
+			const suffix = createHash('sha256').update(memberSocialId).digest('hex').slice(0, 7);
+			const nameBase = (profile.fullName ?? profile.provider).toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20) || 'patient';
+			const memberMail = profile.email && !(await this.memberModel.exists({ memberMail: profile.email })) ? profile.email : undefined;
+			try {
+				member = await this.memberModel.create({
+					memberType: MemberType.PATIENT,
+					memberStatus: MemberStatus.ACTIVE,
+					memberAuthType: profile.provider,
+					memberSocialId,
+					memberNick: `${nameBase}-${suffix}`,
+					memberFullName: profile.fullName,
+					memberMail,
+					memberImage: profile.image ?? '',
+				});
+			} catch {
+				member = await this.memberModel.findOne({ memberSocialId }).exec();
+				if (!member) throw new BadRequestException('Unable to create the social patient account.');
+			}
+		}
+
+		if (member.memberStatus === MemberStatus.DELETE) throw new InternalServerErrorException(Message.NO_MEMBER_NICK);
+		if (member.memberStatus === MemberStatus.BLOCK) throw new InternalServerErrorException(Message.BLOCKED_USER);
+		if (![MemberAuthType.GOOGLE, MemberAuthType.NAVER, MemberAuthType.LINE].includes(member.memberAuthType)) {
+			throw new BadRequestException('This account is not linked to the selected provider.');
+		}
+		member.accessToken = await this.authService.createToken(member);
+		return member;
 	}
 
 	// Authenticated
