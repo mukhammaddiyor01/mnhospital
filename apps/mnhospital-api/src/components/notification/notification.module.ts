@@ -6,6 +6,7 @@ import { NotificationService } from './notification.service';
 import { NotificationResolver } from './notification.resolver';
 import { NoticeService } from './notice.service';
 import { NoticeResolver } from './notice.resolver';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
 	imports: [
@@ -13,6 +14,7 @@ import { NoticeResolver } from './notice.resolver';
 			{ name: 'Notification', schema: NotificationSchema },
 			{ name: 'Notice', schema: NoticeSchema },
 		]),
+		AuthModule,
 	],
 	exports: [MongooseModule, NotificationService],
 	providers: [NotificationService, NotificationResolver, NoticeService, NoticeResolver],
