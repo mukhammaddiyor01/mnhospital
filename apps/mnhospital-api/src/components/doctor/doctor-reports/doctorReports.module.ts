@@ -5,6 +5,7 @@ import { PatientModule } from '../../patient/patient.module';
 import DoctorReportSchema from './schema/DoctorReport.model';
 import { DoctorReportsResolver } from './doctorReports.resolver';
 import { DoctorReportsService } from './doctorReports.service';
+import { AuthModule } from '../../auth/auth.module';
 
 @Module({
 	imports: [
@@ -13,6 +14,7 @@ import { DoctorReportsService } from './doctorReports.service';
 			{ name: 'Appointment', schema: AppointmentSchema },
 		]),
 		PatientModule,
+		AuthModule,
 	],
 	providers: [DoctorReportsService, DoctorReportsResolver],
 	exports: [MongooseModule, DoctorReportsService],
