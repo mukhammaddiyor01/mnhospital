@@ -18,7 +18,7 @@ import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Direction } from '../../../libs/enums/common.enum';
 import { DoctorSort, DoctorSpecialty } from '../enums/doctor.enum';
-import { MemberAuthType } from '../../member/enums/member.enum';
+import { MemberAuthType, MemberStatus } from '../../member/enums/member.enum';
 
 @InputType()
 export class DoctorInput {
@@ -113,6 +113,20 @@ export class DoctorLoginInput {
 	@Length(8, 32)
 	@Field(() => String)
 	docPassword: string;
+}
+
+@InputType()
+export class DoctorStatusUpdateInput {
+	@Transform(({ value }) => (typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value))
+	@IsInstance(ObjectId)
+	@IsNotEmpty()
+	@Field(() => String)
+	_id: ObjectId;
+
+	@IsEnum(MemberStatus)
+	@IsNotEmpty()
+	@Field(() => MemberStatus)
+	memberStatus: MemberStatus;
 }
 
 @InputType()

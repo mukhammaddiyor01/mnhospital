@@ -11,7 +11,7 @@ import { MemberType } from '../member/enums/member.enum';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { DoctorService } from './doctor.service';
 import { Doctor, Doctors } from './dto/doctor';
-import { DoctorInput, DoctorLoginInput, DoctorsInquiry } from './dto/doctor.input';
+import { DoctorInput, DoctorLoginInput, DoctorStatusUpdateInput, DoctorsInquiry } from './dto/doctor.input';
 
 @Resolver()
 export class DoctorResolver {
@@ -29,6 +29,14 @@ export class DoctorResolver {
 	public async loginDoctor(@Args('input') input: DoctorLoginInput): Promise<Doctor> {
 		console.log('Mutation: loginDoctor');
 		return this.doctorService.loginDoctor(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Doctor)
+	public async updateDoctorStatusByAdmin(@Args('input') input: DoctorStatusUpdateInput): Promise<Doctor> {
+		console.log('Mutation: updateDoctorStatusByAdmin');
+		return this.doctorService.updateStatusByAdmin(input._id, input.memberStatus);
 	}
 
 	@UseGuards(AuthGuard)

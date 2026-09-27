@@ -8,7 +8,7 @@ import { StatisticModifier, T } from '../../libs/types/common';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { lookupAuthMemberLiked } from '../../libs/config';
 import { AuthService } from '../auth/auth.service';
-import { MemberStatus } from '../member/enums/member.enum';
+import { MemberStatus, MemberType } from '../member/enums/member.enum';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../like/dto/like.input';
 import { LikeGroup } from '../like/enums/like.enum';
@@ -54,6 +54,25 @@ export class DoctorService {
 
 		doctor.accessToken = await this.authService.createToken(doctor);
 		return doctor;
+	}
+
+	public async updateStatusByAdmin(doctorId: ObjectId, memberStatus: MemberStatus): Promise<Doctor> {
+		const doctor = await this.doctorModel
+			.findOne({ _id: doctorId, memberType: MemberType.DOCTOR, deletedAt: { $exists: false } })
+			.exec();
+		if (!doctor) throw new InternalServerErrorException('Doctor was not found');
+		if (doctor.memberStatus === MemberStatus.DELETE) {
+			throw new BadRequestException('Deleted doctor status cannot be changed');
+		}
+
+		const updateData: Record<string, unknown> = { memberStatus };
+		if (memberStatus === MemberStatus.DELETE) updateData.deletedAt = new Date();
+
+		const result = await this.doctorModel
+			.findOneAndUpdate({ _id: doctorId, memberType: MemberType.DOCTOR }, { $set: updateData }, { new: true, runValidators: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException('Doctor status update failed');
+		return result;
 	}
 
 	public async getDoctors(input: DoctorsInquiry, memberId?: ObjectId): Promise<Doctors> {
