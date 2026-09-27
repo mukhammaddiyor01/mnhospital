@@ -9,6 +9,11 @@ import ServiceSchema from '../service/schema/Service.model';
 import { DoctorModule } from '../doctor/doctor.module';
 import ArticleSchema from '../article/schema/Article.model';
 import CommentSchema from '../comment/schema/Comment.model';
+import PatientSchema from '../patient/schema/Patient.model';
+import DoctorSchema from '../doctor/schema/Doctor.model';
+import ReceptionistSchema from '../receptionist/schema/Receptionist.model';
+import BookingOrderSchema from '../patient/schema/BookingOrder.model';
+import AppointmentSchema from '../../libs/schemas/Appointment.model';
 
 @Module({
 	imports: [
@@ -39,6 +44,11 @@ import CommentSchema from '../comment/schema/Comment.model';
 				name: 'Comment',
 				schema: CommentSchema,
 			},
+			{ name: 'Patient', schema: PatientSchema },
+			{ name: 'Doctor', schema: DoctorSchema },
+			{ name: 'Receptionist', schema: ReceptionistSchema },
+			{ name: 'BookingOrder', schema: BookingOrderSchema },
+			{ name: 'Appointment', schema: AppointmentSchema },
 		]),
 		AuthModule,
 		DoctorModule,

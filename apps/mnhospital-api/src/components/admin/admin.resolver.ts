@@ -20,6 +20,7 @@ import { AdminLoginInput } from './dto/admin.input';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
+import { AdminDashboardStats } from './dto/admin-dashboard';
 
 @Resolver()
 export class AdminResolver {
@@ -37,6 +38,14 @@ export class AdminResolver {
 	public async getMyAdminProfile(@AuthMember('_id') adminId: ObjectId): Promise<Admin> {
 		console.log('Query: getMyAdminProfile');
 		return this.adminService.getMyProfile(adminId);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => AdminDashboardStats)
+	public async getAdminDashboardStats(): Promise<AdminDashboardStats> {
+		console.log('Query: getAdminDashboardStats');
+		return this.adminService.getDashboardStats();
 	}
 	/** MEMBER */
 	@Roles(MemberType.ADMIN)

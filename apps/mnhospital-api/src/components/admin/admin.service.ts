@@ -14,7 +14,7 @@ import { ServiceStatus, MAX_SERVICES_PER_TYPE } from '../service/enums/service.e
 import { DoctorService } from '../doctor/doctor.service';
 import { AuthService } from '../auth/auth.service';
 import { Direction, Message } from '../../libs/enums/common.enum';
-import { MemberType } from '../member/enums/member.enum';
+import { MemberStatus, MemberType } from '../member/enums/member.enum';
 import { lookupDoctor, shapeIntoMongoObjectId } from '../../libs/config';
 import { T } from '../../libs/types/common';
 import { MemberUpdate } from '../member/dto/member.update';
@@ -23,12 +23,23 @@ import { ArticleSearch, ArticlesInquiry } from '../article/dto/article.input';
 import { ArticleUpdate } from '../article/dto/article.update';
 import { ArticleStatus } from '../article/enums/article.enum';
 import { Comment } from '../comment/dto/comment';
+import { AdminDashboardStats } from './dto/admin-dashboard';
+import { Patient } from '../patient/dto/patient';
+import { Doctor } from '../doctor/dto/doctor';
+import { Receptionist } from '../receptionist/dto/receptionist';
+import { BookingOrder } from '../booking/dto/booking-order';
+import { Appointment } from '../appointment/dto/appointment';
 
 @Injectable()
 export class AdminService {
 	constructor(
 		@InjectModel('Admin') private readonly adminModel: Model<Admin>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		@InjectModel('Patient') private readonly patientModel: Model<Patient>,
+		@InjectModel('Doctor') private readonly doctorModel: Model<Doctor>,
+		@InjectModel('Receptionist') private readonly receptionistModel: Model<Receptionist>,
+		@InjectModel('BookingOrder') private readonly bookingOrderModel: Model<BookingOrder>,
+		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		@InjectModel('Article') private readonly articleModel: Model<Article>,
 		@InjectModel('Comment') private readonly commentModel: Model<Comment>,
@@ -54,6 +65,34 @@ export class AdminService {
 			.exec();
 		if (!admin) throw new InternalServerErrorException('Admin was not found');
 		return admin;
+	}
+
+	public async getDashboardStats(): Promise<AdminDashboardStats> {
+		const registeredFilter = { deletedAt: { $exists: false } };
+		const activeFilter = { ...registeredFilter, memberStatus: MemberStatus.ACTIVE };
+
+		const [totalPatients, activePatients, totalDoctors, activeDoctors, totalReceptionists, activeReceptionists, totalBookings, totalAppointments] =
+			await Promise.all([
+				this.patientModel.countDocuments(registeredFilter).exec(),
+				this.patientModel.countDocuments(activeFilter).exec(),
+				this.doctorModel.countDocuments(registeredFilter).exec(),
+				this.doctorModel.countDocuments(activeFilter).exec(),
+				this.receptionistModel.countDocuments(registeredFilter).exec(),
+				this.receptionistModel.countDocuments(activeFilter).exec(),
+				this.bookingOrderModel.countDocuments({}).exec(),
+				this.appointmentModel.countDocuments({}).exec(),
+			]);
+
+		return {
+			totalPatients,
+			activePatients,
+			totalDoctors,
+			activeDoctors,
+			totalReceptionists,
+			activeReceptionists,
+			totalBookings,
+			totalAppointments,
+		};
 	}
 
 	/** MEMBERS */
