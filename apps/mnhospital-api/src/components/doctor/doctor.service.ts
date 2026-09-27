@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Doctor, Doctors } from './dto/doctor';
-import { DoctorInput, DoctorLoginInput, DoctorsInquiry } from './dto/doctor.input';
+import { AdminDoctorInquiry, DoctorInput, DoctorLoginInput, DoctorsInquiry } from './dto/doctor.input';
 import { StatisticModifier, T } from '../../libs/types/common';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { lookupAuthMemberLiked } from '../../libs/config';
@@ -188,6 +188,36 @@ export class DoctorService {
 			});
 			doctor.meFollowed = await this.checkSubscription(memberId, targetId);
 		}
+		return doctor;
+	}
+
+	public async getDoctorsByAdmin(input: AdminDoctorInquiry): Promise<Doctors> {
+		const match: T = { memberType: MemberType.DOCTOR };
+		if (input.memberStatus) match.memberStatus = input.memberStatus;
+		if (input.docSpecialty) match.docSpecialty = input.docSpecialty;
+		if (input.text) {
+			const searchRegex = new RegExp(input.text, 'i');
+			match.$or = [{ docNick: searchRegex }, { docFullName: searchRegex }, { docMail: searchRegex }];
+		}
+
+		const result = await this.doctorModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getDoctorByAdmin(doctorId: ObjectId): Promise<Doctor> {
+		const doctor = await this.doctorModel.findOne({ _id: doctorId, memberType: MemberType.DOCTOR }).exec();
+		if (!doctor) throw new InternalServerErrorException('Doctor was not found');
 		return doctor;
 	}
 

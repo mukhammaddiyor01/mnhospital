@@ -170,3 +170,32 @@ export class DoctorsInquiry {
 	@Field(() => Direction, { nullable: true })
 	direction?: Direction;
 }
+
+@InputType()
+export class AdminDoctorInquiry {
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 1 })
+	page = 1;
+
+	@IsInt()
+	@Min(1)
+	@Max(100)
+	@Field(() => Int, { defaultValue: 10 })
+	limit = 10;
+
+	@IsOptional()
+	@IsEnum(MemberStatus)
+	@Field(() => MemberStatus, { nullable: true })
+	memberStatus?: MemberStatus;
+
+	@IsOptional()
+	@IsString()
+	@Field(() => String, { nullable: true })
+	text?: string;
+
+	@IsOptional()
+	@IsEnum(DoctorSpecialty)
+	@Field(() => DoctorSpecialty, { nullable: true })
+	docSpecialty?: DoctorSpecialty;
+}

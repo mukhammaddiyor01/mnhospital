@@ -11,7 +11,7 @@ import { MemberType } from '../member/enums/member.enum';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { DoctorService } from './doctor.service';
 import { Doctor, Doctors } from './dto/doctor';
-import { DoctorInput, DoctorLoginInput, DoctorStatusUpdateInput, DoctorsInquiry } from './dto/doctor.input';
+import { AdminDoctorInquiry, DoctorInput, DoctorLoginInput, DoctorStatusUpdateInput, DoctorsInquiry } from './dto/doctor.input';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
 
 @Resolver()
@@ -54,6 +54,22 @@ export class DoctorResolver {
 	public async getDoctorDashboardStatsByAdmin(@Args('doctorId') doctorId: string): Promise<DoctorDashboardStats> {
 		console.log('Query: getDoctorDashboardStatsByAdmin');
 		return this.doctorService.getDashboardStats(shapeIntoMongoObjectId(doctorId));
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Doctors)
+	public async getDoctorsByAdmin(@Args('input') input: AdminDoctorInquiry): Promise<Doctors> {
+		console.log('Query: getDoctorsByAdmin');
+		return this.doctorService.getDoctorsByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Doctor)
+	public async getDoctorByAdmin(@Args('doctorId') doctorId: string): Promise<Doctor> {
+		console.log('Query: getDoctorByAdmin');
+		return this.doctorService.getDoctorByAdmin(shapeIntoMongoObjectId(doctorId));
 	}
 
 	@UseGuards(AuthGuard)
