@@ -17,11 +17,13 @@ import {
 	ReceptionistInquiry,
 	ReceptionistLoginInput,
 	ReceptionistProfileUpdateInput,
+	ReceptionistAppointmentQueueInquiry,
 	ReceptionistReportInquiry,
 	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
 import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
 import { DoctorReports } from '../doctor/doctor-reports/dto/doctor-report';
+import { Appointments } from '../appointment/dto/appointment';
 
 @Resolver()
 export class ReceptionistResolver {
@@ -95,6 +97,17 @@ export class ReceptionistResolver {
 	): Promise<DoctorReports> {
 		console.log('Query: getMyReceptionistReports');
 		return this.receptionistService.getMyReports(receptionistId, input);
+	}
+
+	@Roles(MemberType.RECEPTIONIST)
+	@UseGuards(RolesGuard)
+	@Query(() => Appointments)
+	public async getMyReceptionistAppointmentQueue(
+		@Args('input') input: ReceptionistAppointmentQueueInquiry,
+		@AuthMember('_id') receptionistId: ObjectId,
+	): Promise<Appointments> {
+		console.log('Query: getMyReceptionistAppointmentQueue');
+		return this.receptionistService.getMyAppointmentQueue(receptionistId, input);
 	}
 
 	@Roles(MemberType.ADMIN)

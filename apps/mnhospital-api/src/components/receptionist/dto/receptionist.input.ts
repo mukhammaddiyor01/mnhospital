@@ -4,6 +4,7 @@ import { IsEmail, IsEnum, IsInstance, IsInt, IsNotEmpty, IsOptional, IsString, L
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { MemberAuthType, MemberStatus } from '../../member/enums/member.enum';
+import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
 
 @InputType()
 export class ReceptionistInput {
@@ -149,6 +150,24 @@ export class ReceptionistReportInquiry {
 	@IsOptional()
 	@Field(() => String, { nullable: true })
 	patientId?: ObjectId;
+}
+
+@InputType()
+export class ReceptionistAppointmentQueueInquiry {
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 1 })
+	page = 1;
+
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 10 })
+	limit = 10;
+
+	@IsEnum(AppointmentStatus)
+	@IsOptional()
+	@Field(() => AppointmentStatus, { nullable: true })
+	status?: AppointmentStatus;
 }
 
 @InputType()

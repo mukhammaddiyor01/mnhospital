@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, InternalServerErro
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { Appointment } from '../appointment/dto/appointment';
+import { Appointment, Appointments } from '../appointment/dto/appointment';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
 import { AuthService } from '../auth/auth.service';
@@ -13,6 +13,7 @@ import {
 	ReceptionistInquiry,
 	ReceptionistLoginInput,
 	ReceptionistProfileUpdateInput,
+	ReceptionistAppointmentQueueInquiry,
 	ReceptionistReportInquiry,
 	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
@@ -157,6 +158,39 @@ export class ReceptionistService {
 			.aggregate([
 				{ $match: { appointmentId: { $in: appointmentIds } } },
 				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getMyAppointmentQueue(
+		receptionistId: ObjectId,
+		input: ReceptionistAppointmentQueueInquiry,
+	): Promise<Appointments> {
+		const appointmentIds = await this.receptionTaskModel.distinct('appointmentId', {
+			receptionistId,
+			taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] },
+		});
+		if (!appointmentIds.length) return { list: [], metaCounter: [] };
+
+		const match: Record<string, unknown> = {
+			_id: { $in: appointmentIds },
+			appointmentStatus: {
+				$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
+			},
+		};
+		if (input.status) match.appointmentStatus = input.status;
+
+		const result = await this.appointmentModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { startsAt: 1 } },
 				{
 					$facet: {
 						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
