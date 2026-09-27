@@ -17,6 +17,7 @@ import {
 	ReceptionistInquiry,
 	ReceptionistLoginInput,
 	ReceptionistProfileUpdateInput,
+	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
 
 @Resolver()
@@ -70,6 +71,16 @@ export class ReceptionistResolver {
 	public async updateReceptionistByAdmin(@Args('input') input: ReceptionistAdminUpdateInput): Promise<Receptionist> {
 		console.log('Mutation: updateReceptionistByAdmin');
 		return await this.receptionistService.updateByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Receptionist)
+	public async updateReceptionistStatusByAdmin(
+		@Args('input') input: ReceptionistStatusUpdateInput,
+	): Promise<Receptionist> {
+		console.log('Mutation: updateReceptionistStatusByAdmin');
+		return await this.receptionistService.updateStatusByAdmin(input);
 	}
 
 	@Roles(MemberType.ADMIN)

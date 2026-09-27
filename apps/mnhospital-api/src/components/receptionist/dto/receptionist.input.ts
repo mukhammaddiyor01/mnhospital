@@ -119,6 +119,20 @@ export class ReceptionistAdminUpdateInput extends ReceptionistProfileUpdateInput
 }
 
 @InputType()
+export class ReceptionistStatusUpdateInput {
+	@Transform(({ value }) => (typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value))
+	@IsInstance(ObjectId)
+	@IsNotEmpty()
+	@Field(() => String)
+	_id: ObjectId;
+
+	@IsEnum(MemberStatus)
+	@IsNotEmpty()
+	@Field(() => MemberStatus)
+	memberStatus: MemberStatus;
+}
+
+@InputType()
 export class ReceptionistInquiry {
 	@IsInt()
 	@Min(1)

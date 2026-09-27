@@ -13,6 +13,7 @@ import {
 	ReceptionistInquiry,
 	ReceptionistLoginInput,
 	ReceptionistProfileUpdateInput,
+	ReceptionistStatusUpdateInput,
 } from './dto/receptionist.input';
 import { ReceptionTask, ReceptionTasks } from './dto/reception-task';
 import { ReceptionTaskInput, ReceptionTaskInquiry, ReceptionTaskStatusInput } from './dto/reception-task.input';
@@ -109,6 +110,22 @@ export class ReceptionistService {
 			)
 			.exec();
 		if (!result) throw new InternalServerErrorException('Receptionist update failed');
+		return result;
+	}
+
+	public async updateStatusByAdmin(input: ReceptionistStatusUpdateInput): Promise<Receptionist> {
+		const receptionist = await this.receptionistModel
+			.findOne({ _id: input._id, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } })
+			.exec();
+		if (!receptionist) throw new InternalServerErrorException('Receptionist was not found');
+
+		const updateData: Record<string, unknown> = { memberStatus: input.memberStatus };
+		if (input.memberStatus === MemberStatus.DELETE) updateData.deletedAt = new Date();
+
+		const result = await this.receptionistModel
+			.findOneAndUpdate({ _id: input._id, memberType: MemberType.RECEPTIONIST }, { $set: updateData }, { new: true, runValidators: true })
+			.exec();
+		if (!result) throw new InternalServerErrorException('Receptionist status update failed');
 		return result;
 	}
 
