@@ -1,6 +1,6 @@
-import { Field, InputType } from '@nestjs/graphql';
+import { Field, InputType, Int } from '@nestjs/graphql';
 import { Transform, Type } from 'class-transformer';
-import { IsDate, IsEnum, IsInstance, IsNotEmpty, IsOptional, IsString, Length } from 'class-validator';
+import { IsDate, IsEnum, IsInstance, IsInt, IsNotEmpty, IsOptional, IsString, Length, Min } from 'class-validator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { MemberStatus } from '../../member/enums/member.enum';
@@ -62,4 +62,27 @@ export class PatientStatusUpdateInput {
 	@IsNotEmpty()
 	@Field(() => MemberStatus)
 	memberStatus: MemberStatus;
+}
+
+@InputType()
+export class AdminPatientInquiry {
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 1 })
+	page = 1;
+
+	@IsInt()
+	@Min(1)
+	@Field(() => Int, { defaultValue: 10 })
+	limit = 10;
+
+	@IsOptional()
+	@IsEnum(MemberStatus)
+	@Field(() => MemberStatus, { nullable: true })
+	memberStatus?: MemberStatus;
+
+	@IsOptional()
+	@IsString()
+	@Field(() => String, { nullable: true })
+	text?: string;
 }

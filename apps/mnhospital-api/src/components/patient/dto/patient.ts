@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { MemberStatus, MemberType } from '../../member/enums/member.enum';
 import { PatientBloodType, PatientGender } from '../enums/patient.enum';
+import { TotalCounter } from '../../member/dto/member';
 
 @ObjectType()
 export class Patient {
@@ -47,4 +48,13 @@ export class Patient {
 
 	@Field(() => Date)
 	updatedAt: Date;
+}
+
+@ObjectType()
+export class Patients {
+	@Field(() => [Patient])
+	list: Patient[];
+
+	@Field(() => [TotalCounter], { nullable: true })
+	metaCounter?: TotalCounter[];
 }

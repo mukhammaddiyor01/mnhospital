@@ -3,8 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Message } from '../../libs/enums/common.enum';
-import { Patient } from './dto/patient';
-import { PatientProfileInput } from './dto/patient.input';
+import { Patient, Patients } from './dto/patient';
+import { AdminPatientInquiry, PatientProfileInput } from './dto/patient.input';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
 
 @Injectable()
@@ -57,6 +57,35 @@ export class PatientService {
 			.exec();
 		if (!result) throw new InternalServerErrorException('Patient status update failed');
 		return result;
+	}
+
+	public async getPatientsByAdmin(input: AdminPatientInquiry): Promise<Patients> {
+		const match: Record<string, unknown> = { memberType: MemberType.PATIENT };
+		if (input.memberStatus) match.memberStatus = input.memberStatus;
+		if (input.text) {
+			const searchRegex = new RegExp(input.text, 'i');
+			match.$or = [{ patientNick: searchRegex }, { patientFullName: searchRegex }, { patientIdNumber: searchRegex }];
+		}
+
+		const result = await this.patientModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { createdAt: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getPatientByAdmin(patientId: ObjectId): Promise<Patient> {
+		const patient = await this.patientModel.findOne({ _id: patientId, memberType: MemberType.PATIENT }).exec();
+		if (!patient) throw new InternalServerErrorException('Patient was not found');
+		return patient;
 	}
 
 	public async resolveProfileId(memberId: ObjectId): Promise<ObjectId> {

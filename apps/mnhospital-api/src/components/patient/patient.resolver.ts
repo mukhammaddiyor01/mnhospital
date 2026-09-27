@@ -6,9 +6,10 @@ import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { MemberType } from '../member/enums/member.enum';
-import { Patient } from './dto/patient';
-import { PatientProfileInput, PatientStatusUpdateInput } from './dto/patient.input';
+import { Patient, Patients } from './dto/patient';
+import { AdminPatientInquiry, PatientProfileInput, PatientStatusUpdateInput } from './dto/patient.input';
 import { PatientService } from './patient.service';
+import { shapeIntoMongoObjectId } from '../../libs/config';
 
 @Resolver()
 export class PatientResolver {
@@ -50,5 +51,21 @@ export class PatientResolver {
 	public async updatePatientStatusByAdmin(@Args('input') input: PatientStatusUpdateInput): Promise<Patient> {
 		console.log('Mutation: updatePatientStatusByAdmin');
 		return await this.patientService.updateStatusByAdmin(input._id, input.memberStatus);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Patients)
+	public async getPatientsByAdmin(@Args('input') input: AdminPatientInquiry): Promise<Patients> {
+		console.log('Query: getPatientsByAdmin');
+		return this.patientService.getPatientsByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Patient)
+	public async getPatientByAdmin(@Args('patientId') patientId: string): Promise<Patient> {
+		console.log('Query: getPatientByAdmin');
+		return this.patientService.getPatientByAdmin(shapeIntoMongoObjectId(patientId));
 	}
 }
