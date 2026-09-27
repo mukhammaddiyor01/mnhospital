@@ -6,6 +6,7 @@ import ServiceSchema from '../../service/schema/Service.model';
 import AppointmentSchema from '../../../libs/schemas/Appointment.model';
 import { DoctorScheduleResolver } from './doctorSchedule.resolver';
 import { DoctorScheduleService } from './doctorSchedule.service';
+import { AuthModule } from '../../auth/auth.module';
 
 @Module({
 	imports: [
@@ -15,6 +16,7 @@ import { DoctorScheduleService } from './doctorSchedule.service';
 			{ name: 'Service', schema: ServiceSchema },
 			{ name: 'Appointment', schema: AppointmentSchema },
 		]),
+		AuthModule,
 	],
 	exports: [MongooseModule],
 	providers: [DoctorScheduleService, DoctorScheduleResolver],
