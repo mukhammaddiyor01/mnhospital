@@ -25,6 +25,7 @@ export class DoctorService {
 	constructor(
 		@InjectModel('Doctor') private readonly doctorModel: Model<Doctor>,
 		@InjectModel('Follow') private readonly followModel: Model<Follower | Following>,
+		@InjectModel('DoctorFollow') private readonly doctorFollowModel: Model<Doctor>,
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
 		@InjectModel('DoctorReport') private readonly doctorReportModel: Model<DoctorReport>,
@@ -222,7 +223,7 @@ export class DoctorService {
 	}
 
 	public async checkSubscription(followerId: ObjectId, followingId: ObjectId): Promise<MeFollowed[]> {
-		const result = await this.followModel.findOne({ followingId: followingId, followerId: followerId }).exec();
+		const result = await this.doctorFollowModel.findOne({ doctorId: followingId, memberId: followerId }).exec();
 		return result ? [{ followerId: followerId, followingId: followingId, myFollowing: true }] : [];
 	}
 
@@ -255,7 +256,7 @@ export class DoctorService {
 	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
 		const { _id, targetKey, modifier } = input;
 
-		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles', 'docLikes', 'docFollowers', 'docComments'];
+		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'];
 
 		if (!allowedKeys.includes(targetKey)) {
 			throw new BadRequestException('Invalid doctor statistic key');
@@ -264,7 +265,7 @@ export class DoctorService {
 		const search: T = { _id };
 		if (targetKey !== 'docServices') search.memberStatus = MemberStatus.ACTIVE;
 
-		if (['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docComments'].includes(targetKey) && modifier < 0) {
+		if (['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'].includes(targetKey) && modifier < 0) {
 			search[targetKey] = { $gte: Math.abs(modifier) };
 		}
 
@@ -272,7 +273,7 @@ export class DoctorService {
 			.findOneAndUpdate(search, { $inc: { [targetKey]: modifier } }, { new: true })
 			.exec();
 
-		if (!result && ['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docComments'].includes(targetKey) && modifier < 0) {
+		if (!result && ['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'].includes(targetKey) && modifier < 0) {
 			result = await this.doctorModel.findOne({ _id }).exec();
 		}
 

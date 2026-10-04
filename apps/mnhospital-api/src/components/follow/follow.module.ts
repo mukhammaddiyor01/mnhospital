@@ -6,6 +6,7 @@ import FollowSchema from './schema/Follow.model';
 import { AuthModule } from '../auth/auth.module';
 import { MemberModule } from '../member/member.module';
 import { LikeModule } from '../like/like.module';
+import { DoctorModule } from '../doctor/doctor.module';
 
 @Module({
 	imports: [
@@ -18,6 +19,7 @@ import { LikeModule } from '../like/like.module';
 		AuthModule,
 		MemberModule,
 		LikeModule,
+		DoctorModule,
 	],
 	exports: [MongooseModule],
 	providers: [FollowService, FollowResolver],

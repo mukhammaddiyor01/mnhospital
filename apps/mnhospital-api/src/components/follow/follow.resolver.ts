@@ -9,6 +9,7 @@ import { shapeIntoMongoObjectId } from '../../libs/config';
 import { Follower, Followers, Followings } from './dto/follow';
 import { FollowInquiry } from './dto/follow.input';
 import { FollowService } from './follow.service';
+import { MemberType } from '../member/enums/member.enum';
 
 @Resolver()
 export class FollowResolver {
@@ -16,16 +17,16 @@ export class FollowResolver {
 
 	@UseGuards(AuthGuard)
 	@Mutation(() => Follower)
-	public async subscribe(@Args('input') input: string, @AuthMember('_id') memberId: ObjectId): Promise<Follower> {
+	public async subscribe(@Args('input') input: string, @AuthMember('_id') memberId: ObjectId, @AuthMember('memberType') memberType: MemberType): Promise<Follower> {
 		console.log('Mutation: subscribe');
-		return await this.followService.subscribe(memberId, shapeIntoMongoObjectId(input));
+		return await this.followService.subscribe(memberId, shapeIntoMongoObjectId(input), memberType);
 	}
 
 	@UseGuards(AuthGuard)
 	@Mutation(() => Follower)
-	public async unsubscribe(@Args('input') input: string, @AuthMember('_id') memberId: ObjectId): Promise<Follower> {
+	public async unsubscribe(@Args('input') input: string, @AuthMember('_id') memberId: ObjectId, @AuthMember('memberType') memberType: MemberType): Promise<Follower> {
 		console.log('Mutation: unsubscribe');
-		return await this.followService.unsubscribe(memberId, shapeIntoMongoObjectId(input));
+		return await this.followService.unsubscribe(memberId, shapeIntoMongoObjectId(input), memberType);
 	}
 
 	@UseGuards(WithoutGuard)

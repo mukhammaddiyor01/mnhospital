@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { MeLiked } from '../../like/dto/like';
 import { Member, TotalCounter } from '../../member/dto/member';
+import { Doctor } from '../../doctor/dto/doctor';
 
 @ObjectType()
 export class MeFollowed {
@@ -42,6 +43,9 @@ export class Follower {
 
 	@Field(() => Member, { nullable: true })
 	followerData?: Member;
+
+	@Field(() => Doctor, { nullable: true })
+	followerDoctorData?: Doctor;
 }
 
 @ObjectType()

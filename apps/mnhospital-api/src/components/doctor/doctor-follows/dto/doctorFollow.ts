@@ -42,6 +42,9 @@ export class DoctorFollower {
 
 	@Field(() => Member, { nullable: true })
 	memberData?: Member;
+
+	@Field(() => Doctor, { nullable: true })
+	followerDoctorData?: Doctor;
 }
 
 @ObjectType()

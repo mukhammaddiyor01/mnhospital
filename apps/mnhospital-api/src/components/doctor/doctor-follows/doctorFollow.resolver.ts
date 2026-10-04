@@ -14,6 +14,7 @@ import {
 } from './dto/doctorFollow';
 import { DoctorFollowInquiry } from './dto/doctorFollow.input';
 import { DoctorFollowService } from './doctorFollow.service';
+import { MemberType } from '../../member/enums/member.enum';
 
 @Resolver()
 export class DoctorFollowResolver {
@@ -24,9 +25,10 @@ export class DoctorFollowResolver {
 	public async subscribeDoctor(
 		@Args('input') input: string,
 		@AuthMember('_id') memberId: ObjectId,
+		@AuthMember('memberType') memberType: MemberType,
 	): Promise<DoctorFollowing> {
 		console.log('Mutation: subscribeDoctor');
-		return await this.doctorFollowService.subscribeDoctor(memberId, shapeIntoMongoObjectId(input));
+		return await this.doctorFollowService.subscribeDoctor(memberId, shapeIntoMongoObjectId(input), memberType);
 	}
 
 	@UseGuards(AuthGuard)
@@ -34,9 +36,10 @@ export class DoctorFollowResolver {
 	public async unsubscribeDoctor(
 		@Args('input') input: string,
 		@AuthMember('_id') memberId: ObjectId,
+		@AuthMember('memberType') memberType: MemberType,
 	): Promise<DoctorFollowing> {
 		console.log('Mutation: unsubscribeDoctor');
-		return await this.doctorFollowService.unsubscribeDoctor(memberId, shapeIntoMongoObjectId(input));
+		return await this.doctorFollowService.unsubscribeDoctor(memberId, shapeIntoMongoObjectId(input), memberType);
 	}
 
 	@UseGuards(WithoutGuard)

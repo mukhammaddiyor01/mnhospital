@@ -7,6 +7,7 @@ import { lookupAuthMemberLiked } from '../../../libs/config';
 import { T } from '../../../libs/types/common';
 import { LikeGroup } from '../../like/enums/like.enum';
 import { MemberService } from '../../member/member.service';
+import { MemberType } from '../../member/enums/member.enum';
 import { DoctorService } from '../doctor.service';
 import {
 	DoctorFollower,
@@ -25,7 +26,8 @@ export class DoctorFollowService {
 		private readonly memberService: MemberService,
 	) {}
 
-	public async subscribeDoctor(memberId: ObjectId, doctorId: ObjectId): Promise<DoctorFollowing> {
+	public async subscribeDoctor(memberId: ObjectId, doctorId: ObjectId, memberType: MemberType): Promise<DoctorFollowing> {
+		if (memberId.toString() === doctorId.toString()) throw new BadGatewayException(Message.SELF_FOLLOW_DENIED);
 		const targetDoctor = await this.doctorService.getDoctor(doctorId);
 		if (!targetDoctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
@@ -33,11 +35,8 @@ export class DoctorFollowService {
 		if (existing) throw new BadGatewayException(Message.CREATE_FAILED);
 
 		const result = await this.doctorFollowModel.create({ doctorId, memberId });
-		await this.memberService.memberStatisticEditor({
-			_id: memberId,
-			targetKey: 'memberFollowings',
-			modifier: 1,
-		});
+		if (memberType === MemberType.DOCTOR) await this.doctorService.doctorStatisticEditor({ _id: memberId, targetKey: 'docFollowings', modifier: 1 });
+		else await this.memberService.memberStatisticEditor({ _id: memberId, targetKey: 'memberFollowings', modifier: 1 });
 		await this.doctorService.doctorStatisticEditor({
 			_id: doctorId,
 			targetKey: 'docFollowers',
@@ -47,18 +46,15 @@ export class DoctorFollowService {
 		return result;
 	}
 
-	public async unsubscribeDoctor(memberId: ObjectId, doctorId: ObjectId): Promise<DoctorFollowing> {
+	public async unsubscribeDoctor(memberId: ObjectId, doctorId: ObjectId, memberType: MemberType): Promise<DoctorFollowing> {
 		const targetDoctor = await this.doctorService.getDoctor(doctorId);
 		if (!targetDoctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		const result = await this.doctorFollowModel.findOneAndDelete({ doctorId, memberId }).exec();
 		if (!result) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
-		await this.memberService.memberStatisticEditor({
-			_id: memberId,
-			targetKey: 'memberFollowings',
-			modifier: -1,
-		});
+		if (memberType === MemberType.DOCTOR) await this.doctorService.doctorStatisticEditor({ _id: memberId, targetKey: 'docFollowings', modifier: -1 });
+		else await this.memberService.memberStatisticEditor({ _id: memberId, targetKey: 'memberFollowings', modifier: -1 });
 		await this.doctorService.doctorStatisticEditor({
 			_id: doctorId,
 			targetKey: 'docFollowers',
@@ -144,7 +140,9 @@ export class DoctorFollowService {
 									as: 'memberData',
 								},
 							},
-							{ $unwind: '$memberData' },
+							{ $unwind: { path: '$memberData', preserveNullAndEmptyArrays: true } },
+							{ $lookup: { from: 'doctors', localField: 'memberId', foreignField: '_id', as: 'followerDoctorData' } },
+							{ $unwind: { path: '$followerDoctorData', preserveNullAndEmptyArrays: true } },
 						],
 						metaCounter: [{ $count: 'total' }],
 					},
