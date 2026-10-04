@@ -19,7 +19,9 @@ export class ViewService {
 		if (!viewExist) {
 			console.log('_ New View Insert _');
 			return await this.viewModel.create(input);
-		} else return null;
+		}
+		await this.viewModel.updateOne({ _id: viewExist._id }, { $set: { updatedAt: new Date() } }).exec();
+		return null;
 	}
 
 	private async checkViewExistence(input: ViewInput): Promise<View | null> {
@@ -35,7 +37,8 @@ export class ViewService {
 		const data: T[] = await this.viewModel
 			.aggregate([
 				{ $match: match },
-				{ $sort: { createdAt: -1 } },
+				{ $addFields: { lastViewedAt: { $ifNull: ['$updatedAt', '$createdAt'] } } },
+				{ $sort: { lastViewedAt: -1 } },
 				lookupVisitedService,
 				{ $unwind: '$visitedService' },
 				{

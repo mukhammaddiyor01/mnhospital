@@ -20,7 +20,7 @@ const ViewSchema = new Schema(
 			index: true,
 		},
 	},
-	{ timestamps: { createdAt: true, updatedAt: false }, collection: 'views' },
+	{ timestamps: true, collection: 'views' },
 );
 
 ViewSchema.index({ memberId: 1, viewRefId: 1, viewGroup: 1 });
