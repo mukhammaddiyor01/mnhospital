@@ -7,6 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { MemberModule } from '../member/member.module';
 import { ServiceModule } from '../service/service.module';
 import { ArticleModule } from '../article/article.module';
+import { DoctorModule } from '../doctor/doctor.module';
 
 @Module({
 	imports: [
@@ -20,6 +21,7 @@ import { ArticleModule } from '../article/article.module';
 		MemberModule,
 		ServiceModule,
 		ArticleModule,
+		DoctorModule,
 	],
 	exports: [MongooseModule, CommentService],
 	providers: [CommentService, CommentResolver],

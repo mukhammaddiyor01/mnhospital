@@ -38,6 +38,9 @@ export class Doctor {
 	@Field(() => Int)
 	docFollowings: number;
 
+	@Field(() => Int)
+	docComments: number;
+
 	@Field(() => [MeLiked], { nullable: true })
 	meLiked?: MeLiked[];
 

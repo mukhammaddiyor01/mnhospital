@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { TotalCounter } from '../../member/dto/member';
 import { Member } from '../../member/dto/member';
+import { Doctor } from '../../doctor/dto/doctor';
 import { ReferenceGroup } from '../../../libs/enums/reference.enum';
 import { CommentStatus } from '../enums/comment.enum';
 
@@ -35,6 +36,9 @@ export class Comment {
 	/** from aggregation */
 	@Field(() => Member, { nullable: true })
 	memberData?: Member;
+
+	@Field(() => Doctor, { nullable: true })
+	doctorData?: Doctor;
 }
 
 @ObjectType()

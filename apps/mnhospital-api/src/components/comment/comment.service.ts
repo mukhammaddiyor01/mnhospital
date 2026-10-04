@@ -9,10 +9,11 @@ import { CommentStatus } from './enums/comment.enum';
 import { MemberService } from '../member/member.service';
 import { ServiceService } from '../service/service.service';
 import { ArticleService } from '../article/article.service';
+import { DoctorService } from '../doctor/doctor.service';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { ReferenceGroup } from '../../libs/enums/reference.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
-import { lookupMember, shapeIntoMongoObjectId } from '../../libs/config';
+import { lookupDoctor, lookupMember, shapeIntoMongoObjectId } from '../../libs/config';
 
 @Injectable()
 export class CommentService {
@@ -21,6 +22,7 @@ export class CommentService {
 		private readonly memberService: MemberService,
 		private readonly serviceService: ServiceService,
 		private readonly articleService: ArticleService,
+		private readonly doctorService: DoctorService,
 	) {}
 
 	public async createComment(memberId: ObjectId, input: CommentInput): Promise<Comment> {
@@ -90,6 +92,8 @@ export class CommentService {
 							{ $limit: input.limit },
 							lookupMember,
 							{ $unwind: { path: '$memberData', preserveNullAndEmptyArrays: true } },
+							{ ...lookupDoctor, $lookup: { ...lookupDoctor.$lookup, as: 'doctorData' } },
+							{ $unwind: { path: '$doctorData', preserveNullAndEmptyArrays: true } },
 						],
 						metaCounter: [{ $count: 'total' }],
 					},
@@ -118,6 +122,10 @@ export class CommentService {
 				if (!(await this.serviceService.serviceStatsEditor(input))) {
 					throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 				}
+				return;
+			case ReferenceGroup.DOCTOR:
+				input.targetKey = 'docComments';
+				await this.doctorService.doctorStatisticEditor(input);
 				return;
 			case ReferenceGroup.ARTICLE:
 				input.targetKey = 'articleComments';
