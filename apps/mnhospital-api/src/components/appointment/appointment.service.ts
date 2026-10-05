@@ -13,6 +13,8 @@ import { BookingOrder } from '../booking/dto/booking-order';
 import { BookingOrderStatus } from '../patient/enums/patient.enum';
 import { ReceptionTask } from '../receptionist/dto/reception-task';
 import { ReceptionTaskStatus } from '../receptionist/enums/receptionist.enum';
+import { NotificationEventService } from '../notification/notification-event.service';
+import { NotificationGroup, NotificationType } from '../notification/enums/notification.enum';
 
 @Injectable()
 export class AppointmentService {
@@ -21,6 +23,7 @@ export class AppointmentService {
 		@InjectModel('BookingOrder') private readonly bookingOrderModel: Model<BookingOrder>,
 		@InjectModel('ReceptionTask') private readonly receptionTaskModel: Model<ReceptionTask>,
 		private readonly patientService: PatientService,
+		private readonly notificationEvents: NotificationEventService,
 	) {}
 
 	public async createAppointment(memberId: ObjectId, input: AppointmentCreateInput): Promise<Appointment> {
@@ -97,6 +100,26 @@ export class AppointmentService {
 			await this.appointmentModel.deleteOne({ _id: appointment._id }).exec();
 			throw new BadRequestException('The booking order item was already used');
 		}
+		await this.notificationEvents.toPatient(patientId, {
+			key: `appointment:${appointment._id}:created`,
+			type: NotificationType.APPOINTMENT,
+			group: NotificationGroup.APPOINTMENT,
+			title: 'Appointment request received',
+			description: 'Your appointment request is pending review.',
+			refId: appointment._id,
+			authorId: memberId,
+			authorType: MemberType.PATIENT,
+		});
+		await this.notificationEvents.toDoctor(appointment.doctorId, {
+			key: `appointment:${appointment._id}:created`,
+			type: NotificationType.APPOINTMENT,
+			group: NotificationGroup.APPOINTMENT,
+			title: 'New appointment request',
+			description: 'A new appointment request is ready for review.',
+			refId: appointment._id,
+			authorId: memberId,
+			authorType: MemberType.PATIENT,
+		});
 
 		return appointment;
 	}
@@ -124,7 +147,18 @@ export class AppointmentService {
 		appointment.cancellationReason = reason;
 		appointment.cancelledAt = new Date();
 
-		return await appointment.save();
+		const result = await appointment.save();
+		await this.notificationEvents.toDoctor(result.doctorId, {
+			key: `appointment:${result._id}:cancelled`,
+			type: NotificationType.APPOINTMENT,
+			group: NotificationGroup.APPOINTMENT,
+			title: 'Appointment cancelled',
+			description: 'An appointment on your schedule was cancelled.',
+			refId: result._id,
+			authorId: memberId,
+			authorType: MemberType.PATIENT,
+		});
+		return result;
 	}
 
 	public async getMyAppointments(memberId: ObjectId, input: AppointmentInquiry): Promise<Appointments> {
@@ -230,6 +264,25 @@ export class AppointmentService {
 			appointment.completedAt = new Date();
 		}
 
-		return await appointment.save();
+		const result = await appointment.save();
+		const event = {
+			key: `appointment:${result._id}:${appointmentStatus}`,
+			type: NotificationType.APPOINTMENT,
+			group: NotificationGroup.APPOINTMENT,
+			title: 'Appointment status updated',
+			description: `Your appointment status is now ${appointmentStatus.toLowerCase().replace(/_/g, ' ')}.`,
+			refId: result._id,
+			authorId: memberId,
+			authorType: memberType,
+		};
+		await this.notificationEvents.toPatient(result.patientId, event);
+		if (appointmentStatus === AppointmentStatus.CONFIRMED && memberType !== MemberType.DOCTOR) {
+			await this.notificationEvents.toDoctor(result.doctorId, {
+				...event,
+				title: 'Appointment confirmed',
+				description: 'An appointment on your schedule was confirmed.',
+			});
+		}
+		return result;
 	}
 }

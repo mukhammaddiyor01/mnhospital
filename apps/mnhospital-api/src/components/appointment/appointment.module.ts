@@ -6,6 +6,7 @@ import AppointmentSchema from '../../libs/schemas/Appointment.model';
 import { AuthModule } from '../auth/auth.module';
 import { PatientModule } from '../patient/patient.module';
 import ReceptionTaskSchema from '../receptionist/schema/ReceptionTask.model';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
 	imports: [
@@ -15,6 +16,7 @@ import ReceptionTaskSchema from '../receptionist/schema/ReceptionTask.model';
 		]),
 		AuthModule,
 		PatientModule,
+		NotificationModule,
 	],
 	providers: [AppointmentService, AppointmentResolver],
 	exports: [AppointmentService],
