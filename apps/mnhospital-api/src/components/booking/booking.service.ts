@@ -22,6 +22,8 @@ import { MemberType } from '../member/enums/member.enum';
 import { StaffBookingOrderInquiry } from './dto/staff-booking-order.input';
 import { EximbayService } from './eximbay.service';
 import { Member } from '../member/dto/member';
+import { NotificationEventService } from '../notification/notification-event.service';
+import { NotificationGroup, NotificationType } from '../notification/enums/notification.enum';
 
 @Injectable()
 export class BookingService {
@@ -34,6 +36,7 @@ export class BookingService {
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
 		private readonly patientService: PatientService,
 		private readonly eximbayService: EximbayService,
+		private readonly notificationEvents: NotificationEventService,
 	) {}
 
 	public async createCart(memberId: ObjectId, input: CartInput): Promise<Cart> {
@@ -174,6 +177,16 @@ export class BookingService {
 			await this.bookingOrderModel.deleteOne({ _id: order._id }).exec();
 			throw err;
 		}
+		await this.notificationEvents.toPatient(patientId, {
+			key: `booking-order:${order._id}:created`,
+			type: NotificationType.SYSTEM,
+			group: NotificationGroup.BOOKING_ORDER,
+			title: 'Booking order created',
+			description: 'Your booking order is awaiting payment.',
+			refId: order._id,
+			authorId: memberId,
+			authorType: MemberType.PATIENT,
+		});
 
 		return order;
 	}
@@ -221,6 +234,16 @@ export class BookingService {
 			.exec();
 
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		await this.notificationEvents.toPatient(patientId, {
+			key: `booking-order:${result._id}:cancelled`,
+			type: NotificationType.SYSTEM,
+			group: NotificationGroup.BOOKING_ORDER,
+			title: 'Booking order cancelled',
+			description: 'Your booking order was cancelled.',
+			refId: result._id,
+			authorId: memberId,
+			authorType: MemberType.PATIENT,
+		});
 		return result;
 	}
 
@@ -301,6 +324,7 @@ export class BookingService {
 		if (paymentStatus === PaymentStatus.PAID) payment.paidAt = new Date();
 		if (paymentStatus === PaymentStatus.REFUNDED) payment.refundedAt = new Date();
 		const result = await payment.save();
+		await this.notifyPaymentStatus(result, paymentStatus, memberId, memberType);
 
 		if (paymentStatus === PaymentStatus.PAID) {
 			await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
@@ -322,13 +346,36 @@ export class BookingService {
 		const allItemsPaid = order.bookingOrderItems.every((item) => paidLines.has(`${item.serviceId}:${item.doctorId}`));
 
 		if (allItemsPaid) {
-			await this.bookingOrderModel
+			const confirmedOrder = await this.bookingOrderModel
 				.findOneAndUpdate(
 					{ _id: order._id, bookingOrderStatus: BookingOrderStatus.PENDING },
 					{ $set: { bookingOrderStatus: BookingOrderStatus.CONFIRMED, confirmedAt: new Date() } },
 				)
 				.exec();
+			if (confirmedOrder) {
+				await this.notificationEvents.toPatient(order.patientId, {
+					key: `booking-order:${order._id}:confirmed`,
+					type: NotificationType.SYSTEM,
+					group: NotificationGroup.BOOKING_ORDER,
+					title: 'Booking order confirmed',
+					description: 'Your booking order is confirmed and ready for appointment scheduling.',
+					refId: order._id,
+				});
+			}
 		}
+	}
+
+	private async notifyPaymentStatus(payment: Payment, status: PaymentStatus, authorId?: ObjectId, authorType?: MemberType): Promise<void> {
+		await this.notificationEvents.toPatient(payment.patientId, {
+			key: `payment:${payment._id}:${status}`,
+			type: NotificationType.PAYMENT,
+			group: NotificationGroup.PAYMENT,
+			title: 'Payment status updated',
+			description: `Your payment status is now ${status.toLowerCase()}.`,
+			refId: payment._id,
+			authorId,
+			authorType,
+		});
 	}
 
 	public async verifyEximbayPayment(paymentId: ObjectId, rawData: string): Promise<{ firstTime: boolean }> {
@@ -365,7 +412,10 @@ export class BookingService {
 			)
 			.exec();
 
-		if (updated) await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
+		if (updated) {
+			await this.notifyPaymentStatus(updated, PaymentStatus.PAID);
+			await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
+		}
 		return { firstTime: Boolean(updated) };
 	}
 

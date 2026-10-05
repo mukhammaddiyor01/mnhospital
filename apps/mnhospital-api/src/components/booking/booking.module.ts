@@ -8,9 +8,10 @@ import { BookingResolver } from './booking.resolver';
 import { BookingService } from './booking.service';
 import { EximbayService } from './eximbay.service';
 import { BookingController } from './booking.controller';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-	imports: [AuthModule, ConfigModule, MemberModule, PatientModule, ServiceModule],
+	imports: [AuthModule, ConfigModule, MemberModule, PatientModule, ServiceModule, NotificationModule],
 	controllers: [BookingController],
 	providers: [BookingService, BookingResolver, EximbayService],
 })
