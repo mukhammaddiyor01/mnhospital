@@ -22,10 +22,14 @@ const NotificationSchema = new Schema(
 		notificationTitle: {
 			type: String,
 			required: true,
+			trim: true,
+			maxlength: 150,
 		},
 		notificationDesc: {
 			type: String,
 			required: true,
+			trim: true,
+			maxlength: 2000,
 		},
 		authorId: {
 			type: Schema.Types.ObjectId,
@@ -56,5 +60,6 @@ const NotificationSchema = new Schema(
 );
 
 NotificationSchema.index({ receiverId: 1, receiverType: 1, notificationStatus: 1, createdAt: -1 });
+NotificationSchema.index({ receiverId: 1, receiverType: 1, createdAt: -1 });
 
 export default NotificationSchema;
