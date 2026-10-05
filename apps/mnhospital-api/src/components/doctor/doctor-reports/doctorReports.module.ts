@@ -6,6 +6,7 @@ import DoctorReportSchema from './schema/DoctorReport.model';
 import { DoctorReportsResolver } from './doctorReports.resolver';
 import { DoctorReportsService } from './doctorReports.service';
 import { AuthModule } from '../../auth/auth.module';
+import { NotificationModule } from '../../notification/notification.module';
 
 @Module({
 	imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from '../../auth/auth.module';
 		]),
 		PatientModule,
 		AuthModule,
+		NotificationModule,
 	],
 	providers: [DoctorReportsService, DoctorReportsResolver],
 	exports: [MongooseModule, DoctorReportsService],

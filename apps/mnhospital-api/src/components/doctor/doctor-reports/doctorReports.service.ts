@@ -8,6 +8,9 @@ import { PatientService } from '../../patient/patient.service';
 import { DoctorReport, DoctorReports } from './dto/doctor-report';
 import { DoctorReportInput, DoctorReportInquiry, DoctorReportUpdateInput } from './dto/doctor-report.input';
 import { DoctorReportFollowUp } from './enums/doctor-report.enum';
+import { NotificationEventService } from '../../notification/notification-event.service';
+import { NotificationGroup, NotificationType } from '../../notification/enums/notification.enum';
+import { MemberType } from '../../member/enums/member.enum';
 
 @Injectable()
 export class DoctorReportsService {
@@ -15,6 +18,7 @@ export class DoctorReportsService {
 		@InjectModel('DoctorReport') private readonly doctorReportModel: Model<DoctorReport>,
 		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
 		private readonly patientService: PatientService,
+		private readonly notificationEvents: NotificationEventService,
 	) {}
 
 	public async createReport(doctorId: ObjectId, input: DoctorReportInput): Promise<DoctorReport> {
@@ -32,8 +36,9 @@ export class DoctorReportsService {
 		if (existing) throw new BadRequestException('A report already exists for this appointment');
 		this.validateFollowUp(input.docReportFollowUp, input.docReportFollowUpDate);
 
+		let report: DoctorReport;
 		try {
-			return await this.doctorReportModel.create({
+			report = await this.doctorReportModel.create({
 				doctorId,
 				patientId: appointment.patientId,
 				appointmentId: appointment._id,
@@ -49,6 +54,17 @@ export class DoctorReportsService {
 		} catch (error) {
 			throw new BadRequestException('Report creation failed because this appointment already has a report');
 		}
+		await this.notificationEvents.toPatient(report.patientId, {
+			key: `report:${report._id}:created`,
+			type: NotificationType.SYSTEM,
+			group: NotificationGroup.REPORT,
+			title: 'Doctor report available',
+			description: 'A report from your appointment is ready to view securely.',
+			refId: report._id,
+			authorId: doctorId,
+			authorType: MemberType.DOCTOR,
+		});
+		return report;
 	}
 
 	public async updateReport(doctorId: ObjectId, input: DoctorReportUpdateInput): Promise<DoctorReport> {
@@ -70,6 +86,16 @@ export class DoctorReportsService {
 			.findOneAndUpdate({ _id: input.reportId, doctorId }, { $set: updateData }, { new: true, runValidators: true })
 			.exec();
 		if (!result) throw new InternalServerErrorException('Doctor report update failed');
+		await this.notificationEvents.toPatient(result.patientId, {
+			key: `report:${result._id}:updated:${result.updatedAt.toISOString()}`,
+			type: NotificationType.SYSTEM,
+			group: NotificationGroup.REPORT,
+			title: 'Doctor report updated',
+			description: 'Your appointment report was updated. View it securely in your account.',
+			refId: result._id,
+			authorId: doctorId,
+			authorType: MemberType.DOCTOR,
+		});
 		return result;
 	}
 
