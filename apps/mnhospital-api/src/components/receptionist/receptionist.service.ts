@@ -23,6 +23,8 @@ import { ReceptionTaskStatus } from './enums/receptionist.enum';
 import { ReceptionistDashboardStats } from './dto/receptionist-dashboard';
 import { DoctorReport, DoctorReports } from '../doctor/doctor-reports/dto/doctor-report';
 import { AppointmentService } from '../appointment/appointment.service';
+import { NotificationEventService } from '../notification/notification-event.service';
+import { NotificationGroup, NotificationType } from '../notification/enums/notification.enum';
 
 @Injectable()
 export class ReceptionistService {
@@ -33,6 +35,7 @@ export class ReceptionistService {
 		@InjectModel('DoctorReport') private readonly doctorReportModel: Model<DoctorReport>,
 		private readonly authService: AuthService,
 		private readonly appointmentService: AppointmentService,
+		private readonly notificationEvents: NotificationEventService,
 	) {}
 
 	public async createReceptionist(input: ReceptionistInput): Promise<Receptionist> {
@@ -289,7 +292,7 @@ export class ReceptionistService {
 			await this.ensureReceptionist(receptionistId);
 		}
 
-		return await this.receptionTaskModel.create({
+		const task = await this.receptionTaskModel.create({
 			appointmentId: appointment._id,
 			patientId: appointment.patientId,
 			doctorId: appointment.doctorId,
@@ -301,6 +304,19 @@ export class ReceptionistService {
 			dueAt: input.dueAt,
 			taskStatus: ReceptionTaskStatus.PENDING,
 		});
+		if (receptionistId) {
+			await this.notificationEvents.toReceptionist(receptionistId, {
+				key: `reception-task:${task._id}:assigned`,
+				type: NotificationType.SYSTEM,
+				group: NotificationGroup.RECEPTION_TASK,
+				title: 'Reception task assigned',
+				description: 'A reception task is ready for review.',
+				refId: task._id,
+				authorId: memberId,
+				authorType: memberType,
+			});
+		}
+		return task;
 	}
 
 	public async getTasks(memberId: ObjectId, memberType: MemberType, input: ReceptionTaskInquiry): Promise<ReceptionTasks> {
@@ -364,7 +380,20 @@ export class ReceptionistService {
 		if (input.taskStatus === ReceptionTaskStatus.ACCEPTED) task.acceptedAt = new Date();
 		if (input.taskStatus === ReceptionTaskStatus.COMPLETED) task.completedAt = new Date();
 
-		return await task.save();
+		const result = await task.save();
+		if (input.taskStatus === ReceptionTaskStatus.COMPLETED) {
+			await this.notificationEvents.toDoctor(result.doctorId, {
+				key: `reception-task:${result._id}:completed`,
+				type: NotificationType.SYSTEM,
+				group: NotificationGroup.RECEPTION_TASK,
+				title: 'Reception task completed',
+				description: 'A reception task for your appointment was completed.',
+				refId: result._id,
+				authorId: memberId,
+				authorType: memberType,
+			});
+		}
+		return result;
 	}
 
 	private async ensureReceptionist(receptionistId: ObjectId): Promise<void> {
