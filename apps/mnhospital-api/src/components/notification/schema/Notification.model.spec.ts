@@ -32,5 +32,6 @@ describe('Notification schema', () => {
 		const indexes = NotificationSchema.indexes().map(([keys]) => keys);
 		expect(indexes).toContainEqual({ receiverId: 1, receiverType: 1, notificationStatus: 1, createdAt: -1 });
 		expect(indexes).toContainEqual({ receiverId: 1, receiverType: 1, createdAt: -1 });
+		expect(indexes).toContainEqual({ notificationEventKey: 1 });
 	});
 });

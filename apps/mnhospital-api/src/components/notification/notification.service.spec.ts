@@ -9,6 +9,7 @@ describe('NotificationService receiver ownership', () => {
 	const notificationId = new Types.ObjectId();
 	const exec = jest.fn();
 	const model = {
+		create: jest.fn(),
 		aggregate: jest.fn(() => ({ exec })),
 		findOne: jest.fn(() => ({ exec })),
 		findOneAndUpdate: jest.fn(() => ({ exec })),
@@ -57,6 +58,21 @@ describe('NotificationService receiver ownership', () => {
 		expect(model.updateMany).toHaveBeenCalledWith(
 			{ receiverId, receiverType: MemberType.PATIENT, notificationStatus: NotificationStatus.UNREAD },
 			{ $set: { notificationStatus: NotificationStatus.READ } },
+		);
+	});
+
+	it('uses a stable event key and insert-only fields for retry-safe creation', async () => {
+		exec.mockResolvedValue({ _id: notificationId });
+		const event = {
+			notificationType: 'APPOINTMENT', notificationGroup: 'APPOINTMENT',
+			notificationTitle: 'Appointment confirmed', notificationDesc: 'Status changed',
+			receiverId, receiverType: MemberType.PATIENT, notificationRefId: notificationId,
+		} as Parameters<NotificationService['createEventNotification']>[1];
+		await service.createEventNotification('appointment:123:confirmed:PATIENT:456', event);
+		expect(model.findOneAndUpdate).toHaveBeenCalledWith(
+			{ notificationEventKey: 'appointment:123:confirmed:PATIENT:456' },
+			{ $setOnInsert: { ...event, notificationStatus: NotificationStatus.UNREAD, notificationEventKey: 'appointment:123:confirmed:PATIENT:456' } },
+			{ upsert: true, new: true, setDefaultsOnInsert: true },
 		);
 	});
 });

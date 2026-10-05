@@ -25,11 +25,11 @@ export class Notification {
 	@Field(() => String)
 	notificationDesc: string;
 
-	@Field(() => String)
-	authorId: ObjectId;
+	@Field(() => String, { nullable: true })
+	authorId?: ObjectId;
 
-	@Field(() => MemberType)
-	authorType: MemberType;
+	@Field(() => MemberType, { nullable: true })
+	authorType?: MemberType;
 
 	@Field(() => String)
 	receiverId: ObjectId;

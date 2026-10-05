@@ -7,16 +7,19 @@ import { NotificationResolver } from './notification.resolver';
 import { NoticeService } from './notice.service';
 import { NoticeResolver } from './notice.resolver';
 import { AuthModule } from '../auth/auth.module';
+import PatientSchema from '../patient/schema/Patient.model';
+import { NotificationEventService } from './notification-event.service';
 
 @Module({
 	imports: [
 		MongooseModule.forFeature([
 			{ name: 'Notification', schema: NotificationSchema },
 			{ name: 'Notice', schema: NoticeSchema },
+			{ name: 'Patient', schema: PatientSchema },
 		]),
 		AuthModule,
 	],
-	exports: [MongooseModule, NotificationService],
-	providers: [NotificationService, NotificationResolver, NoticeService, NoticeResolver],
+	exports: [MongooseModule, NotificationService, NotificationEventService],
+	providers: [NotificationService, NotificationEventService, NotificationResolver, NoticeService, NoticeResolver],
 })
 export class NotificationModule {}

@@ -13,8 +13,8 @@ export interface CreateNotificationData {
 	notificationGroup: NotificationGroup;
 	notificationTitle: string;
 	notificationDesc: string;
-	authorId: ObjectId;
-	authorType: MemberType;
+	authorId?: ObjectId;
+	authorType?: MemberType;
 	receiverId: ObjectId;
 	receiverType: MemberType;
 	notificationRefId: ObjectId;
@@ -29,6 +29,19 @@ export class NotificationService {
 			...input,
 			notificationStatus: input.notificationStatus ?? NotificationStatus.UNREAD,
 		});
+	}
+
+	public async createEventNotification(eventKey: string, input: CreateNotificationData): Promise<Notification> {
+		try {
+			return await this.notificationModel.findOneAndUpdate(
+				{ notificationEventKey: eventKey },
+				{ $setOnInsert: { ...input, notificationStatus: NotificationStatus.UNREAD, notificationEventKey: eventKey } },
+				{ upsert: true, new: true, setDefaultsOnInsert: true },
+			).exec();
+		} catch (error) {
+			if ((error as { code?: number }).code !== 11000) throw error;
+			return this.notificationModel.findOne({ notificationEventKey: eventKey }).select('+notificationEventKey').exec();
+		}
 	}
 
 	public async getMyNotifications(

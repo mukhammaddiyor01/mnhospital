@@ -33,13 +33,11 @@ const NotificationSchema = new Schema(
 		},
 		authorId: {
 			type: Schema.Types.ObjectId,
-			required: true,
 			index: true,
 		},
 		authorType: {
 			type: String,
 			enum: MemberType,
-			required: true,
 		},
 		receiverId: {
 			type: Schema.Types.ObjectId,
@@ -54,6 +52,13 @@ const NotificationSchema = new Schema(
 		notificationRefId: {
 			type: Schema.Types.ObjectId,
 			required: true,
+		},
+		notificationEventKey: {
+			type: String,
+			maxlength: 256,
+			unique: true,
+			sparse: true,
+			select: false,
 		},
 	},
 	{ timestamps: true, collection: 'notification' },
