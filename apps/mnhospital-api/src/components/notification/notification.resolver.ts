@@ -1,8 +1,7 @@
 import { Args, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { BadRequestException, UseGuards } from '@nestjs/common';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { shapeIntoMongoObjectId } from '../../libs/config';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -12,6 +11,10 @@ import { NotificationInquiry } from './dto/notification.input';
 import { NotificationService } from './notification.service';
 
 const notificationRoles = [MemberType.PATIENT, MemberType.DOCTOR, MemberType.RECEPTIONIST, MemberType.ADMIN];
+const parseNotificationId = (notificationId: string): ObjectId => {
+	if (!ObjectId.isValid(notificationId)) throw new BadRequestException('Invalid notification ID');
+	return new ObjectId(notificationId);
+};
 
 @Resolver()
 export class NotificationResolver {
@@ -39,7 +42,7 @@ export class NotificationResolver {
 		return await this.notificationService.getMyNotification(
 			authMember._id,
 			authMember.memberType,
-			shapeIntoMongoObjectId(notificationId),
+			parseNotificationId(notificationId),
 		);
 	}
 
@@ -54,7 +57,7 @@ export class NotificationResolver {
 		return await this.notificationService.markMyNotificationRead(
 			authMember._id,
 			authMember.memberType,
-			shapeIntoMongoObjectId(notificationId),
+			parseNotificationId(notificationId),
 		);
 	}
 
@@ -79,7 +82,7 @@ export class NotificationResolver {
 		return await this.notificationService.archiveMyNotification(
 			authMember._id,
 			authMember.memberType,
-			shapeIntoMongoObjectId(notificationId),
+			parseNotificationId(notificationId),
 		);
 	}
 }

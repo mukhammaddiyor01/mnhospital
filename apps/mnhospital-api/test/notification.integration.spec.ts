@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApolloDriver } from '@nestjs/apollo';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -57,8 +57,9 @@ describe('Notification and notice GraphQL integration', () => {
 			],
 		}).compile();
 
-		app = moduleFixture.createNestApplication();
-		await app.init();
+			app = moduleFixture.createNestApplication();
+			app.useGlobalPipes(new ValidationPipe());
+			await app.init();
 		authService = app.get(AuthService);
 	});
 
@@ -142,6 +143,24 @@ describe('Notification and notice GraphQL integration', () => {
 			MemberType.PATIENT,
 			expect.objectContaining({ toString: expect.any(Function) }),
 		);
+	});
+
+	it('rejects a malformed notification ID before calling the service', async () => {
+		const response = await request(app.getHttpServer())
+			.post('/graphql')
+			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
+			.send({ query: 'query { getMyNotification(notificationId: "not-an-id") { _id } }' });
+		expect(response.body.errors?.[0].message).toContain('Invalid notification ID');
+		expect(notificationService.getMyNotification).not.toHaveBeenCalled();
+	});
+
+	it('requires a valid page and limit for the notification inbox', async () => {
+		const response = await request(app.getHttpServer())
+			.post('/graphql')
+			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
+			.send({ query: 'query { getMyNotifications(input: { page: 0, limit: 101 }) { metaCounter { total } } }' });
+		expect(response.body.errors).toBeDefined();
+		expect(notificationService.getMyNotifications).not.toHaveBeenCalled();
 	});
 
 	it('allows an admin to create a draft notice with profile ownership', async () => {

@@ -1,8 +1,7 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { Message } from '../../libs/enums/common.enum';
 import { MemberType } from '../member/enums/member.enum';
 import { Notification, Notifications } from './dto/notification';
 import { NotificationGroup, NotificationStatus, NotificationType } from './enums/notification.enum';
@@ -66,7 +65,7 @@ export class NotificationService {
 		const notification = await this.notificationModel
 			.findOne({ _id: notificationId, receiverId, receiverType })
 			.exec();
-		if (!notification) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (!notification) throw new NotFoundException('Notification not found');
 		return notification;
 	}
 
