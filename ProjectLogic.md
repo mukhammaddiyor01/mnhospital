@@ -15,6 +15,7 @@ This document records the conventions used while completing the MN Hospital API.
 - Public signup creates a patient account; staff roles are managed through their existing administrative flows.
 - Notification records are private to `receiverId` and `receiverType`. Public notices are a separate model and only published notices are visible without authentication.
 - Notification creation is internal to the API. Appointment, booking, payment, reception task, and report state changes emit the events recorded in `docs/NOTIFICATION_EVENTS.md`; the API does not expose a public create mutation. Message events will be connected when the messaging domain is implemented.
+- Direct messaging belongs to authenticated patient, doctor, receptionist, and admin profiles. Store each participant as a role plus profile ID because staff and patients live in different collections. Scope every conversation and message operation to a participant. The public Guest live chat is a separate WebSocket flow.
 - Do not place detailed clinical information in notification title or description. Link to the authorized resource through `notificationGroup` and `notificationRefId`.
 
 ## Change discipline

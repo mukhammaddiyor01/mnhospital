@@ -21,6 +21,9 @@ describe('Messaging GraphQL access', () => {
 		startDirectConversation: jest.fn(),
 		getMyConversations: jest.fn(),
 		getMyConversation: jest.fn(),
+		getMyMessages: jest.fn(),
+		sendDirectMessage: jest.fn(),
+		markMyMessagesRead: jest.fn(),
 	};
 
 	beforeAll(async () => {
@@ -62,15 +65,15 @@ describe('Messaging GraphQL access', () => {
 		);
 	});
 
-	it('rejects guests and malformed conversation IDs before reading conversations', async () => {
+	it('rejects guests and malformed conversation IDs before reading messages', async () => {
 		const guest = await request(app.getHttpServer()).post('/graphql')
 			.send({ query: 'query { getMyConversations(input: {}) { total } }' });
 		expect(guest.body.errors).toBeDefined();
 
 		const malformed = await request(app.getHttpServer()).post('/graphql')
 			.set('Authorization', `Bearer ${await tokenFor(doctorId, MemberType.DOCTOR)}`)
-			.send({ query: 'query { getMyConversation(conversationId: "bad") { _id } }' });
+			.send({ query: 'query { getMyMessages(conversationId: "bad", input: {}) { total } }' });
 		expect(malformed.body.errors?.[0].message).toContain('Invalid conversation ID');
-		expect(service.getMyConversation).not.toHaveBeenCalled();
+		expect(service.getMyMessages).not.toHaveBeenCalled();
 	});
 });

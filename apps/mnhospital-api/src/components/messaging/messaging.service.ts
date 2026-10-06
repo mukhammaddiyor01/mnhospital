@@ -2,8 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConversationType, MemberStatus, MemberType } from '../member/enums/member.enum';
-import { ChatConversation, ChatConversations, ChatParticipant } from './dto/messaging';
-import { ChatInquiry, StartDirectConversationInput } from './dto/messaging.input';
+import { ChatConversation, ChatConversations, ChatMessage, ChatMessages, ChatParticipant } from './dto/messaging';
+import { ChatInquiry, SendDirectMessageInput, StartDirectConversationInput } from './dto/messaging.input';
 
 export interface MessageActor {
 	_id: Types.ObjectId;
@@ -20,6 +20,7 @@ const parseId = (value: string): Types.ObjectId => {
 export class MessagingService {
 	constructor(
 		@InjectModel('Conversation') private readonly conversationModel: Model<ChatConversation>,
+		@InjectModel('Message') private readonly messageModel: Model<ChatMessage>,
 		@InjectModel('Member') private readonly memberModel: Model<any>,
 		@InjectModel('Doctor') private readonly doctorModel: Model<any>,
 		@InjectModel('Receptionist') private readonly receptionistModel: Model<any>,
@@ -73,6 +74,52 @@ export class MessagingService {
 		}).exec();
 		if (!conversation) throw new NotFoundException('Conversation not found');
 		return conversation;
+	}
+
+	public async getMyMessages(actor: MessageActor, conversationId: Types.ObjectId, input: ChatInquiry): Promise<ChatMessages> {
+		await this.getMyConversation(actor, conversationId);
+		const filter = { conversationId, deletedAt: { $exists: false } };
+		const [list, total] = await Promise.all([
+			this.messageModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip((input.page - 1) * input.limit).limit(input.limit).exec(),
+			this.messageModel.countDocuments(filter).exec(),
+		]);
+		return { list, total };
+	}
+
+	public async sendDirectMessage(actor: MessageActor, conversationId: Types.ObjectId, input: SendDirectMessageInput): Promise<ChatMessage> {
+		await this.getMyConversation(actor, conversationId);
+		const content = input.messageContent.trim();
+		if (!content) throw new BadRequestException('Message cannot be empty');
+
+		let replyToMessageId: Types.ObjectId | undefined;
+		if (input.replyToMessageId) {
+			replyToMessageId = parseId(input.replyToMessageId);
+			const reply = await this.messageModel.exists({ _id: replyToMessageId, conversationId, deletedAt: { $exists: false } });
+			if (!reply) throw new BadRequestException('Reply message is not in this conversation');
+		}
+
+		const message = await this.messageModel.create({
+			conversationId,
+			senderId: actor._id,
+			senderType: actor.memberType,
+			messageContent: content,
+			replyToMessageId,
+		});
+		await this.conversationModel.updateOne({ _id: conversationId }, { $set: { lastMessageAt: message.createdAt } }).exec();
+		return message;
+	}
+
+	public async markMyMessagesRead(actor: MessageActor, conversationId: Types.ObjectId): Promise<number> {
+		const conversation = await this.getMyConversation(actor, conversationId);
+		const other = conversation.participants.find(
+			(participant) => participantKey(participant.participantType, participant.participantId) !== participantKey(actor.memberType, actor._id),
+		);
+		if (!other) throw new NotFoundException('Conversation recipient not found');
+		const result = await this.messageModel.updateMany(
+			{ conversationId, senderId: other.participantId, senderType: other.participantType, readAt: { $exists: false }, deletedAt: { $exists: false } },
+			{ $set: { readAt: new Date() } },
+		).exec();
+		return result.modifiedCount;
 	}
 
 	private async requireActiveActor(actor: MessageActor): Promise<void> {

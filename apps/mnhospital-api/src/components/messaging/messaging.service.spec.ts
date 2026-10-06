@@ -15,18 +15,20 @@ describe('Messaging ownership', () => {
 
 	const models = () => {
 		const conversationModel = { findOneAndUpdate: jest.fn(), findOne: jest.fn(), updateOne: jest.fn() };
+		const messageModel = { create: jest.fn(), exists: jest.fn(), updateMany: jest.fn() };
 		const memberModel = { findOne: jest.fn().mockReturnValue(profileQuery({ memberNick: 'patient' })) };
 		const doctorModel = { findOne: jest.fn().mockReturnValue(profileQuery({ docNick: 'doctor' })) };
 		const receptionistModel = { findOne: jest.fn() };
 		const adminModel = { findById: jest.fn() };
 		const service = new MessagingService(
 			conversationModel as any,
+			messageModel as any,
 			memberModel as any,
 			doctorModel as any,
 			receptionistModel as any,
 			adminModel as any,
 		);
-		return { service, conversationModel, memberModel, doctorModel };
+		return { service, conversationModel, messageModel, memberModel, doctorModel };
 	};
 
 	it('uses one canonical key for a patient and doctor regardless of who starts the chat', async () => {
@@ -59,4 +61,48 @@ describe('Messaging ownership', () => {
 		});
 	});
 
+	it('rejects a reply to a message outside the conversation', async () => {
+		const { service, conversationModel, messageModel } = models();
+		conversationModel.findOne.mockReturnValue(conversationQuery({ _id: conversationId }));
+		messageModel.exists.mockResolvedValue(null);
+		await expect(service.sendDirectMessage(actor, conversationId, {
+			messageContent: 'Hello',
+			replyToMessageId: outsiderId.toString(),
+		})).rejects.toBeInstanceOf(BadRequestException);
+		expect(messageModel.exists).toHaveBeenCalledWith(expect.objectContaining({ conversationId }));
+		expect(messageModel.create).not.toHaveBeenCalled();
+	});
+
+	it('writes the verified sender identity and updates the conversation timestamp', async () => {
+		const { service, conversationModel, messageModel } = models();
+		const createdAt = new Date();
+		conversationModel.findOne.mockReturnValue(conversationQuery({ _id: conversationId }));
+		conversationModel.updateOne.mockReturnValue(conversationQuery({ modifiedCount: 1 }));
+		messageModel.create.mockResolvedValue({ _id: new Types.ObjectId(), createdAt });
+		await service.sendDirectMessage(actor, conversationId, { messageContent: '  Hello doctor  ' });
+		expect(messageModel.create).toHaveBeenCalledWith(expect.objectContaining({
+			conversationId,
+			senderId: patientId,
+			senderType: MemberType.PATIENT,
+			messageContent: 'Hello doctor',
+		}));
+		expect(conversationModel.updateOne).toHaveBeenCalledWith({ _id: conversationId }, { $set: { lastMessageAt: createdAt } });
+	});
+
+	it('marks only the other participant’s messages as read', async () => {
+		const { service, conversationModel, messageModel } = models();
+		conversationModel.findOne.mockReturnValue(conversationQuery({
+			_id: conversationId,
+			participants: [
+				{ participantId: patientId, participantType: MemberType.PATIENT },
+				{ participantId: doctorId, participantType: MemberType.DOCTOR },
+			],
+		}));
+		messageModel.updateMany.mockReturnValue(conversationQuery({ modifiedCount: 2 }));
+		expect(await service.markMyMessagesRead(actor, conversationId)).toBe(2);
+		expect(messageModel.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({ senderId: doctorId, senderType: MemberType.DOCTOR }),
+			expect.objectContaining({ $set: { readAt: expect.any(Date) } }),
+		);
+	});
 });
