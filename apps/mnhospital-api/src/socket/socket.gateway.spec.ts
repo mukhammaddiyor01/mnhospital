@@ -5,6 +5,7 @@ import { MemberType } from '../components/member/enums/member.enum';
 import { MessagingEventsService } from '../components/messaging/messaging-events.service';
 import { Types } from 'mongoose';
 import { SocketGateway } from './socket.gateway';
+import { GeneralChatService } from './general-chat.service';
 
 const client = () => ({ readyState: WebSocket.OPEN, send: jest.fn(), close: jest.fn() }) as unknown as WebSocket;
 const request = (url = '/') => ({ url }) as IncomingMessage;
@@ -16,9 +17,19 @@ describe('General live chat', () => {
 	let onRead: (event: any) => void;
 	const unsubscribe = jest.fn();
 	let gateway: SocketGateway;
+	let stored: any[];
+	let storage: { getRecentMessages: jest.Mock; createMessage: jest.Mock };
 
 	beforeEach(() => {
 		verifyToken.mockReset();
+		stored = [];
+		storage = {
+			getRecentMessages: jest.fn(async () => stored.slice(-50)),
+			createMessage: jest.fn(async (identity, text) => {
+				const message = { id: String(stored.length), name: identity.name, role: identity.role, text, createdAt: new Date().toISOString() };
+				stored.push(message); return message;
+			}),
+		};
 		gateway = new SocketGateway({ verifyToken } as unknown as AuthService, {
 			onMessageCreated: (handler: (event: any) => void) => {
 				onCreated = handler;
@@ -28,7 +39,7 @@ describe('General live chat', () => {
 				onRead = handler;
 				return { unsubscribe };
 			},
-		} as unknown as MessagingEventsService);
+		} as unknown as MessagingEventsService, storage as unknown as GeneralChatService);
 	});
 
 	it('admits a guest, sends history, and broadcasts under the Guest name', async () => {
@@ -36,7 +47,7 @@ describe('General live chat', () => {
 		const other = client();
 		await gateway.handleConnection(guest, request());
 		await gateway.handleConnection(other, request());
-		gateway.handleMessage(guest, { text: '  Hello  ' });
+		await gateway.handleMessage(guest, { text: '  Hello  ' });
 		expect(events(guest)[0]).toEqual({ event: 'getMessages', list: [] });
 		expect(events(other).slice(-1)[0]).toMatchObject({ event: 'message', data: { text: 'Hello', name: 'Guest', role: 'GUEST' } });
 		expect(verifyToken).not.toHaveBeenCalled();
@@ -46,14 +57,14 @@ describe('General live chat', () => {
 		verifyToken.mockResolvedValueOnce({ _id: new Types.ObjectId(), memberType: MemberType.DOCTOR, docFullName: 'Dr Lee' });
 		const doctor = client();
 		await gateway.handleConnection(doctor, request('/?token=valid'));
-		gateway.handleMessage(doctor, { text: 'Available', name: 'Impersonated' } as any);
+		await gateway.handleMessage(doctor, { text: 'Available', name: 'Impersonated' } as any);
 		expect(events(doctor).slice(-1)[0]).toMatchObject({ event: 'message', data: { name: 'Dr Lee', role: MemberType.DOCTOR } });
 
 		verifyToken.mockRejectedValueOnce(new Error('expired'));
 		const rejected = client();
 		await gateway.handleConnection(rejected, request('/?token=expired'));
 		expect(rejected.close).toHaveBeenCalledWith(1008, 'Invalid token');
-		gateway.handleMessage(rejected, 'should not appear');
+		await gateway.handleMessage(rejected, 'should not appear');
 		expect(rejected.send).not.toHaveBeenCalled();
 	});
 
@@ -106,14 +117,59 @@ describe('General live chat', () => {
 	it('rejects invalid text and retains only the latest fifty messages', async () => {
 		const guest = client();
 		await gateway.handleConnection(guest, request());
-		gateway.handleMessage(guest, '   ');
-		gateway.handleMessage(guest, 'x'.repeat(501));
+		await gateway.handleMessage(guest, '   ');
+		await gateway.handleMessage(guest, 'x'.repeat(501));
 		expect(events(guest).filter((event) => event.event === 'error')).toHaveLength(2);
-		for (let number = 0; number < 51; number++) gateway.handleMessage(guest, `Message ${number}`);
+		for (let number = 0; number < 51; number++) await gateway.handleMessage(guest, `Message ${number}`);
 		const newcomer = client();
 		await gateway.handleConnection(newcomer, request());
 		const history = events(newcomer)[0];
 		expect(history.list).toHaveLength(50);
 		expect(history.list[0].text).toBe('Message 1');
+	});
+
+	it('loads persisted history when a new gateway instance starts', async () => {
+		const guest = client();
+		await gateway.handleConnection(guest, request());
+		await gateway.handleMessage(guest, 'Before restart');
+		const restarted = new SocketGateway({ verifyToken } as any, {} as any, storage as any);
+		const newcomer = client();
+		await restarted.handleConnection(newcomer, request());
+		expect(events(newcomer)[0].list).toMatchObject([{ text: 'Before restart', name: 'Guest', role: 'GUEST' }]);
+	});
+
+	it('broadcasts and acknowledges only after storage succeeds', async () => {
+		const guest = client();
+		await gateway.handleConnection(guest, request());
+		let finish: (message: any) => void;
+		storage.createMessage.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+		const pending = gateway.handleMessage(guest, { text: 'Waiting', requestId: 'request-1' });
+		expect(events(guest).filter((event) => ['message', 'messageSent'].includes(event.event))).toHaveLength(0);
+		finish({ id: 'saved', text: 'Waiting', name: 'Guest', role: 'GUEST', createdAt: new Date().toISOString() });
+		await pending;
+		expect(events(guest).slice(-2).map((event) => event.event)).toEqual(['message', 'messageSent']);
+		expect(events(guest).slice(-1)[0]).toEqual({ event: 'messageSent', requestId: 'request-1' });
+	});
+
+	it('does not broadcast a failed write or expose database errors', async () => {
+		const guest = client();
+		const other = client();
+		await gateway.handleConnection(guest, request());
+		await gateway.handleConnection(other, request());
+		storage.createMessage.mockRejectedValueOnce(new Error('private database connection details'));
+		await gateway.handleMessage(guest, { text: 'Failing', requestId: 'request-2' });
+		expect(events(other).filter((event) => event.event === 'message')).toHaveLength(0);
+		expect(events(guest).slice(-1)[0]).toMatchObject({ event: 'error', code: 'GENERAL_SEND_FAILED', requestId: 'request-2' });
+		expect(JSON.stringify(events(guest))).not.toContain('private database');
+	});
+
+	it('rejects non-string text safely and keeps the connection usable when history fails', async () => {
+		storage.getRecentMessages.mockRejectedValueOnce(new Error('database unavailable'));
+		const guest = client();
+		await gateway.handleConnection(guest, request());
+		expect(events(guest)[0]).toMatchObject({ event: 'error', code: 'GENERAL_HISTORY_UNAVAILABLE' });
+		await gateway.handleMessage(guest, { text: 123 });
+		expect(storage.createMessage).not.toHaveBeenCalled();
+		expect(events(guest).slice(-1)[0]).toMatchObject({ code: 'INVALID_GENERAL_MESSAGE' });
 	});
 });

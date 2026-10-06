@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { IncomingMessage } from 'http';
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { Subscription } from 'rxjs';
@@ -15,6 +14,7 @@ import { AuthService } from '../components/auth/auth.service';
 import { MemberType } from '../components/member/enums/member.enum';
 import { DirectMessageEvent, DirectReadEvent, MessagingEventsService } from '../components/messaging/messaging-events.service';
 import { ChatParticipant } from '../components/messaging/dto/messaging';
+import { GeneralChatService, MAX_GENERAL_MESSAGE_LENGTH } from './general-chat.service';
 
 interface ChatIdentity {
 	name: string;
@@ -22,26 +22,18 @@ interface ChatIdentity {
 	profileId?: string;
 }
 
-interface GeneralMessage {
-	id: string;
-	text: string;
-	name: string;
-	role: MemberType | 'GUEST';
-	createdAt: string;
-}
-
-const MAX_GENERAL_MESSAGE_LENGTH = 500;
-const GENERAL_HISTORY_LIMIT = 50;
-
 @WebSocketGateway({ transports: ['websocket'], secure: false })
 export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSocket>, OnGatewayDisconnect<WebSocket>, OnModuleDestroy {
 	private readonly logger = new Logger(SocketGateway.name);
 	private readonly clients = new Map<WebSocket, ChatIdentity>();
-	private readonly generalMessages: GeneralMessage[] = [];
 	private messageSubscription?: Subscription;
 	private readSubscription?: Subscription;
 
-	constructor(private readonly authService: AuthService, private readonly messagingEvents: MessagingEventsService) {}
+	constructor(
+		private readonly authService: AuthService,
+		private readonly messagingEvents: MessagingEventsService,
+		private readonly generalChat: GeneralChatService,
+	) {}
 
 	@WebSocketServer()
 	server: Server;
@@ -75,8 +67,16 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSock
 			}
 		}
 
+		if (client.readyState !== WebSocket.OPEN) return;
 		this.clients.set(client, identity);
-		this.send(client, { event: 'getMessages', list: this.generalMessages });
+		try {
+			const list = await this.generalChat.getRecentMessages();
+			this.send(client, { event: 'getMessages', list });
+		} catch {
+			this.logger.error('General chat history could not be loaded');
+			this.send(client, { event: 'error', code: 'GENERAL_HISTORY_UNAVAILABLE', message: 'Chat history could not be loaded.' });
+		}
+		if (!this.clients.has(client)) return;
 		this.broadcast({ event: 'info', totalClients: this.clients.size, action: 'Joined', name: identity.name });
 	}
 
@@ -88,19 +88,25 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSock
 	}
 
 	@SubscribeMessage('message')
-	public handleMessage(client: WebSocket, payload: string | { text?: string }): void {
+	public async handleMessage(client: WebSocket, payload: string | { text?: unknown; requestId?: unknown }): Promise<void> {
 		const identity = this.clients.get(client);
 		if (!identity) return;
-		const text = (typeof payload === 'string' ? payload : payload?.text)?.trim();
+		const rawText = typeof payload === 'string' ? payload : payload?.text;
+		const text = typeof rawText === 'string' ? rawText.trim() : '';
+		const requestId = typeof payload === 'object' && typeof payload?.requestId === 'string' ? payload.requestId.slice(0, 64) : undefined;
 		if (!text || text.length > MAX_GENERAL_MESSAGE_LENGTH) {
-			this.send(client, { event: 'error', message: `Message must be 1–${MAX_GENERAL_MESSAGE_LENGTH} characters.` });
+			this.send(client, { event: 'error', code: 'INVALID_GENERAL_MESSAGE', requestId, message: `Message must be 1–${MAX_GENERAL_MESSAGE_LENGTH} characters.` });
 			return;
 		}
 
-		const message: GeneralMessage = { id: randomUUID(), text, name: identity.name, role: identity.role, createdAt: new Date().toISOString() };
-		this.generalMessages.push(message);
-		if (this.generalMessages.length > GENERAL_HISTORY_LIMIT) this.generalMessages.shift();
-		this.broadcast({ event: 'message', data: message });
+		try {
+			const message = await this.generalChat.createMessage(identity, text);
+			this.broadcast({ event: 'message', data: message });
+			if (requestId) this.send(client, { event: 'messageSent', requestId });
+		} catch {
+			this.logger.error('General chat message could not be saved');
+			this.send(client, { event: 'error', code: 'GENERAL_SEND_FAILED', requestId, message: 'Your message could not be saved. Please try again.' });
+		}
 	}
 
 	private send(client: WebSocket, payload: Record<string, unknown>): void {
