@@ -147,7 +147,10 @@ export class BookingService {
 		if (!items.length) throw new BadRequestException('Cannot create a booking order from an empty cart');
 
 		const existingOrder = await this.bookingOrderModel
-			.findOne({ cartId: cart._id, bookingOrderStatus: { $in: [BookingOrderStatus.PENDING, BookingOrderStatus.CONFIRMED] } })
+			.findOne({
+				cartId: cart._id,
+				bookingOrderStatus: { $in: [BookingOrderStatus.PENDING, BookingOrderStatus.CONFIRMED] },
+			})
 			.lean()
 			.exec();
 		if (existingOrder) throw new BadRequestException(Message.CREATE_FAILED);
@@ -365,7 +368,12 @@ export class BookingService {
 		}
 	}
 
-	private async notifyPaymentStatus(payment: Payment, status: PaymentStatus, authorId?: ObjectId, authorType?: MemberType): Promise<void> {
+	private async notifyPaymentStatus(
+		payment: Payment,
+		status: PaymentStatus,
+		authorId?: ObjectId,
+		authorType?: MemberType,
+	): Promise<void> {
 		await this.notificationEvents.toPatient(payment.patientId, {
 			key: `payment:${payment._id}:${status}`,
 			type: NotificationType.PAYMENT,
@@ -381,7 +389,8 @@ export class BookingService {
 	public async verifyEximbayPayment(paymentId: ObjectId, rawData: string): Promise<{ firstTime: boolean }> {
 		const payment = await this.paymentModel.findById(paymentId).lean().exec();
 		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-		if (payment.paymentProvider !== PaymentProvider.EXIMBAY) throw new BadRequestException('Payment provider must be EXIMBAY');
+		if (payment.paymentProvider !== PaymentProvider.EXIMBAY)
+			throw new BadRequestException('Payment provider must be EXIMBAY');
 
 		const transactionId = new URLSearchParams(rawData).get('transaction_id');
 		if (!transactionId) throw new BadRequestException('Eximbay transaction_id is missing');
@@ -451,7 +460,8 @@ export class BookingService {
 		const patientId = await this.patientService.resolveProfileId(memberId);
 		const payment = await this.paymentModel.findOne({ _id: paymentId, patientId }).lean().exec();
 		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-		if (payment.paymentProvider !== PaymentProvider.EXIMBAY) throw new BadRequestException('Payment provider must be EXIMBAY');
+		if (payment.paymentProvider !== PaymentProvider.EXIMBAY)
+			throw new BadRequestException('Payment provider must be EXIMBAY');
 		if (payment.paymentStatus !== PaymentStatus.PENDING) throw new BadRequestException('Payment is no longer pending');
 
 		const order = await this.bookingOrderModel.findOne({ _id: payment.bookingOrderId, patientId }).lean().exec();
@@ -471,19 +481,26 @@ export class BookingService {
 	}
 
 	public async getStaffPayments(memberType: MemberType, input: PaymentInquiry): Promise<Payments> {
-		if (![MemberType.ADMIN, MemberType.RECEPTIONIST].includes(memberType)) throw new InternalServerErrorException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
+		if (![MemberType.ADMIN, MemberType.RECEPTIONIST].includes(memberType))
+			throw new InternalServerErrorException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
 		const match: Record<string, unknown> = input.status ? { paymentStatus: input.status } : {};
-		const result = await this.paymentModel.aggregate([
-			{ $match: match }, { $sort: { createdAt: -1, _id: -1 } },
-			{ $facet: { list: [{ $skip: (input.page - 1) * input.limit }, { $limit: Math.min(input.limit, 100) }], metaCounter: [{ $count: 'total' }] } },
-		]).exec();
+		const limit = Math.min(input.limit, 100);
+		const result = await this.paymentModel
+			.aggregate([
+				{ $match: match },
+				{ $sort: { createdAt: -1, _id: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * limit }, { $limit: limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
 		return result[0] ?? { list: [], metaCounter: [] };
 	}
 
-	public async getStaffBookingOrders(
-		memberType: MemberType,
-		input: StaffBookingOrderInquiry,
-	): Promise<BookingOrders> {
+	public async getStaffBookingOrders(memberType: MemberType, input: StaffBookingOrderInquiry): Promise<BookingOrders> {
 		if (![MemberType.ADMIN, MemberType.RECEPTIONIST].includes(memberType)) {
 			throw new InternalServerErrorException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
 		}
