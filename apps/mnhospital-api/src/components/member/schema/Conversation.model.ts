@@ -1,5 +1,5 @@
 import { Schema } from 'mongoose';
-import { ConversationType } from '../enums/member.enum';
+import { ConversationType, MemberType } from '../enums/member.enum';
 
 const ConversationSchema = new Schema(
 	{
@@ -10,20 +10,28 @@ const ConversationSchema = new Schema(
 		},
 		conversationTitle: {
 			type: String,
+			default: '',
+		},
+		participants: {
+			type: [{
+				participantId: { type: Schema.Types.ObjectId, required: true },
+				participantType: { type: String, enum: MemberType, required: true },
+				displayName: { type: String },
+				image: { type: String },
+			}],
 			required: true,
 		},
-		conversationRefId: {
-			type: Schema.Types.ObjectId,
+		participantKeys: {
+			type: [String],
 			required: true,
 		},
-		memberId: {
-			type: Schema.Types.ObjectId,
-			ref: 'Member',
-			required: true,
-			index: true,
-		},
+		directKey: { type: String },
+		lastMessageAt: { type: Date },
 	},
 	{ timestamps: true, collection: 'conversation' },
 );
+
+ConversationSchema.index({ participantKeys: 1, updatedAt: -1 });
+ConversationSchema.index({ directKey: 1 }, { unique: true, partialFilterExpression: { conversationType: ConversationType.DIRECT } });
 
 export default ConversationSchema;

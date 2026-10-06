@@ -1,4 +1,5 @@
 import { Schema } from 'mongoose';
+import { MemberType } from '../enums/member.enum';
 
 const MessageSchema = new Schema(
 	{
@@ -8,22 +9,24 @@ const MessageSchema = new Schema(
 			required: true,
 			index: true,
 		},
-		senderMemberId: {
+		senderId: {
 			type: Schema.Types.ObjectId,
-			ref: 'Member',
 			required: true,
 		},
+		senderType: { type: String, enum: MemberType, required: true },
 		replyToMessageId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Message',
 		},
 		messageTitle: {
 			type: String,
-			required: true,
+			default: '',
 		},
 		messageContent: {
 			type: String,
 			required: true,
+			trim: true,
+			maxlength: 2000,
 		},
 		messageImages: {
 			type: [String],
@@ -41,5 +44,7 @@ const MessageSchema = new Schema(
 	},
 	{ timestamps: true, collection: 'message' },
 );
+
+MessageSchema.index({ conversationId: 1, createdAt: -1 });
 
 export default MessageSchema;
