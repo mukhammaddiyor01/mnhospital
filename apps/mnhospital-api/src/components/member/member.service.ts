@@ -114,16 +114,28 @@ export class MemberService {
 		delete updateData.memberType;
 		delete updateData.memberStatus;
 
-		const result: Member = await this.memberModel
-			.findOneAndUpdate(
-				{
-					_id: memberId,
-					memberStatus: MemberStatus.ACTIVE,
-				},
-				updateData,
-				{ new: true },
-			)
-			.exec();
+		let result: Member;
+		try {
+			result = await this.memberModel
+				.findOneAndUpdate(
+					{
+						_id: memberId,
+						memberStatus: MemberStatus.ACTIVE,
+					},
+					updateData,
+					{ new: true, runValidators: true },
+				)
+				.exec();
+		} catch (error) {
+			const duplicate = error as { code?: number; keyPattern?: Record<string, number> };
+			if (duplicate.code === 11000 && duplicate.keyPattern?.memberPhone) {
+				throw new BadRequestException('This phone number is already in use.');
+			}
+			if (duplicate.code === 11000 && duplicate.keyPattern?.memberMail) {
+				throw new BadRequestException('This email address is already in use.');
+			}
+			throw error;
+		}
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
 
 		result.accessToken = await this.authService.createToken(result);
