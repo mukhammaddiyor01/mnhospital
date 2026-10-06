@@ -19,6 +19,7 @@ import { AppointmentModule } from './appointment/appointment.module';
 import { AdvertisementModule } from './advertisement/advertisement.module';
 import { BookingModule } from './booking/booking.module';
 import { MessagingModule } from './messaging/messaging.module';
+import { AiChatModule } from './ai-chat/ai-chat.module';
 import { PreferenceModule } from './preference/preference.module';
 
 @Module({
@@ -45,6 +46,7 @@ import { PreferenceModule } from './preference/preference.module';
 		BookingModule,
 		MessagingModule,
 		PreferenceModule,
+		AiChatModule,
 	],
 	exports: [MongooseModule],
 })
