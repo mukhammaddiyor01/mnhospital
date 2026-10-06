@@ -18,6 +18,7 @@ import { ViewModule } from './view/view.module';
 import { AppointmentModule } from './appointment/appointment.module';
 import { AdvertisementModule } from './advertisement/advertisement.module';
 import { BookingModule } from './booking/booking.module';
+import { MessagingModule } from './messaging/messaging.module';
 
 @Module({
 	imports: [
@@ -41,6 +42,7 @@ import { BookingModule } from './booking/booking.module';
 		AppointmentModule,
 		AdvertisementModule,
 		BookingModule,
+		MessagingModule,
 	],
 	exports: [MongooseModule],
 })

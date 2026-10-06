@@ -1,0 +1,104 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { ConversationType, MemberStatus, MemberType } from '../member/enums/member.enum';
+import { ChatConversation, ChatConversations, ChatParticipant } from './dto/messaging';
+import { ChatInquiry, StartDirectConversationInput } from './dto/messaging.input';
+
+export interface MessageActor {
+	_id: Types.ObjectId;
+	memberType: MemberType;
+}
+
+const participantKey = (type: MemberType, id: Types.ObjectId): string => `${type}:${id.toString()}`;
+const parseId = (value: string): Types.ObjectId => {
+	if (!/^[0-9a-f]{24}$/i.test(value)) throw new BadRequestException('Invalid profile ID');
+	return new Types.ObjectId(value);
+};
+
+@Injectable()
+export class MessagingService {
+	constructor(
+		@InjectModel('Conversation') private readonly conversationModel: Model<ChatConversation>,
+		@InjectModel('Member') private readonly memberModel: Model<any>,
+		@InjectModel('Doctor') private readonly doctorModel: Model<any>,
+		@InjectModel('Receptionist') private readonly receptionistModel: Model<any>,
+		@InjectModel('Admin') private readonly adminModel: Model<any>,
+	) {}
+
+	public async startDirectConversation(actor: MessageActor, input: StartDirectConversationInput): Promise<ChatConversation> {
+		const targetId = parseId(input.targetId);
+		if (actor.memberType === input.targetType && actor._id.equals(targetId)) {
+			throw new BadRequestException('Cannot start a conversation with yourself');
+		}
+		if (actor.memberType === MemberType.PATIENT && input.targetType === MemberType.PATIENT) {
+			throw new BadRequestException('Patient-to-patient messaging is unavailable');
+		}
+		const [sender, receiver] = await Promise.all([
+			this.getActiveParticipant(actor.memberType, actor._id),
+			this.getActiveParticipant(input.targetType, targetId),
+		]);
+		if (!sender || !receiver) throw new NotFoundException('Active messaging participant not found');
+
+		const keys = [participantKey(actor.memberType, actor._id), participantKey(input.targetType, targetId)].sort();
+		const directKey = keys.join('|');
+		try {
+			return await this.conversationModel.findOneAndUpdate(
+				{ conversationType: ConversationType.DIRECT, directKey },
+				{ $setOnInsert: { conversationType: ConversationType.DIRECT, directKey, participantKeys: keys, participants: [sender, receiver] } },
+				{ upsert: true, new: true, setDefaultsOnInsert: true },
+			).exec();
+		} catch (error) {
+			if ((error as { code?: number }).code !== 11000) throw error;
+			return this.conversationModel.findOne({ conversationType: ConversationType.DIRECT, directKey }).exec();
+		}
+	}
+
+	public async getMyConversations(actor: MessageActor, input: ChatInquiry): Promise<ChatConversations> {
+		await this.requireActiveActor(actor);
+		const filter = { conversationType: ConversationType.DIRECT, participantKeys: participantKey(actor.memberType, actor._id) };
+		const [list, total] = await Promise.all([
+			this.conversationModel.find(filter).sort({ lastMessageAt: -1, createdAt: -1 }).skip((input.page - 1) * input.limit).limit(input.limit).exec(),
+			this.conversationModel.countDocuments(filter).exec(),
+		]);
+		return { list, total };
+	}
+
+	public async getMyConversation(actor: MessageActor, conversationId: Types.ObjectId): Promise<ChatConversation> {
+		await this.requireActiveActor(actor);
+		const conversation = await this.conversationModel.findOne({
+			_id: conversationId,
+			conversationType: ConversationType.DIRECT,
+			participantKeys: participantKey(actor.memberType, actor._id),
+		}).exec();
+		if (!conversation) throw new NotFoundException('Conversation not found');
+		return conversation;
+	}
+
+	private async requireActiveActor(actor: MessageActor): Promise<void> {
+		if (!await this.getActiveParticipant(actor.memberType, actor._id)) {
+			throw new NotFoundException('Active messaging profile not found');
+		}
+	}
+
+	private async getActiveParticipant(type: MemberType, id: Types.ObjectId): Promise<ChatParticipant | null> {
+		const active = { _id: id, memberStatus: MemberStatus.ACTIVE };
+		let profile: Record<string, any> | null;
+		switch (type) {
+			case MemberType.PATIENT:
+				profile = await this.memberModel.findOne({ ...active, memberType: MemberType.PATIENT }).select('memberFullName memberNick memberImage').lean().exec();
+				return profile ? { participantId: id, participantType: type, displayName: profile.memberFullName || profile.memberNick, image: profile.memberImage } : null;
+			case MemberType.DOCTOR:
+				profile = await this.doctorModel.findOne(active).select('docFullName docNick docImage').lean().exec();
+				return profile ? { participantId: id, participantType: type, displayName: profile.docFullName || profile.docNick, image: profile.docImage } : null;
+			case MemberType.RECEPTIONIST:
+				profile = await this.receptionistModel.findOne(active).select('receptionistFullName receptionistNick receptionistImage').lean().exec();
+				return profile ? { participantId: id, participantType: type, displayName: profile.receptionistFullName || profile.receptionistNick, image: profile.receptionistImage } : null;
+			case MemberType.ADMIN:
+				profile = await this.adminModel.findById(id).select('adminNick adminImage').lean().exec();
+				return profile ? { participantId: id, participantType: type, displayName: profile.adminNick, image: profile.adminImage } : null;
+			default:
+				return null;
+		}
+	}
+}
