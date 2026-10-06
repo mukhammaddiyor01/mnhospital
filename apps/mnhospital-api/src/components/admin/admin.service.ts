@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -50,10 +50,10 @@ export class AdminService {
 
 	public async loginAdmin(input: AdminLoginInput): Promise<Admin> {
 		const admin = await this.adminModel.findOne({ adminNick: input.adminNick }).select('+adminPassword').exec();
-		if (!admin || admin.deletedAt) throw new InternalServerErrorException('Admin was not found');
+		if (!admin || admin.deletedAt) throw new UnauthorizedException('Invalid admin credentials');
 
 		const isMatch = await this.authService.comparePassword(input.adminPassword, admin.adminPassword);
-		if (!isMatch) throw new InternalServerErrorException(Message.WRONG_PASSWORD);
+		if (!isMatch) throw new UnauthorizedException('Invalid admin credentials');
 
 		admin.memberType = MemberType.ADMIN;
 		admin.accessToken = await this.authService.createToken(admin);
