@@ -20,7 +20,8 @@
 		"test:cov": "jest --coverage",
 		"test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
 		"test:e2e": "jest --config ./apps/mnhospital-api/test/jest-e2e.json",
-		"db:repair-patient-indexes": "node --env-file=.env scripts/repair-patient-optional-indexes.js"
+		"db:repair-patient-indexes": "node --env-file=.env scripts/repair-patient-optional-indexes.js",
+		"db:bootstrap-admin": "node --env-file=.env scripts/bootstrap-admin.js"
 	},
 	"dependencies": {
 		"@apollo/server": "^4.9.5",
