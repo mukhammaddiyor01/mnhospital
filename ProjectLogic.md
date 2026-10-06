@@ -25,3 +25,9 @@ This document records the conventions used while completing the MN Hospital API.
 
 - Commit one coherent behavior with its relevant verification. Keep unrelated domain changes in separate commits.
 - Before connecting a new frontend flow, verify its GraphQL contract, role access, ownership, and validation in the API.
+
+## Homepage AI assistant
+
+- `AiChatModule` follows the resolver → service pattern and uses the installed Nest Axios module for the external provider. Read `docs/AI_ASSISTANT.md` for its current limits and configuration.
+- Homepage AI assistance is a public, stateless operation. Project only explicitly allowed public catalog fields; keep private profile, medical report, direct message and appointment data out of provider requests. Render plain text and use fixed application links.
+- Never log raw AI questions, answers or Axios errors. Missing provider configuration must be shown honestly; preserve drafts when requests fail. Private AI conversations and authenticated tools require their own ownership design before implementation.
