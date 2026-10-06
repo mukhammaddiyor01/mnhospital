@@ -13,7 +13,8 @@ import {
 import { Server, WebSocket } from 'ws';
 import { AuthService } from '../components/auth/auth.service';
 import { MemberType } from '../components/member/enums/member.enum';
-import { DirectMessageEvent, MessagingEventsService } from '../components/messaging/messaging-events.service';
+import { DirectMessageEvent, DirectReadEvent, MessagingEventsService } from '../components/messaging/messaging-events.service';
+import { ChatParticipant } from '../components/messaging/dto/messaging';
 
 interface ChatIdentity {
 	name: string;
@@ -38,6 +39,7 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSock
 	private readonly clients = new Map<WebSocket, ChatIdentity>();
 	private readonly generalMessages: GeneralMessage[] = [];
 	private messageSubscription?: Subscription;
+	private readSubscription?: Subscription;
 
 	constructor(private readonly authService: AuthService, private readonly messagingEvents: MessagingEventsService) {}
 
@@ -46,11 +48,13 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSock
 
 	public afterInit(): void {
 		this.messageSubscription = this.messagingEvents.onMessageCreated((event) => this.deliverPrivateMessage(event));
+		this.readSubscription = this.messagingEvents.onMessagesRead((event) => this.deliverPrivateRead(event));
 		this.logger.log('WebSocket server initialized');
 	}
 
 	public onModuleDestroy(): void {
 		this.messageSubscription?.unsubscribe();
+		this.readSubscription?.unsubscribe();
 	}
 
 	public async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {
@@ -108,8 +112,20 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSock
 	}
 
 	private deliverPrivateMessage(event: DirectMessageEvent): void {
-		const participants = new Set(event.participants.map((item) => `${item.participantType}:${item.participantId.toString()}`));
 		const payload = { event: 'privateMessage', data: { conversationId: event.conversationId.toString(), message: event.message } };
+		this.deliverToParticipants(event.participants, payload);
+	}
+
+	private deliverPrivateRead(event: DirectReadEvent): void {
+		const payload = { event: 'privateRead', data: {
+			conversationId: event.conversationId.toString(), readerId: event.readerId.toString(),
+			readerType: event.readerType, readAt: event.readAt.toISOString(),
+		} };
+		this.deliverToParticipants(event.participants, payload);
+	}
+
+	private deliverToParticipants(participantList: ChatParticipant[], payload: Record<string, unknown>): void {
+		const participants = new Set(participantList.map((item) => `${item.participantType}:${item.participantId.toString()}`));
 		for (const [client, identity] of this.clients) {
 			if (identity.profileId && participants.has(`${identity.role}:${identity.profileId}`)) this.send(client, payload);
 		}

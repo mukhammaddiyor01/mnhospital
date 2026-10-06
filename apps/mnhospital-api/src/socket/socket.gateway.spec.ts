@@ -13,6 +13,7 @@ const events = (socket: WebSocket) => (socket.send as jest.Mock).mock.calls.map(
 describe('General live chat', () => {
 	const verifyToken = jest.fn();
 	let onCreated: (event: any) => void;
+	let onRead: (event: any) => void;
 	const unsubscribe = jest.fn();
 	let gateway: SocketGateway;
 
@@ -21,6 +22,10 @@ describe('General live chat', () => {
 		gateway = new SocketGateway({ verifyToken } as unknown as AuthService, {
 			onMessageCreated: (handler: (event: any) => void) => {
 				onCreated = handler;
+				return { unsubscribe };
+			},
+			onMessagesRead: (handler: (event: any) => void) => {
+				onRead = handler;
 				return { unsubscribe };
 			},
 		} as unknown as MessagingEventsService);
@@ -81,6 +86,19 @@ describe('General live chat', () => {
 		expect(events(patient).filter((event) => event.event === 'privateMessage')).toHaveLength(1);
 		expect(events(guest).filter((event) => event.event === 'privateMessage')).toHaveLength(0);
 		expect(events(outsider).filter((event) => event.event === 'privateMessage')).toHaveLength(0);
+		onRead({
+			conversationId,
+			participants: [
+				{ participantId: doctorId, participantType: MemberType.DOCTOR },
+				{ participantId: patientId, participantType: MemberType.PATIENT },
+			],
+			readerId: patientId,
+			readerType: MemberType.PATIENT,
+			readAt: new Date(),
+		});
+		expect(events(doctor).filter((event) => event.event === 'privateRead')).toHaveLength(1);
+		expect(events(guest).filter((event) => event.event === 'privateRead')).toHaveLength(0);
+		expect(events(outsider).filter((event) => event.event === 'privateRead')).toHaveLength(0);
 		gateway.onModuleDestroy();
 		expect(unsubscribe).toHaveBeenCalled();
 	});
