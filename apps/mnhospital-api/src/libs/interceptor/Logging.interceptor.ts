@@ -18,7 +18,11 @@ export class LoggingInterceptor implements NestInterceptor {
 		} else if (requestType === 'graphql') {
 			/** (1) Print Request  */
 			const gqlContext = GqlExecutionContext.create(context);
-			this.logger.log(`${this.stringify(gqlContext.getContext().req.body)}`, 'REQUEST');
+			const isAssistant = gqlContext.getInfo().fieldName === 'askHospitalAssistant';
+			this.logger.log(
+				isAssistant ? 'askHospitalAssistant' : `${this.stringify(gqlContext.getContext().req.body)}`,
+				'REQUEST',
+			);
 
 			/** (2) Errors handling via GraphQL  */
 
@@ -26,7 +30,12 @@ export class LoggingInterceptor implements NestInterceptor {
 			return next.handle().pipe(
 				tap((context) => {
 					const responseTime = Date.now() - recordTime;
-					this.logger.log(`${this.stringify(context)} - ${responseTime}ms \n\n`, 'RESPONSE');
+					this.logger.log(
+						isAssistant
+							? `askHospitalAssistant - ${responseTime}ms`
+							: `${this.stringify(context)} - ${responseTime}ms \n\n`,
+						'RESPONSE',
+					);
 				}),
 			);
 		}
