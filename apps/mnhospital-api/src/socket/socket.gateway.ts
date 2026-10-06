@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { IncomingMessage } from 'http';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
+import { Subscription } from 'rxjs';
 import {
 	OnGatewayConnection,
 	OnGatewayDisconnect,
@@ -12,10 +13,12 @@ import {
 import { Server, WebSocket } from 'ws';
 import { AuthService } from '../components/auth/auth.service';
 import { MemberType } from '../components/member/enums/member.enum';
+import { DirectMessageEvent, MessagingEventsService } from '../components/messaging/messaging-events.service';
 
 interface ChatIdentity {
 	name: string;
 	role: MemberType | 'GUEST';
+	profileId?: string;
 }
 
 interface GeneralMessage {
@@ -30,18 +33,24 @@ const MAX_GENERAL_MESSAGE_LENGTH = 500;
 const GENERAL_HISTORY_LIMIT = 50;
 
 @WebSocketGateway({ transports: ['websocket'], secure: false })
-export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSocket>, OnGatewayDisconnect<WebSocket> {
+export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSocket>, OnGatewayDisconnect<WebSocket>, OnModuleDestroy {
 	private readonly logger = new Logger(SocketGateway.name);
 	private readonly clients = new Map<WebSocket, ChatIdentity>();
 	private readonly generalMessages: GeneralMessage[] = [];
+	private messageSubscription?: Subscription;
 
-	constructor(private readonly authService: AuthService) {}
+	constructor(private readonly authService: AuthService, private readonly messagingEvents: MessagingEventsService) {}
 
 	@WebSocketServer()
 	server: Server;
 
 	public afterInit(): void {
+		this.messageSubscription = this.messagingEvents.onMessageCreated((event) => this.deliverPrivateMessage(event));
 		this.logger.log('WebSocket server initialized');
+	}
+
+	public onModuleDestroy(): void {
+		this.messageSubscription?.unsubscribe();
 	}
 
 	public async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {
@@ -54,6 +63,7 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSock
 				identity = {
 					name: member.memberFullName || member.docFullName || member.receptionistFullName || member.adminNick || member.memberNick || member.docNick || member.receptionistNick || 'Member',
 					role: member.memberType,
+					profileId: member._id.toString(),
 				};
 			} catch {
 				client.close(1008, 'Invalid token');
@@ -95,5 +105,13 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection<WebSock
 
 	private broadcast(payload: Record<string, unknown>): void {
 		for (const client of this.clients.keys()) this.send(client, payload);
+	}
+
+	private deliverPrivateMessage(event: DirectMessageEvent): void {
+		const participants = new Set(event.participants.map((item) => `${item.participantType}:${item.participantId.toString()}`));
+		const payload = { event: 'privateMessage', data: { conversationId: event.conversationId.toString(), message: event.message } };
+		for (const [client, identity] of this.clients) {
+			if (identity.profileId && participants.has(`${identity.role}:${identity.profileId}`)) this.send(client, payload);
+		}
 	}
 }
