@@ -17,6 +17,7 @@ This document records the conventions used while completing the MN Hospital API.
 - Notification creation is internal to the API. Appointment, booking, payment, reception task, report, and direct message changes emit the events recorded in `docs/NOTIFICATION_EVENTS.md`; the API does not expose a public create mutation.
 - Direct messaging belongs to authenticated patient, doctor, receptionist, and admin profiles. Store each participant as a role plus profile ID because staff and patients live in different collections. Scope every conversation and message operation to a participant. The public Guest live chat is a separate WebSocket flow.
 - Send private message and read receipt WebSocket events only to verified conversation participants after the GraphQL service has saved the change. Load missed messages through the scoped GraphQL queries.
+- Save public Guest live chat in the separate `generalChatMessages` collection before broadcasting. Load its latest 50 messages on connection. Persist only public display fields; keep direct conversations and participant IDs out of the public history.
 - Store UI preferences by the verified profile ID and role, since patient and staff profiles use separate collections. Return defaults without creating a record; apply partial updates only to the authenticated active profile.
 - Do not place detailed clinical information in notification title or description. Link to the authorized resource through `notificationGroup` and `notificationRefId`.
 
