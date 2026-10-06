@@ -10,7 +10,11 @@ Each question is independent. The panel keeps the last 40 displayed messages onl
 
 ## Configuration
 
-Set **backend-only** `AI_CHAT_API_KEY` and `AI_CHAT_MODEL` in the backend `.env`, using an OpenAI model available to your API account that supports Chat Completions. Neither has a default. Restart the API after configuration. Never use `NEXT_PUBLIC_` for the key or commit `.env`. The provider uses the existing Nest Axios HttpService, `https://api.openai.com/v1/chat/completions`, 20 second timeout, no redirects, 600 output tokens and `store: false`.
+Gemini generation is disabled unless `AI_CHAT_ENABLED=true`. Check the key's Google AI Studio project tier before enabling; setting this flag cannot enforce Free Tier on a paid Google project. No generation is made during tariff verification.
+
+For Gemini free tier, set `AI_CHAT_PROVIDER=gemini`, `AI_CHAT_MODEL=gemini-2.5-flash` and a Google AI Studio API key. Gemini uses its native `generateContent` endpoint and the `x-goog-api-key` header, with 600 output tokens and disabled thinking for 2.5 Flash. Free tier quota and billing are controlled by the Google project; the application never falls back to a paid provider. OpenAI remains available with `AI_CHAT_PROVIDER=openai` (legacy default when omitted). A model must be an identifier, never a URL.
+
+For OpenAI, set **backend-only** `AI_CHAT_API_KEY` and `AI_CHAT_MODEL` in the backend `.env`, using an OpenAI model available to your API account that supports Chat Completions. Neither has a default. Restart the API after configuration. Never use `NEXT_PUBLIC_` for the key or commit `.env`. The provider uses the existing Nest Axios HttpService, `https://api.openai.com/v1/chat/completions`, 20 second timeout, no redirects, 600 output tokens and `store: false`.
 
 API contract: `READY` with `text`, or `NOT_CONFIGURED`, `UNAVAILABLE`, `RATE_LIMITED` without provider details. Requests and responses for this resolver are omitted from the normal GraphQL body logs. Provider exceptions are logged as a generic warning.
 
