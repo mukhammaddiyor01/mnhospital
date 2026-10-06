@@ -470,6 +470,16 @@ export class BookingService {
 		});
 	}
 
+	public async getStaffPayments(memberType: MemberType, input: PaymentInquiry): Promise<Payments> {
+		if (![MemberType.ADMIN, MemberType.RECEPTIONIST].includes(memberType)) throw new InternalServerErrorException(Message.ONLY_SPECIFIC_ROLES_ALLOWED);
+		const match: Record<string, unknown> = input.status ? { paymentStatus: input.status } : {};
+		const result = await this.paymentModel.aggregate([
+			{ $match: match }, { $sort: { createdAt: -1, _id: -1 } },
+			{ $facet: { list: [{ $skip: (input.page - 1) * input.limit }, { $limit: Math.min(input.limit, 100) }], metaCounter: [{ $count: 'total' }] } },
+		]).exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
 	public async getStaffBookingOrders(
 		memberType: MemberType,
 		input: StaffBookingOrderInquiry,

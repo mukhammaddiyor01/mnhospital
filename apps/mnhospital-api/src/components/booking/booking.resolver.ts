@@ -178,4 +178,11 @@ export class BookingResolver {
 		console.log('Query: getBookingOrders');
 		return await this.bookingService.getStaffBookingOrders(authMember.memberType, input);
 	}
+	@Roles(MemberType.RECEPTIONIST, MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Payments)
+	public async getPayments(@Args('input') input: PaymentInquiry, @AuthMember() authMember: T): Promise<Payments> {
+		return this.bookingService.getStaffPayments(authMember.memberType, input);
+	}
+
 }
