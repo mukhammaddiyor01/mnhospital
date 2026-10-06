@@ -1,3 +1,4 @@
+import { CommentStatus } from '../comment/enums/comment.enum';
 import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -22,6 +23,8 @@ import { Article, Articles } from '../article/dto/article';
 import { ArticleSearch, ArticlesInquiry } from '../article/dto/article.input';
 import { ArticleUpdate } from '../article/dto/article.update';
 import { ArticleStatus } from '../article/enums/article.enum';
+import { Comments } from '../comment/dto/comment';
+import { OrdinaryInquiry } from '../service/dto/service.input';
 import { Comment } from '../comment/dto/comment';
 import { AdminDashboardStats } from './dto/admin-dashboard';
 import { Patient } from '../patient/dto/patient';
@@ -72,17 +75,25 @@ export class AdminService {
 		const registeredFilter = { deletedAt: { $exists: false } };
 		const activeFilter = { ...registeredFilter, memberStatus: MemberStatus.ACTIVE };
 
-		const [totalPatients, activePatients, totalDoctors, activeDoctors, totalReceptionists, activeReceptionists, totalBookings, totalAppointments] =
-			await Promise.all([
-				this.patientModel.countDocuments(registeredFilter).exec(),
-				this.patientModel.countDocuments(activeFilter).exec(),
-				this.doctorModel.countDocuments(registeredFilter).exec(),
-				this.doctorModel.countDocuments(activeFilter).exec(),
-				this.receptionistModel.countDocuments(registeredFilter).exec(),
-				this.receptionistModel.countDocuments(activeFilter).exec(),
-				this.bookingOrderModel.countDocuments({}).exec(),
-				this.appointmentModel.countDocuments({}).exec(),
-			]);
+		const [
+			totalPatients,
+			activePatients,
+			totalDoctors,
+			activeDoctors,
+			totalReceptionists,
+			activeReceptionists,
+			totalBookings,
+			totalAppointments,
+		] = await Promise.all([
+			this.patientModel.countDocuments(registeredFilter).exec(),
+			this.patientModel.countDocuments(activeFilter).exec(),
+			this.doctorModel.countDocuments(registeredFilter).exec(),
+			this.doctorModel.countDocuments(activeFilter).exec(),
+			this.receptionistModel.countDocuments(registeredFilter).exec(),
+			this.receptionistModel.countDocuments(activeFilter).exec(),
+			this.bookingOrderModel.countDocuments({}).exec(),
+			this.appointmentModel.countDocuments({}).exec(),
+		]);
 
 		return {
 			totalPatients,
@@ -113,7 +124,11 @@ export class AdminService {
 			.map((serviceId) => new ObjectId(serviceId));
 		const uniqueServiceIds = [...new Map(serviceIds.map((serviceId) => [serviceId.toString(), serviceId])).values()];
 		const services = uniqueServiceIds.length
-			? await this.serviceModel.find({ _id: { $in: uniqueServiceIds } }).sort({ createdAt: -1 }).lean().exec()
+			? await this.serviceModel
+					.find({ _id: { $in: uniqueServiceIds } })
+					.sort({ createdAt: -1 })
+					.lean()
+					.exec()
 			: [];
 
 		return { patient, bookingOrders, services, appointments };
@@ -417,5 +432,20 @@ export class AdminService {
 		const result = await this.commentModel.findByIdAndDelete(input);
 		if (!result) throw new InternalServerErrorException(Message.REMOVE_FAILED);
 		return result;
+	}
+	public async getCommentsByAdmin(input: OrdinaryInquiry): Promise<Comments> {
+		const result = await this.commentModel
+			.aggregate([
+				{ $match: { commentStatus: { $ne: CommentStatus.DELETED } } },
+				{ $sort: { createdAt: -1, _id: -1 } },
+				{
+					$facet: {
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
 	}
 }

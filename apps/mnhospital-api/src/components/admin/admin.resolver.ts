@@ -14,6 +14,8 @@ import { shapeIntoMongoObjectId } from '../../libs/config';
 import { Article, Articles } from '../article/dto/article';
 import { ArticlesInquiry } from '../article/dto/article.input';
 import { ArticleUpdate } from '../article/dto/article.update';
+import { Comments } from '../comment/dto/comment';
+import { OrdinaryInquiry } from '../service/dto/service.input';
 import { Comment } from '../comment/dto/comment';
 import { Admin } from './dto/admin';
 import { AdminLoginInput } from './dto/admin.input';
@@ -135,5 +137,11 @@ export class AdminResolver {
 		console.log('Mutation: removeCommentByAdmin');
 		const commentId = shapeIntoMongoObjectId(input);
 		return await this.adminService.removeCommentByAdmin(commentId);
+	}
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => Comments)
+	public async getCommentsByAdmin(@Args('input') input: OrdinaryInquiry): Promise<Comments> {
+		return this.adminService.getCommentsByAdmin(input);
 	}
 }
