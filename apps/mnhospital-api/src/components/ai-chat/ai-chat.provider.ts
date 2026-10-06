@@ -63,6 +63,7 @@ export class AiChatProvider {
 					contents: [{ role: 'user', parts: [{ text: question }] }],
 					generationConfig: {
 						maxOutputTokens: 600,
+						...(model === 'gemini-3.1-flash-lite' ? { thinkingConfig: { thinkingLevel: 'minimal' } } : {}),
 						...(model === 'gemini-2.5-flash' || model === 'gemini-2.5-flash-lite'
 							? { thinkingConfig: { thinkingBudget: 0 } }
 							: {}),

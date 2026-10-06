@@ -42,7 +42,7 @@ describe('Gemini assistant transport', () => {
 		const values = {
 			AI_CHAT_PROVIDER: 'gemini',
 			AI_CHAT_ENABLED: 'true',
-			AI_CHAT_MODEL: 'gemini-2.5-flash',
+			AI_CHAT_MODEL: 'gemini-3.1-flash-lite',
 			AI_CHAT_API_KEY: 'google-test-secret',
 		};
 		const http = {
@@ -57,8 +57,10 @@ describe('Gemini assistant transport', () => {
 		const provider = new AiChatProvider({ get: (key: string) => values[key] } as any, http as any);
 		expect(await provider.reply('instructions', 'question')).toBe('Hospital answer');
 		expect(http.post).toHaveBeenCalledWith(
-			'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-			expect.objectContaining({ generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingBudget: 0 } } }),
+			'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent',
+			expect.objectContaining({
+				generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingLevel: 'minimal' } },
+			}),
 			expect.objectContaining({ headers: { 'x-goog-api-key': 'google-test-secret' }, maxRedirects: 0 }),
 		);
 	});
@@ -67,7 +69,7 @@ describe('Gemini assistant transport', () => {
 			const values = {
 				AI_CHAT_PROVIDER: 'gemini',
 				AI_CHAT_ENABLED: 'true',
-				AI_CHAT_MODEL: 'gemini-2.5-flash',
+				AI_CHAT_MODEL: 'gemini-3.1-flash-lite',
 				AI_CHAT_API_KEY: 'test-secret',
 				...extra,
 			};
@@ -83,7 +85,7 @@ describe('Gemini assistant transport', () => {
 it('keeps Gemini disabled until enabled after checking the project tariff', () => {
 	const values = {
 		AI_CHAT_PROVIDER: 'gemini',
-		AI_CHAT_MODEL: 'gemini-2.5-flash',
+		AI_CHAT_MODEL: 'gemini-3.1-flash-lite',
 		AI_CHAT_API_KEY: 'google-test-secret',
 	};
 	const provider = new AiChatProvider({ get: (key: string) => values[key] } as any, { post: jest.fn() } as any);

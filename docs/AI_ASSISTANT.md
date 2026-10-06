@@ -12,7 +12,7 @@ Each question is independent. The panel keeps the last 40 displayed messages onl
 
 Gemini generation is disabled unless `AI_CHAT_ENABLED=true`. Check the key's Google AI Studio project tier before enabling; setting this flag cannot enforce Free Tier on a paid Google project. No generation is made during tariff verification.
 
-For Gemini free tier, set `AI_CHAT_PROVIDER=gemini`, `AI_CHAT_MODEL=gemini-2.5-flash` and a Google AI Studio API key. Gemini uses its native `generateContent` endpoint and the `x-goog-api-key` header, with 600 output tokens and disabled thinking for 2.5 Flash. Free tier quota and billing are controlled by the Google project; the application never falls back to a paid provider. OpenAI remains available with `AI_CHAT_PROVIDER=openai` (legacy default when omitted). A model must be an identifier, never a URL.
+For Gemini free tier, set `AI_CHAT_PROVIDER=gemini`, `AI_CHAT_MODEL=gemini-3.1-flash-lite` and a Google AI Studio API key. Gemini uses its native `generateContent` endpoint and the `x-goog-api-key` header, with 600 output tokens and minimal thinking for 3.1 Flash-Lite (disabled thinking for legacy 2.5 Flash). Free tier quota and billing are controlled by the Google project; the application never falls back to a paid provider. OpenAI remains available with `AI_CHAT_PROVIDER=openai` (legacy default when omitted). A model must be an identifier, never a URL.
 
 For OpenAI, set **backend-only** `AI_CHAT_API_KEY` and `AI_CHAT_MODEL` in the backend `.env`, using an OpenAI model available to your API account that supports Chat Completions. Neither has a default. Restart the API after configuration. Never use `NEXT_PUBLIC_` for the key or commit `.env`. The provider uses the existing Nest Axios HttpService, `https://api.openai.com/v1/chat/completions`, 20 second timeout, no redirects, 600 output tokens and `store: false`.
 
@@ -23,5 +23,7 @@ Limits are local to one API process: 6 requests per request IP per minute, 60 to
 ## Verification
 
 Unit tests cover DTO validation, public projections, disabled configuration, safe provider failures, per-address limits and concurrent admission; transport tests cover server authorization, bounded request configuration, empty output and transport failure. No paid provider call is made by these tests.
+
+Live verification: the key authenticated successfully. 2.5 Flash returned 404 for this new account; 3.1 Flash-Lite returned 200 with a real Uzbek reply. The user confirmed the Google project is Free Tier. Keep this project on Free Tier to avoid paid API usage.
 
 Provider contract reference: https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
