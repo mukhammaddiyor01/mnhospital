@@ -13,10 +13,30 @@ import { DoctorService } from './doctor.service';
 import { Doctor, Doctors } from './dto/doctor';
 import { AdminDoctorInquiry, DoctorInput, DoctorLoginInput, DoctorStatusUpdateInput, DoctorsInquiry } from './dto/doctor.input';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
+import { DoctorProfileUpdateInput } from './dto/doctor-profile.input';
 
 @Resolver()
 export class DoctorResolver {
 	constructor(private readonly doctorService: DoctorService) {}
+
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Query(() => Doctor)
+	public async getMyDoctorProfile(@AuthMember('_id') doctorId: ObjectId): Promise<Doctor> {
+		console.log('Query: getMyDoctorProfile');
+		return await this.doctorService.getMyProfile(doctorId);
+	}
+
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Doctor)
+	public async updateMyDoctorProfile(
+		@Args('input') input: DoctorProfileUpdateInput,
+		@AuthMember('_id') doctorId: ObjectId,
+	): Promise<Doctor> {
+		console.log('Mutation: updateMyDoctorProfile');
+		return await this.doctorService.updateMyProfile(doctorId, input);
+	}
 
 	@Roles(MemberType.ADMIN)
 	@UseGuards(RolesGuard)

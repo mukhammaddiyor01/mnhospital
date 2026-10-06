@@ -19,6 +19,7 @@ import { DoctorReport } from './doctor-reports/dto/doctor-report';
 import { ServiceStatus } from '../service/enums/service.enum';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
+import { DoctorProfileUpdateInput } from './dto/doctor-profile.input';
 
 @Injectable()
 export class DoctorService {
@@ -32,6 +33,39 @@ export class DoctorService {
 		private readonly authService: AuthService,
 		private readonly likeService: LikeService,
 	) {}
+
+	public async getMyProfile(doctorId: ObjectId): Promise<Doctor> {
+		const doctor = await this.doctorModel
+			.findOne({ _id: doctorId, memberType: MemberType.DOCTOR, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
+			.exec();
+		if (!doctor) throw new InternalServerErrorException('Doctor was not found');
+		return doctor;
+	}
+
+	public async updateMyProfile(doctorId: ObjectId, input: DoctorProfileUpdateInput): Promise<Doctor> {
+		const updates: Record<string, string> = {};
+		for (const key of ['docFullName', 'docPhone', 'docMail', 'docAddress', 'docDesc'] as const) {
+			if (input[key] !== undefined) updates[key] = input[key];
+		}
+		if (!Object.keys(updates).length) throw new BadRequestException('No profile changes were provided');
+		const clearEmail = updates.docMail === '';
+		if (clearEmail) delete updates.docMail;
+
+		let doctor: Doctor;
+		try {
+			doctor = await this.doctorModel.findOneAndUpdate(
+				{ _id: doctorId, memberType: MemberType.DOCTOR, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } },
+				{ $set: updates, ...(clearEmail ? { $unset: { docMail: 1 } } : {}) },
+				{ new: true, runValidators: true },
+			).exec();
+		} catch (err) {
+			if (err.code === 11000) throw new BadRequestException(Message.USED_DOCTOR_NICK_PHONE_OR_MAIL);
+			throw err;
+		}
+		if (!doctor) throw new InternalServerErrorException('Doctor profile update failed');
+		doctor.accessToken = await this.authService.createToken(doctor);
+		return doctor;
+	}
 
 	public async createDoctorByAdmin(input: DoctorInput): Promise<Doctor> {
 		const createData: DoctorInput = {
