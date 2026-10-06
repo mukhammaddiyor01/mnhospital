@@ -26,9 +26,17 @@ export class AdvertisementService {
 	}
 
 	public async getAdvertisements(input: AdvertisementsInquiry): Promise<Advertisements> {
+		return this.listAdvertisements(input, { advertisementStatus: AdvertisementStatus.PUBLISHED });
+	}
+
+	public async getAdvertisementsByAdmin(input: AdvertisementsInquiry): Promise<Advertisements> {
+		return this.listAdvertisements(input, {});
+	}
+
+	private async listAdvertisements(input: AdvertisementsInquiry, match: Record<string, unknown>): Promise<Advertisements> {
 		const result = await this.advertisementModel
 			.aggregate([
-				{ $match: { advertisementStatus: AdvertisementStatus.PUBLISHED } },
+				{ $match: match },
 				{ $sort: { createdAt: -1 } },
 				{
 					$facet: {

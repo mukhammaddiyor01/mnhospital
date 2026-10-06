@@ -37,6 +37,13 @@ export class AdvertisementResolver {
 
 	@Roles(MemberType.ADMIN)
 	@UseGuards(RolesGuard)
+	@Query(() => Advertisements)
+	public async getAdvertisementsByAdmin(@Args('input') input: AdvertisementsInquiry): Promise<Advertisements> {
+		return this.advertisementService.getAdvertisementsByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
 	@Mutation(() => Advertisement)
 	public async updateAdvertisement(@Args('input') input: AdvertisementUpdate): Promise<Advertisement> {
 		console.log('Mutation: updateAdvertisement');
