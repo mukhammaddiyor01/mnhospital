@@ -66,4 +66,21 @@ describe('Room and appointment workspace access', () => {
 		expect(roomFind).toHaveBeenCalledWith({ _id: roomId, roomStatus: RoomStatus.AVAILABLE });
 		expect(create).not.toHaveBeenCalled();
 	});
+	it('scopes receptionist appointment reads to active assigned task references', async () => {
+		const receptionistId = new Types.ObjectId(),
+			appointmentId = new Types.ObjectId();
+		const aggregate = jest.fn((_pipeline: any) => ({ exec: async () => [{ list: [], metaCounter: [] }] }));
+		const tasks = jest.fn(() => ({ select: () => ({ lean: () => ({ exec: async () => [{ appointmentId }] }) }) }));
+		const service = new AppointmentService(
+			{ aggregate } as never,
+			{} as never,
+			{ find: tasks } as never,
+			{} as never,
+			{} as never,
+			{} as never,
+		);
+		await service.getStaffAppointments(receptionistId, MemberType.RECEPTIONIST, { page: 1, limit: 10 });
+		expect(tasks).toHaveBeenCalledWith(expect.objectContaining({ receptionistId }));
+		expect(aggregate.mock.calls[0][0][0]).toEqual({ $match: { _id: { $in: [appointmentId] } } });
+	});
 });
