@@ -17,4 +17,8 @@ export class DepartmentService {
 			throw new BadRequestException(Message.CREATE_FAILED);
 		}
 	}
+	public async getDepartments(): Promise<Department[]> {
+		return this.departmentModel.find({}).sort({ departmentName: 1 }).limit(100).lean().exec();
+	}
+
 }

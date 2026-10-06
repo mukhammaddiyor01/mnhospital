@@ -1,5 +1,5 @@
-import { Args, Mutation, Resolver } from '@nestjs/graphql';
-import { Query, UseGuards } from '@nestjs/common';
+import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { MemberType } from '../../member/enums/member.enum';
@@ -21,4 +21,11 @@ export class DepartmentResolver {
 		console.log('Mutation: createDepartment');
 		return await this.departmentService.createDepartment(input);
 	}
+	@Roles(MemberType.DOCTOR, MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => [Department])
+	public async getDepartments(): Promise<Department[]> {
+		return this.departmentService.getDepartments();
+	}
+
 }
