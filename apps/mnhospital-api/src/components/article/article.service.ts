@@ -167,6 +167,18 @@ export class ArticleService {
 		return result[0];
 	}
 
+	public async getMyArticles(doctorId: ObjectId, input: ArticlesInquiry): Promise<Articles> {
+		const match: T = { memberId: doctorId };
+		if (input.search.articleStatus) match.articleStatus = input.search.articleStatus;
+		if (input.search.articleCategoryList?.length) match.articleCategory = { $in: input.search.articleCategoryList };
+		if (input.search.text) match.articleTitle = { $regex: input.search.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+		const result = await this.articleModel.aggregate([
+			{ $match: match }, { $sort: { createdAt: -1, _id: -1 } },
+			{ $facet: { list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }], metaCounter: [{ $count: 'total' }] } },
+		]).exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
 	public async articleStatsEditor(input: StatisticModifier): Promise<Article> {
 		const { _id, targetKey, modifier } = input;
 		return await this.articleModel

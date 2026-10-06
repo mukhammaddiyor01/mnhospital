@@ -3,6 +3,7 @@ import { ArticleService } from './article.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MemberType } from '../member/enums/member.enum';
 import { UseGuards } from '@nestjs/common';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { Article, Articles } from './dto/article';
 import { ArticleInput, ArticlesInquiry } from './dto/article.input';
@@ -18,7 +19,7 @@ export class ArticleResolver {
 	constructor(private readonly articleService: ArticleService) {}
 
 	@Roles(MemberType.DOCTOR)
-	@UseGuards(AuthGuard)
+	@UseGuards(RolesGuard)
 	@Mutation(() => Article)
 	public async createArticle(
 		@Args('input') input: ArticleInput,
@@ -38,7 +39,8 @@ export class ArticleResolver {
 		return await this.articleService.likeTargetArticle(memberId, shapeIntoMongoObjectId(input));
 	}
 
-	@UseGuards(AuthGuard)
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
 	@Mutation(() => Article)
 	public async updateArticle(
 		@Args('input') input: ArticleUpdate,
@@ -68,4 +70,11 @@ export class ArticleResolver {
 		console.log('Query: getArticles');
 		return await this.articleService.getArticles(memberId, input);
 	}
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Query(() => Articles)
+	public async getMyArticles(@Args('input') input: ArticlesInquiry, @AuthMember('_id') doctorId: ObjectId): Promise<Articles> {
+		return this.articleService.getMyArticles(doctorId, input);
+	}
+
 }
