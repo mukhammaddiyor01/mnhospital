@@ -7,6 +7,7 @@ import ConversationSchema from '../member/schema/Conversation.model';
 import MemberSchema from '../member/schema/Member.model';
 import MessageSchema from '../member/schema/Message.model';
 import ReceptionistSchema from '../receptionist/schema/Receptionist.model';
+import { NotificationModule } from '../notification/notification.module';
 import { MessagingResolver } from './messaging.resolver';
 import { MessagingService } from './messaging.service';
 
@@ -21,6 +22,7 @@ import { MessagingService } from './messaging.service';
 			{ name: 'Admin', schema: AdminSchema },
 		]),
 		AuthModule,
+		NotificationModule,
 	],
 	providers: [MessagingService, MessagingResolver],
 	exports: [MessagingService],

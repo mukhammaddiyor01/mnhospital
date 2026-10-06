@@ -12,9 +12,10 @@ Notification writes occur after the associated domain operation has been persist
 | Reception task assigned | Assigned receptionist | `RECEPTION_TASK` |
 | Reception task completed | Doctor | `RECEPTION_TASK` |
 | Doctor report created or updated | Patient | `REPORT` |
+| Direct message sent | The other conversation participant | `CONVERSATION` |
 
 Patient profile IDs are resolved to their linked `Member` account IDs before delivery; doctor and receptionist account IDs are used directly. Events carry a stable key with receiver type and ID so repeated callbacks do not insert duplicate notifications. Report update keys include the saved revision timestamp.
 
 Notification text is deliberately generic. Clinical details remain behind the resource's authorized API. Notification creation errors are logged and do not roll back a completed booking, payment, appointment, task, or report operation. This direct write path has no durable retry queue yet; an outbox would be needed if guaranteed delivery becomes a requirement.
 
-`MESSAGE` notifications are reserved for the messaging stage and are not emitted before conversations and participant permissions exist.
+Direct messages emit `MESSAGE` notifications after the message is saved. Their stable event key includes the message ID and receiver identity; the notification text never includes the message body.

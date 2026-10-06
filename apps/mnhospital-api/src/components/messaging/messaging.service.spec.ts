@@ -20,6 +20,7 @@ describe('Messaging ownership', () => {
 		const doctorModel = { findOne: jest.fn().mockReturnValue(profileQuery({ docNick: 'doctor' })) };
 		const receptionistModel = { findOne: jest.fn() };
 		const adminModel = { findById: jest.fn() };
+		const notificationEvents = { toRecipient: jest.fn().mockResolvedValue(undefined) };
 		const service = new MessagingService(
 			conversationModel as any,
 			messageModel as any,
@@ -27,8 +28,9 @@ describe('Messaging ownership', () => {
 			doctorModel as any,
 			receptionistModel as any,
 			adminModel as any,
+			notificationEvents as any,
 		);
-		return { service, conversationModel, messageModel, memberModel, doctorModel };
+		return { service, conversationModel, messageModel, memberModel, doctorModel, notificationEvents };
 	};
 
 	it('uses one canonical key for a patient and doctor regardless of who starts the chat', async () => {
@@ -74,9 +76,15 @@ describe('Messaging ownership', () => {
 	});
 
 	it('writes the verified sender identity and updates the conversation timestamp', async () => {
-		const { service, conversationModel, messageModel } = models();
+		const { service, conversationModel, messageModel, notificationEvents } = models();
 		const createdAt = new Date();
-		conversationModel.findOne.mockReturnValue(conversationQuery({ _id: conversationId }));
+		conversationModel.findOne.mockReturnValue(conversationQuery({
+			_id: conversationId,
+			participants: [
+				{ participantId: patientId, participantType: MemberType.PATIENT },
+				{ participantId: doctorId, participantType: MemberType.DOCTOR },
+			],
+		}));
 		conversationModel.updateOne.mockReturnValue(conversationQuery({ modifiedCount: 1 }));
 		messageModel.create.mockResolvedValue({ _id: new Types.ObjectId(), createdAt });
 		await service.sendDirectMessage(actor, conversationId, { messageContent: '  Hello doctor  ' });
@@ -87,6 +95,11 @@ describe('Messaging ownership', () => {
 			messageContent: 'Hello doctor',
 		}));
 		expect(conversationModel.updateOne).toHaveBeenCalledWith({ _id: conversationId }, { $set: { lastMessageAt: createdAt } });
+		expect(notificationEvents.toRecipient).toHaveBeenCalledWith(
+			doctorId,
+			MemberType.DOCTOR,
+			expect.objectContaining({ refId: conversationId, authorId: patientId, authorType: MemberType.PATIENT }),
+		);
 	});
 
 	it('marks only the other participant’s messages as read', async () => {

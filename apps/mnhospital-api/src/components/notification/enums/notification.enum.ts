@@ -17,6 +17,7 @@ export enum NotificationStatus {
 registerEnumType(NotificationStatus, { name: 'NotificationStatus' });
 
 export enum NotificationGroup {
+	CONVERSATION = 'CONVERSATION',
 	APPOINTMENT = 'APPOINTMENT',
 	BOOKING_ORDER = 'BOOKING_ORDER',
 	PAYMENT = 'PAYMENT',

@@ -4,6 +4,8 @@ import { Model, Types } from 'mongoose';
 import { ConversationType, MemberStatus, MemberType } from '../member/enums/member.enum';
 import { ChatConversation, ChatConversations, ChatMessage, ChatMessages, ChatParticipant } from './dto/messaging';
 import { ChatInquiry, SendDirectMessageInput, StartDirectConversationInput } from './dto/messaging.input';
+import { NotificationEventService } from '../notification/notification-event.service';
+import { NotificationGroup, NotificationType } from '../notification/enums/notification.enum';
 
 export interface MessageActor {
 	_id: Types.ObjectId;
@@ -25,6 +27,7 @@ export class MessagingService {
 		@InjectModel('Doctor') private readonly doctorModel: Model<any>,
 		@InjectModel('Receptionist') private readonly receptionistModel: Model<any>,
 		@InjectModel('Admin') private readonly adminModel: Model<any>,
+		private readonly notificationEvents: NotificationEventService,
 	) {}
 
 	public async startDirectConversation(actor: MessageActor, input: StartDirectConversationInput): Promise<ChatConversation> {
@@ -87,7 +90,7 @@ export class MessagingService {
 	}
 
 	public async sendDirectMessage(actor: MessageActor, conversationId: Types.ObjectId, input: SendDirectMessageInput): Promise<ChatMessage> {
-		await this.getMyConversation(actor, conversationId);
+		const conversation = await this.getMyConversation(actor, conversationId);
 		const content = input.messageContent.trim();
 		if (!content) throw new BadRequestException('Message cannot be empty');
 
@@ -106,6 +109,21 @@ export class MessagingService {
 			replyToMessageId,
 		});
 		await this.conversationModel.updateOne({ _id: conversationId }, { $set: { lastMessageAt: message.createdAt } }).exec();
+		const recipient = conversation.participants.find(
+			(participant) => participantKey(participant.participantType, participant.participantId) !== participantKey(actor.memberType, actor._id),
+		);
+		if (recipient) {
+			await this.notificationEvents.toRecipient(recipient.participantId, recipient.participantType, {
+				key: `message:${message._id}`,
+				type: NotificationType.MESSAGE,
+				group: NotificationGroup.CONVERSATION,
+				title: 'New message',
+				description: 'You have a new message in your inbox.',
+				refId: conversationId,
+				authorId: actor._id,
+				authorType: actor.memberType,
+			});
+		}
 		return message;
 	}
 

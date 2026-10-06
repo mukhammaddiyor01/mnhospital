@@ -47,6 +47,10 @@ export class NotificationEventService {
 		await this.publishSafely(receptionistId, MemberType.RECEPTIONIST, event);
 	}
 
+	public async toRecipient(receiverId: Types.ObjectId, receiverType: MemberType, event: NotificationEvent): Promise<void> {
+		await this.publishSafely(receiverId, receiverType, event);
+	}
+
 	private async publishSafely(receiverId: Types.ObjectId, receiverType: MemberType, event: NotificationEvent): Promise<void> {
 		try {
 			await this.publish(receiverId, receiverType, event);
