@@ -21,7 +21,7 @@ describe('Messaging ownership', () => {
 		const receptionistModel = { findOne: jest.fn() };
 		const adminModel = { findById: jest.fn() };
 		const notificationEvents = { toRecipient: jest.fn().mockResolvedValue(undefined) };
-		const messagingEvents = { publishMessageCreated: jest.fn() };
+		const messagingEvents = { publishMessageCreated: jest.fn(), publishMessagesRead: jest.fn() };
 		const service = new MessagingService(
 			conversationModel as any,
 			messageModel as any,
@@ -109,7 +109,7 @@ describe('Messaging ownership', () => {
 	});
 
 	it('marks only the other participant’s messages as read', async () => {
-		const { service, conversationModel, messageModel } = models();
+		const { service, conversationModel, messageModel, messagingEvents } = models();
 		conversationModel.findOne.mockReturnValue(conversationQuery({
 			_id: conversationId,
 			participants: [
@@ -123,5 +123,8 @@ describe('Messaging ownership', () => {
 			expect.objectContaining({ senderId: doctorId, senderType: MemberType.DOCTOR }),
 			expect.objectContaining({ $set: { readAt: expect.any(Date) } }),
 		);
+		expect(messagingEvents.publishMessagesRead).toHaveBeenCalledWith(expect.objectContaining({
+			conversationId, readerId: patientId, readerType: MemberType.PATIENT, readAt: expect.any(Date),
+		}));
 	});
 });

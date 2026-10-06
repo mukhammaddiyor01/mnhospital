@@ -136,10 +136,14 @@ export class MessagingService {
 			(participant) => participantKey(participant.participantType, participant.participantId) !== participantKey(actor.memberType, actor._id),
 		);
 		if (!other) throw new NotFoundException('Conversation recipient not found');
+		const readAt = new Date();
 		const result = await this.messageModel.updateMany(
 			{ conversationId, senderId: other.participantId, senderType: other.participantType, readAt: { $exists: false }, deletedAt: { $exists: false } },
-			{ $set: { readAt: new Date() } },
+			{ $set: { readAt } },
 		).exec();
+		if (result.modifiedCount > 0) this.messagingEvents.publishMessagesRead({
+			conversationId, participants: conversation.participants, readerId: actor._id, readerType: actor.memberType, readAt,
+		});
 		return result.modifiedCount;
 	}
 
