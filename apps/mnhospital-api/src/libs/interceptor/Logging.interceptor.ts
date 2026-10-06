@@ -19,8 +19,9 @@ export class LoggingInterceptor implements NestInterceptor {
 			/** (1) Print Request  */
 			const gqlContext = GqlExecutionContext.create(context);
 			const isAssistant = gqlContext.getInfo().fieldName === 'askHospitalAssistant';
+			const containsAssistant = isAssistant || /\baskHospitalAssistant\b/.test(gqlContext.getContext().req.body?.query ?? '');
 			this.logger.log(
-				isAssistant ? 'askHospitalAssistant' : `${this.stringify(gqlContext.getContext().req.body)}`,
+				containsAssistant ? 'Operation containing hospital assistant' : `${this.stringify(gqlContext.getContext().req.body)}`,
 				'REQUEST',
 			);
 
