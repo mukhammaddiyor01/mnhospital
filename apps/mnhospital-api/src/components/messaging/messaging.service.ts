@@ -6,6 +6,7 @@ import { ChatConversation, ChatConversations, ChatMessage, ChatMessages, ChatPar
 import { ChatInquiry, SendDirectMessageInput, StartDirectConversationInput } from './dto/messaging.input';
 import { NotificationEventService } from '../notification/notification-event.service';
 import { NotificationGroup, NotificationType } from '../notification/enums/notification.enum';
+import { MessagingEventsService } from './messaging-events.service';
 
 export interface MessageActor {
 	_id: Types.ObjectId;
@@ -28,6 +29,7 @@ export class MessagingService {
 		@InjectModel('Receptionist') private readonly receptionistModel: Model<any>,
 		@InjectModel('Admin') private readonly adminModel: Model<any>,
 		private readonly notificationEvents: NotificationEventService,
+		private readonly messagingEvents: MessagingEventsService,
 	) {}
 
 	public async startDirectConversation(actor: MessageActor, input: StartDirectConversationInput): Promise<ChatConversation> {
@@ -109,6 +111,7 @@ export class MessagingService {
 			replyToMessageId,
 		});
 		await this.conversationModel.updateOne({ _id: conversationId }, { $set: { lastMessageAt: message.createdAt } }).exec();
+		this.messagingEvents.publishMessageCreated({ conversationId, participants: conversation.participants, message });
 		const recipient = conversation.participants.find(
 			(participant) => participantKey(participant.participantType, participant.participantId) !== participantKey(actor.memberType, actor._id),
 		);

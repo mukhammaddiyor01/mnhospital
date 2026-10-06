@@ -21,6 +21,7 @@ describe('Messaging ownership', () => {
 		const receptionistModel = { findOne: jest.fn() };
 		const adminModel = { findById: jest.fn() };
 		const notificationEvents = { toRecipient: jest.fn().mockResolvedValue(undefined) };
+		const messagingEvents = { publishMessageCreated: jest.fn() };
 		const service = new MessagingService(
 			conversationModel as any,
 			messageModel as any,
@@ -29,8 +30,9 @@ describe('Messaging ownership', () => {
 			receptionistModel as any,
 			adminModel as any,
 			notificationEvents as any,
+			messagingEvents as any,
 		);
-		return { service, conversationModel, messageModel, memberModel, doctorModel, notificationEvents };
+		return { service, conversationModel, messageModel, memberModel, doctorModel, notificationEvents, messagingEvents };
 	};
 
 	it('uses one canonical key for a patient and doctor regardless of who starts the chat', async () => {
@@ -76,7 +78,7 @@ describe('Messaging ownership', () => {
 	});
 
 	it('writes the verified sender identity and updates the conversation timestamp', async () => {
-		const { service, conversationModel, messageModel, notificationEvents } = models();
+		const { service, conversationModel, messageModel, notificationEvents, messagingEvents } = models();
 		const createdAt = new Date();
 		conversationModel.findOne.mockReturnValue(conversationQuery({
 			_id: conversationId,
@@ -95,6 +97,10 @@ describe('Messaging ownership', () => {
 			messageContent: 'Hello doctor',
 		}));
 		expect(conversationModel.updateOne).toHaveBeenCalledWith({ _id: conversationId }, { $set: { lastMessageAt: createdAt } });
+		expect(messagingEvents.publishMessageCreated).toHaveBeenCalledWith(expect.objectContaining({
+			conversationId,
+			participants: expect.arrayContaining([expect.objectContaining({ participantId: doctorId })]),
+		}));
 		expect(notificationEvents.toRecipient).toHaveBeenCalledWith(
 			doctorId,
 			MemberType.DOCTOR,

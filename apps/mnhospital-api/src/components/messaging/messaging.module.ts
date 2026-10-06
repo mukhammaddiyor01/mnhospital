@@ -10,6 +10,7 @@ import ReceptionistSchema from '../receptionist/schema/Receptionist.model';
 import { NotificationModule } from '../notification/notification.module';
 import { MessagingResolver } from './messaging.resolver';
 import { MessagingService } from './messaging.service';
+import { MessagingEventsService } from './messaging-events.service';
 
 @Module({
 	imports: [
@@ -24,7 +25,7 @@ import { MessagingService } from './messaging.service';
 		AuthModule,
 		NotificationModule,
 	],
-	providers: [MessagingService, MessagingResolver],
-	exports: [MessagingService],
+	providers: [MessagingService, MessagingResolver, MessagingEventsService],
+	exports: [MessagingService, MessagingEventsService],
 })
 export class MessagingModule {}
