@@ -1,3 +1,6 @@
+import RoomSchema from '../../libs/schemas/Room.model';
+import { RoomResolver } from './room.resolver';
+import { RoomService } from './room.service';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppointmentService } from './appointment.service';
@@ -12,13 +15,14 @@ import { NotificationModule } from '../notification/notification.module';
 	imports: [
 		MongooseModule.forFeature([
 			{ name: 'Appointment', schema: AppointmentSchema },
+			{ name: 'Room', schema: RoomSchema },
 			{ name: 'ReceptionTask', schema: ReceptionTaskSchema },
 		]),
 		AuthModule,
 		PatientModule,
 		NotificationModule,
 	],
-	providers: [AppointmentService, AppointmentResolver],
+	providers: [AppointmentService, AppointmentResolver, RoomService, RoomResolver],
 	exports: [AppointmentService],
 })
 export class AppointmentModule {}

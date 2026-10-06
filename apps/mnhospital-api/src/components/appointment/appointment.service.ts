@@ -4,7 +4,13 @@ import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { v4 as uuidv4 } from 'uuid';
 import { Appointment, Appointments } from './dto/appointment';
-import { AppointmentInput as AppointmentCreateInput, AppointmentInquiry, StaffAppointmentInquiry } from './dto/appointment.input';
+import {
+	AppointmentInput as AppointmentCreateInput,
+	AppointmentInquiry,
+	StaffAppointmentInquiry,
+} from './dto/appointment.input';
+import { HospitalRoom } from './dto/room';
+import { RoomStatus } from '../../libs/enums/appointment.enum';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { Message } from '../../libs/enums/common.enum';
 import { MemberType } from '../member/enums/member.enum';
@@ -24,6 +30,7 @@ export class AppointmentService {
 		@InjectModel('ReceptionTask') private readonly receptionTaskModel: Model<ReceptionTask>,
 		private readonly patientService: PatientService,
 		private readonly notificationEvents: NotificationEventService,
+		@InjectModel('Room') private readonly roomModel: Model<HospitalRoom>,
 	) {}
 
 	public async createAppointment(memberId: ObjectId, input: AppointmentCreateInput): Promise<Appointment> {
@@ -56,6 +63,9 @@ export class AppointmentService {
 		if (requestedStartsAt.getTime() !== startsAt.getTime() || requestedEndsAt.getTime() !== endsAt.getTime()) {
 			throw new BadRequestException('Appointment time must match the booking order item');
 		}
+
+		const room = await this.roomModel.findOne({ _id: input.roomId, roomStatus: RoomStatus.AVAILABLE }).lean().exec();
+		if (!room) throw new BadRequestException('The selected room is not available');
 
 		const conflict = await this.appointmentModel
 			.findOne({
@@ -183,12 +193,27 @@ export class AppointmentService {
 		return result[0] ?? { list: [], metaCounter: [] };
 	}
 
-	public async getStaffAppointments(memberId: ObjectId, memberType: MemberType, input: StaffAppointmentInquiry): Promise<Appointments> {
+	public async getStaffAppointments(
+		memberId: ObjectId,
+		memberType: MemberType,
+		input: StaffAppointmentInquiry,
+	): Promise<Appointments> {
 		const { page, limit, status, doctorId, patientId } = input;
 		const match: Record<string, unknown> = {};
 
 		if (memberType === MemberType.DOCTOR) match.doctorId = memberId;
-		else if (doctorId) match.doctorId = doctorId;
+		else if (memberType === MemberType.RECEPTIONIST) {
+			const tasks = await this.receptionTaskModel
+				.find({
+					receptionistId: memberId,
+					taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] },
+				})
+				.select('appointmentId')
+				.lean()
+				.exec();
+			match._id = { $in: tasks.map((task) => task.appointmentId) };
+			if (doctorId) match.doctorId = doctorId;
+		} else if (doctorId) match.doctorId = doctorId;
 
 		if (patientId) match.patientId = patientId;
 		if (status) match.appointmentStatus = status;
@@ -233,14 +258,26 @@ export class AppointmentService {
 				.lean()
 				.exec();
 			if (!assignedTask) throw new ForbiddenException('This appointment is not assigned to you');
-			if (![AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS, AppointmentStatus.NO_SHOW].includes(appointmentStatus)) {
+			if (
+				![AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS, AppointmentStatus.NO_SHOW].includes(
+					appointmentStatus,
+				)
+			) {
 				throw new ForbiddenException('Receptionist cannot apply this appointment status');
 			}
 		}
 
 		const allowedStatuses: Record<AppointmentStatus, AppointmentStatus[]> = {
-			[AppointmentStatus.PENDING]: [AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
-			[AppointmentStatus.CONFIRMED]: [AppointmentStatus.IN_PROGRESS, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
+			[AppointmentStatus.PENDING]: [
+				AppointmentStatus.CONFIRMED,
+				AppointmentStatus.CANCELLED,
+				AppointmentStatus.NO_SHOW,
+			],
+			[AppointmentStatus.CONFIRMED]: [
+				AppointmentStatus.IN_PROGRESS,
+				AppointmentStatus.CANCELLED,
+				AppointmentStatus.NO_SHOW,
+			],
 			[AppointmentStatus.IN_PROGRESS]: [AppointmentStatus.ENDED, AppointmentStatus.COMPLETED],
 			[AppointmentStatus.ENDED]: [AppointmentStatus.COMPLETED],
 			[AppointmentStatus.COMPLETED]: [],
@@ -249,7 +286,9 @@ export class AppointmentService {
 		};
 
 		if (!allowedStatuses[appointment.appointmentStatus].includes(appointmentStatus)) {
-			throw new BadRequestException(`Cannot change appointment status from ${appointment.appointmentStatus} to ${appointmentStatus}`);
+			throw new BadRequestException(
+				`Cannot change appointment status from ${appointment.appointmentStatus} to ${appointmentStatus}`,
+			);
 		}
 
 		appointment.statusHistory.push({
