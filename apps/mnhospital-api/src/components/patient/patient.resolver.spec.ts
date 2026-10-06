@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { FileUpload } from 'graphql-upload';
 import { mkdtemp, readdir, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -36,6 +36,13 @@ describe('Patient image upload', () => {
 		const url = await resolver.uploadMyPatientImage(upload(bytes));
 		expect(url).toMatch(/^uploads\/patient\/[\w-]+\.png$/);
 		expect(await readFile(join(directory, url))).toEqual(bytes);
+	});
+
+	it('passes an upload through the global validation pipe', async () => {
+		const parameterTypes = Reflect.getMetadata('design:paramtypes', PatientResolver.prototype, 'uploadMyPatientImage');
+		expect(parameterTypes[0]).toBe(Object);
+		const file = upload(Buffer.from('image-data'));
+		expect(await new ValidationPipe().transform(file, { type: 'custom', metatype: parameterTypes[0] })).toEqual(await file);
 	});
 
 	it('rejects oversized images and removes the partial file', async () => {

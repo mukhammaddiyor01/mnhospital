@@ -58,7 +58,7 @@ export class PatientResolver {
 	@UseGuards(RolesGuard)
 	@Mutation(() => String)
 	public async uploadMyPatientImage(
-		@Args({ name: 'file', type: () => GraphQLUpload }) file: Promise<FileUpload>,
+		@Args({ name: 'file', type: () => GraphQLUpload }) file: FileUpload | Promise<FileUpload>,
 	): Promise<string> {
 		const { mimetype, createReadStream } = await file;
 		if (!validMimeTypes.includes(mimetype)) throw new BadRequestException('Please upload a PNG or JPEG image.');
