@@ -318,6 +318,12 @@ export class DoctorService {
 	}
 
 	public async getDoctor(targetId: ObjectId, memberId?: ObjectId): Promise<Doctor> {
+		const doctor = await this.findPublicDoctor(targetId, memberId);
+		if (!doctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		return doctor;
+	}
+
+	public async findPublicDoctor(targetId: ObjectId, memberId?: ObjectId): Promise<Doctor | null> {
 		const doctor = await this.doctorModel
 			.findOne({
 				_id: targetId,
@@ -327,7 +333,7 @@ export class DoctorService {
 			.lean()
 			.exec();
 
-		if (!doctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (!doctor) return null;
 
 		if (memberId) {
 			doctor.meLiked = await this.likeService.checkLikeExistence({

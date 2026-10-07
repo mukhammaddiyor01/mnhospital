@@ -18,6 +18,7 @@ describe('Recommended services GraphQL integration', () => {
 	let app: INestApplication;
 	const serviceService = {
 		getRecommendedServices: jest.fn(),
+		getService: jest.fn(),
 	};
 
 	beforeAll(async () => {
@@ -43,6 +44,31 @@ describe('Recommended services GraphQL integration', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
+	});
+
+	it('returns published service details when the optional doctor profile is missing', async () => {
+		serviceService.getService.mockResolvedValue({
+			_id: currentServiceId,
+			serviceName: 'Consultation',
+			serviceTitle: 'Feel comfortable with us',
+			serviceDesc: 'Published service description',
+		});
+		const response = await request(app.getHttpServer())
+			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
+			.send({
+				query: `query GetService($serviceId: String!) {
+					getService(serviceId: $serviceId) {
+						_id serviceName serviceTitle serviceDesc memberData { _id }
+					}
+				}`,
+				variables: { serviceId: currentServiceId.toString() },
+			});
+		expect(response.body.errors).toBeUndefined();
+		expect(response.body.data.getService).toEqual({
+			_id: currentServiceId.toString(), serviceName: 'Consultation',
+			serviceTitle: 'Feel comfortable with us', serviceDesc: 'Published service description', memberData: null,
+		});
 	});
 
 	it('returns recommended services with GraphQL variables without authentication', async () => {

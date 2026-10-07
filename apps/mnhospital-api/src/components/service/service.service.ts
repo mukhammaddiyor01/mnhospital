@@ -117,7 +117,7 @@ export class ServiceService {
 			targetService.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		}
 
-		targetService.memberData = await this.doctorService.getDoctor(targetService.memberId, memberId);
+		targetService.memberData = (await this.doctorService.findPublicDoctor(targetService.memberId, memberId)) ?? undefined;
 		return targetService;
 	}
 
