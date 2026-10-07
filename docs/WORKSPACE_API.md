@@ -1,0 +1,11 @@
+# Role workspace APIs
+
+Frontend workspaces reuse existing resolver → service → Mongoose domain operations and DTOs. Administrative content lists include drafts; public lists retain publication filters. Article creation requires a doctor identity, and author workspace reads are owner scoped. Comment moderation is admin only.
+
+Hospital room listing is authenticated. Only admins can create or update rooms, and appointments require an AVAILABLE room. Reception appointment reads follow active assigned reception tasks; doctors see their own appointments. Payment lists are admin/receptionist only with bounded pagination.
+
+Appointment linkage uses one `$elemMatch` for the requested doctor/service and unused appointment ID, together with patient ownership and confirmed order status. Retry payment keys must match the same owner, order, line, provider and method; already paid lines reuse their existing payment record. This does not claim to eliminate all concurrent provider transactions with different keys.
+
+Image uploads await multipart promises, restrict MIME types and sizes, preserve role boundaries, and remove partial files on failure. Private notifications and reports retain existing access rules.
+
+The offline export script `scripts/export-workspace-schema.cjs` generates GraphQL schema from the current resolvers without connecting to the database. Frontend contract verification is documented in that repository. Live merchant checkout requires provider configuration and separate acceptance testing.
