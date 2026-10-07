@@ -273,11 +273,29 @@ export class BookingService {
 			const sameOrder = existingPayment.bookingOrderId.toString() === input.bookingOrderId.toString();
 			const sameService = existingPayment.serviceId.toString() === input.serviceId.toString();
 			const sameDoctor = existingPayment.doctorId.toString() === input.doctorId.toString();
-			if (!samePatient || !sameOrder || !sameService || !sameDoctor) {
+			if (
+				!samePatient ||
+				!sameOrder ||
+				!sameService ||
+				!sameDoctor ||
+				existingPayment.paymentProvider !== input.paymentProvider ||
+				existingPayment.paymentMethod !== input.paymentMethod
+			) {
 				throw new BadRequestException('The idempotency key is already used for another payment');
 			}
 			return existingPayment;
 		}
+
+		const paidPayment = await this.paymentModel
+			.findOne({
+				patientId,
+				bookingOrderId: order._id,
+				serviceId: input.serviceId,
+				doctorId: input.doctorId,
+				paymentStatus: PaymentStatus.PAID,
+			})
+			.exec();
+		if (paidPayment) return paidPayment;
 
 		const paymentAmount = Number(orderItem.servicePrice);
 		if (!Number.isFinite(paymentAmount) || paymentAmount < 0) {
