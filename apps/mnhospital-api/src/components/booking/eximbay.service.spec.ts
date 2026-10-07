@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { EximbayService } from './eximbay.service';
 
 describe('Eximbay checkout preparation', () => {
-	const values = { EXIMBAY_API_KEY: 'fixture-key', EXIMBAY_MID: 'fixture-mid', BASE_URL: 'http://localhost:2001' };
+	const values = { EXIMBAY_API_KEY: 'test_fixture-key', EXIMBAY_MID: 'fixture-mid', BASE_URL: 'http://localhost:2001' };
 	const input = { paymentId: 'payment-fixture', providerPaymentId: 'order-fixture', currency: 'KRW', amount: 70000, buyerName: 'Fixture Buyer', buyerEmail: 'fixture@example.com' };
 	let fetchMock: jest.SpyInstance;
 	let service: EximbayService;
@@ -38,6 +38,20 @@ describe('Eximbay checkout preparation', () => {
 	it('requires merchant configuration before gateway preparation', async () => {
 		service = new EximbayService({ get: () => undefined } as unknown as ConfigService);
 		await expect(service.prepare(input)).rejects.toThrow('configuration is incomplete');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ EXIMBAY_API_BASE: 'https://api.eximbay.com' },
+		{ EXIMBAY_API_BASE: 'https://api-test.eximbay.com.example.com' },
+		{ EXIMBAY_API_BASE: 'http://api-test.eximbay.com' },
+		{ EXIMBAY_API_KEY: 'live_fixture-key' },
+	])('blocks non-sandbox configuration for every gateway operation: %j', async (override) => {
+		const config = { ...values, ...override };
+		service = new EximbayService({ get: (key: string) => config[key] } as unknown as ConfigService);
+		await expect(service.prepare(input)).rejects.toThrow('restricted to sandbox');
+		await expect(service.verify('fixture')).rejects.toThrow('restricted to sandbox');
+		await expect(service.retrieve({ ...input, transactionId: 'fixture' })).rejects.toThrow('restricted to sandbox');
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 });

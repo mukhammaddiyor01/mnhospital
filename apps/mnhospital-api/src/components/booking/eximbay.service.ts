@@ -29,6 +29,9 @@ export class EximbayService {
 		if (!apiKey || !mid) {
 			throw new InternalServerErrorException('Eximbay configuration is incomplete');
 		}
+		if (baseUrl.replace(/\/$/, '') !== 'https://api-test.eximbay.com' || !apiKey.startsWith('test_')) {
+			throw new InternalServerErrorException('Eximbay is restricted to sandbox test payments');
+		}
 
 		return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, mid, serverUrl: serverUrl.replace(/\/$/, ''), clientUrl: clientUrl.replace(/\/$/, '') };
 	}

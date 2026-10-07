@@ -1,5 +1,7 @@
 # Eximbay test payment: NestJS + NextJS
 
+Sandbox only: all gateway operations require `https://api-test.eximbay.com` and a `test_` API key. Production URLs and keys are rejected before any gateway request. The frontend only accepts the test SDK v3 URL; this integration cannot perform real charges.
+
 Bu oqim loyihadagi mavjud `BookingOrder` va line-level `Payment` mantiqini saqlaydi.
 Bemor avval payment yaratadi, keyin shu payment uchun Eximbay oynasini ochadi.
 
