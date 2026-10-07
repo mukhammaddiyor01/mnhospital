@@ -11,6 +11,7 @@ import { CartInput } from './dto/cart.input';
 import { CartItemInput } from './dto/cart.item.input';
 import { BookingOrder, BookingOrders } from './dto/booking-order';
 import { BookingOrderInquiry } from './dto/booking-order.input';
+import { DoctorBookingRequests } from './dto/doctor-booking-request';
 import { BookingOrderStatus } from '../patient/enums/patient.enum';
 import { Service } from '../service/dto/service';
 import { ServiceStatus } from '../service/enums/service.enum';
@@ -190,6 +191,18 @@ export class BookingService {
 			authorId: memberId,
 			authorType: MemberType.PATIENT,
 		});
+		for (const doctorId of new Set(items.map((item) => item.doctorId.toString()))) {
+			await this.notificationEvents.toDoctor(new Types.ObjectId(doctorId), {
+				key: `booking-order:${order._id}:created`,
+				type: NotificationType.SYSTEM,
+				group: NotificationGroup.BOOKING_ORDER,
+				title: 'New booking request',
+				description: 'A booking request for your service is awaiting payment and appointment creation.',
+				refId: order._id,
+				authorId: memberId,
+				authorType: MemberType.PATIENT,
+			});
+		}
 
 		return order;
 	}
@@ -515,6 +528,33 @@ export class BookingService {
 				},
 			])
 			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
+
+	public async getDoctorBookingRequests(doctorId: ObjectId, input: BookingOrderInquiry): Promise<DoctorBookingRequests> {
+		const match: Record<string, unknown> = { 'bookingOrderItems.doctorId': doctorId.toString() };
+		if (input.status) match.bookingOrderStatus = input.status;
+		const result = await this.bookingOrderModel.aggregate([
+			{ $match: match },
+			{ $unwind: '$bookingOrderItems' },
+			{ $match: { 'bookingOrderItems.doctorId': doctorId.toString() } },
+			{ $sort: { createdAt: -1, _id: -1, 'bookingOrderItems.serviceId': 1 } },
+			{ $project: {
+				_id: { $concat: [{ $toString: '$_id' }, ':', '$bookingOrderItems.serviceId'] },
+				bookingOrderId: { $toString: '$_id' },
+				orderCode: 1,
+				bookingOrderStatus: 1,
+				serviceId: '$bookingOrderItems.serviceId',
+				serviceName: '$bookingOrderItems.serviceName',
+				serviceDuration: '$bookingOrderItems.serviceDuration',
+				requestedStartAt: '$bookingOrderItems.requestedStartAt',
+				appointmentId: '$bookingOrderItems.appointmentId',
+			} },
+			{ $facet: {
+				list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+				metaCounter: [{ $count: 'total' }],
+			} },
+		]).exec();
 		return result[0] ?? { list: [], metaCounter: [] };
 	}
 

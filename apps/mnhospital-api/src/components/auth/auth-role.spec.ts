@@ -53,6 +53,7 @@ const policies: [MemberType[], string[]][] = [
 			'getMyDoctorProfile',
 			'updateMyDoctorProfile',
 			'getMyDoctorDashboardStats',
+			'getMyDoctorBookingRequests',
 			'createDoctorReport',
 			'updateDoctorReport',
 			'getMyDoctorReports',

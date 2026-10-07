@@ -23,6 +23,9 @@ This document records the conventions used while completing the MN Hospital API.
 
 ## Change discipline
 
+- The public appointment wizard creates a booking order. Payment confirmation makes the order eligible for the patient to create an appointment; it does not create one automatically.
+- Doctor booking requests use the authenticated doctor ID, filter each order line again after unwinding multi-doctor orders, and expose scheduling fields only. Receptionists use their existing booking list, while their appointment queue remains limited to active assigned reception tasks.
+
 - Commit one coherent behavior with its relevant verification. Keep unrelated domain changes in separate commits.
 - Before connecting a new frontend flow, verify its GraphQL contract, role access, ownership, and validation in the API.
 

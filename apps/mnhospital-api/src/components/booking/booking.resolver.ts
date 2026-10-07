@@ -13,6 +13,7 @@ import { CartItem } from './dto/cart';
 import { BookingOrder } from './dto/booking-order';
 import { BookingOrders } from './dto/booking-order';
 import { BookingOrderInquiry } from './dto/booking-order.input';
+import { DoctorBookingRequests } from './dto/doctor-booking-request';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { BookingService } from './booking.service';
 import { Payment } from './dto/payment';
@@ -169,6 +170,16 @@ export class BookingResolver {
 	): Promise<EximbayPrepare> {
 		console.log('Mutation: prepareEximbayPayment');
 		return await this.bookingService.prepareEximbayPayment(memberId, input.paymentId);
+	}
+
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Query(() => DoctorBookingRequests)
+	public async getMyDoctorBookingRequests(
+		@Args('input') input: BookingOrderInquiry,
+		@AuthMember('_id') doctorId: ObjectId,
+	): Promise<DoctorBookingRequests> {
+		return this.bookingService.getDoctorBookingRequests(doctorId, input);
 	}
 
 	@Roles(MemberType.RECEPTIONIST, MemberType.ADMIN)

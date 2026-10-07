@@ -7,7 +7,8 @@ Notification writes occur after the associated domain operation has been persist
 | Appointment request created | Patient and doctor | `APPOINTMENT` |
 | Appointment cancelled by patient | Doctor | `APPOINTMENT` |
 | Appointment status changed | Patient; doctor also receives staff confirmation | `APPOINTMENT` |
-| Booking order created, cancelled, or confirmed | Patient | `BOOKING_ORDER` |
+| Booking order created | Patient and each doctor with a service line in the order | `BOOKING_ORDER` |
+| Booking order cancelled or confirmed | Patient | `BOOKING_ORDER` |
 | Payment status changed by staff or Eximbay | Patient | `PAYMENT` |
 | Reception task assigned | Assigned receptionist | `RECEPTION_TASK` |
 | Reception task completed | Doctor | `RECEPTION_TASK` |
