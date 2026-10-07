@@ -21,6 +21,7 @@ import {
 } from './dto/doctor.input';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
 import { DoctorProfileUpdateInput } from './dto/doctor-profile.input';
+import { DoctorAdminUpdateInput } from './dto/doctor-admin.input';
 
 @Resolver()
 export class DoctorResolver {
@@ -64,6 +65,13 @@ export class DoctorResolver {
 	public async loginDoctor(@Args('input') input: DoctorLoginInput): Promise<Doctor> {
 		console.log('Mutation: loginDoctor');
 		return this.doctorService.loginDoctor(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Doctor)
+	public async updateDoctorByAdmin(@Args('input') input: DoctorAdminUpdateInput): Promise<Doctor> {
+		return this.doctorService.updateDoctorByAdmin(input._id, input);
 	}
 
 	@Roles(MemberType.ADMIN)

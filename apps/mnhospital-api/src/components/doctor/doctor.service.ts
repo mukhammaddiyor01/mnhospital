@@ -22,6 +22,7 @@ import { RoomStatus } from '../../libs/enums/appointment.enum';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
 import { DoctorProfileUpdateInput } from './dto/doctor-profile.input';
+import { DoctorAdminUpdateInput } from './dto/doctor-admin.input';
 
 @Injectable()
 export class DoctorService {
@@ -92,6 +93,55 @@ export class DoctorService {
 			.limit(100)
 			.lean()
 			.exec();
+	}
+
+	public async updateDoctorByAdmin(doctorId: ObjectId, input: DoctorAdminUpdateInput): Promise<Doctor> {
+		if (input.memberStatus !== undefined && ![MemberStatus.ACTIVE, MemberStatus.BLOCK].includes(input.memberStatus)) {
+			throw new BadRequestException('Use the separate remove action to archive a doctor');
+		}
+		const updates: Record<string, unknown> = {};
+		for (const key of [
+			'docFullName',
+			'docPhone',
+			'docMail',
+			'docAddress',
+			'docDesc',
+			'docImage',
+			'docExperience',
+			'docSpecialty',
+			'memberStatus',
+		] as const) {
+			if (input[key] !== undefined) {
+				const value = input[key];
+				updates[key] = typeof value === 'string' ? value.trim() : value;
+				if (key === 'docMail' && typeof updates[key] === 'string')
+					updates[key] = (updates[key] as string).toLowerCase();
+			}
+		}
+		if (!Object.keys(updates).length) throw new BadRequestException('No doctor changes were provided');
+		const clearEmail = updates.docMail === '';
+		if (clearEmail) delete updates.docMail;
+		let doctor: Doctor;
+		try {
+			doctor = await this.doctorModel
+				.findOneAndUpdate(
+					{
+						_id: doctorId,
+						memberType: MemberType.DOCTOR,
+						memberStatus: { $in: [MemberStatus.ACTIVE, MemberStatus.BLOCK] },
+						deletedAt: { $exists: false },
+					},
+					{ $set: updates, ...(clearEmail ? { $unset: { docMail: 1 } } : {}) },
+					{ new: true, runValidators: true },
+				)
+				.exec();
+		} catch (error) {
+			if (error?.code === 11000) throw new BadRequestException(Message.USED_DOCTOR_NICK_PHONE_OR_MAIL);
+			if (error?.name === 'ValidationError') throw new BadRequestException('Invalid doctor profile values');
+			throw new InternalServerErrorException('Doctor profile update failed');
+		}
+		if (!doctor) throw new BadRequestException('Doctor was not found or is archived');
+		return doctor;
 	}
 
 	public async createDoctorByAdmin(input: DoctorInput): Promise<Doctor> {

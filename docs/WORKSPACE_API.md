@@ -13,3 +13,7 @@ The offline export script `scripts/export-workspace-schema.cjs` generates GraphQ
 ## Doctor room assignment
 
 `getAvailableDoctorRooms` is admin only. It lists registered AVAILABLE rooms without a reservation and excludes room numbers already used by nondeleted doctors, including blocked doctors and legacy records. Doctor creation normalizes the room number and atomically reserves the Room document with the new doctor ID. A failed insertion releases its own reservation; deleting the doctor releases the assignment. Room availability for appointments remains independent: assigning a doctor's office does not change `roomStatus`. Register rooms in the admin room workspace before creating a doctor. The existing `docRoom` string contract is preserved.
+
+## Admin doctor editing
+
+`updateDoctorByAdmin(DoctorAdminUpdateInput)` requires a verified admin identity through `RolesGuard`. It edits name, contact details, description, image, experience, specialty and ACTIVE/BLOCK status of nonarchived doctor records. Explicit field projection protects login credentials, role, counters and the assigned office. Clearing optional email uses `$unset` to preserve its sparse unique index. The admin mutation never returns a new doctor session. DELETE remains the separate `updateDoctorStatusByAdmin` removal action, including room release; archived doctors cannot be restored through profile editing.
