@@ -59,7 +59,8 @@ export class ServiceResolver {
 		return this.serviceService.getRecommendedServices(shapeIntoMongoObjectId(serviceId), limit);
 	}
 
-	@UseGuards(AuthGuard)
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
 	@Query(() => Services)
 	public async getFavorites(
 		@Args('input') input: OrdinaryInquiry,
@@ -69,7 +70,8 @@ export class ServiceResolver {
 		return await this.serviceService.getFavorites(memberId, input);
 	}
 
-	@UseGuards(AuthGuard)
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
 	@Query(() => Services)
 	public async getVisited(
 		@Args('input') input: OrdinaryInquiry,

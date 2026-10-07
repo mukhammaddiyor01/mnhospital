@@ -4,7 +4,7 @@ import { ApolloDriver } from '@nestjs/apollo';
 import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { AuthService } from '../src/components/auth/auth.service';
 import { RolesGuard } from '../src/components/auth/guards/roles.guard';
 import { ConversationType, MemberType } from '../src/components/member/enums/member.enum';
@@ -29,7 +29,14 @@ describe('Messaging GraphQL access', () => {
 	beforeAll(async () => {
 		process.env.SECRET_TOKEN = 'messaging-integration-test-secret';
 		const module = await Test.createTestingModule({
-			imports: [AuthModule, GraphQLModule.forRoot({ driver: ApolloDriver, autoSchemaFile: true })],
+			imports: [
+				AuthModule,
+				GraphQLModule.forRoot({
+					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
+					autoSchemaFile: true,
+				}),
+			],
 			providers: [MessagingResolver, RolesGuard, { provide: MessagingService, useValue: service }],
 		}).compile();
 		app = module.createNestApplication();
@@ -47,30 +54,43 @@ describe('Messaging GraphQL access', () => {
 		service.startDirectConversation.mockResolvedValue({
 			_id: conversationId,
 			conversationType: ConversationType.DIRECT,
-			participants: [{ participantId: patientId, participantType: MemberType.PATIENT }, { participantId: doctorId, participantType: MemberType.DOCTOR }],
+			participants: [
+				{ participantId: patientId, participantType: MemberType.PATIENT },
+				{ participantId: doctorId, participantType: MemberType.DOCTOR },
+			],
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		const response = await request(app.getHttpServer()).post('/graphql')
+		const response = await request(app.getHttpServer())
+			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
 			.send({
-				query: 'mutation($input: StartDirectConversationInput!) { startDirectConversation(input: $input) { _id participants { participantId participantType } } }',
+				query:
+					'mutation($input: StartDirectConversationInput!) { startDirectConversation(input: $input) { _id participants { participantId participantType } } }',
 				variables: { input: { targetType: MemberType.DOCTOR, targetId: doctorId.toString() } },
 			});
 		expect(response.body.errors).toBeUndefined();
 		expect(response.body.data.startDirectConversation.participants).toHaveLength(2);
 		expect(service.startDirectConversation).toHaveBeenCalledWith(
-			expect.objectContaining({ _id: expect.objectContaining({ toString: expect.any(Function) }), memberType: MemberType.PATIENT }),
+			expect.objectContaining({
+				_id: expect.objectContaining({ toString: expect.any(Function) }),
+				memberType: MemberType.PATIENT,
+			}),
 			expect.objectContaining({ targetType: MemberType.DOCTOR, targetId: doctorId.toString() }),
 		);
 	});
 
 	it('rejects guests and malformed conversation IDs before reading messages', async () => {
-		const guest = await request(app.getHttpServer()).post('/graphql')
+		const guest = await request(app.getHttpServer())
+			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.send({ query: 'query { getMyConversations(input: {}) { total } }' });
 		expect(guest.body.errors).toBeDefined();
 
-		const malformed = await request(app.getHttpServer()).post('/graphql')
+		const malformed = await request(app.getHttpServer())
+			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(doctorId, MemberType.DOCTOR)}`)
 			.send({ query: 'query { getMyMessages(conversationId: "bad", input: {}) { total } }' });
 		expect(malformed.body.errors?.[0].message).toContain('Invalid conversation ID');

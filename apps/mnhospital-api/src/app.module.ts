@@ -17,6 +17,7 @@ import { SocketModule } from './socket/socket.module';
 			driver: ApolloDriver,
 			playground: true,
 			uploads: false,
+			context: ({ req, res }) => ({ req, res }),
 			autoSchemaFile: true,
 			formatError: (error: T) => {
 				const graphQLFormattedError = {

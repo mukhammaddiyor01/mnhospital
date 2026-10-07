@@ -79,7 +79,7 @@ export class DoctorService {
 			throw err;
 		}
 		if (!doctor) throw new InternalServerErrorException('Doctor profile update failed');
-		doctor.accessToken = await this.authService.createToken(doctor);
+
 		return doctor;
 	}
 
@@ -131,7 +131,11 @@ export class DoctorService {
 						memberStatus: { $in: [MemberStatus.ACTIVE, MemberStatus.BLOCK] },
 						deletedAt: { $exists: false },
 					},
-					{ $set: updates, ...(clearEmail ? { $unset: { docMail: 1 } } : {}) },
+					{
+						$set: updates,
+						...(clearEmail ? { $unset: { docMail: 1 } } : {}),
+						...(input.memberStatus === MemberStatus.BLOCK ? { $inc: { sessionVersion: 1 } } : {}),
+					},
 					{ new: true, runValidators: true },
 				)
 				.exec();
@@ -141,6 +145,8 @@ export class DoctorService {
 			throw new InternalServerErrorException('Doctor profile update failed');
 		}
 		if (!doctor) throw new BadRequestException('Doctor was not found or is archived');
+		if (input.memberStatus === MemberStatus.BLOCK)
+			await this.authService.revokeOwnerSessions(doctorId, MemberType.DOCTOR);
 		return doctor;
 	}
 
@@ -175,12 +181,15 @@ export class DoctorService {
 			if (err?.code === 11000) throw new BadRequestException(Message.USED_DOCTOR_NICK_PHONE_OR_MAIL);
 			throw err;
 		}
-		doctor.accessToken = await this.authService.createToken(doctor);
+
 		return doctor;
 	}
 
 	public async loginDoctor(input: DoctorLoginInput): Promise<Doctor> {
-		const doctor = await this.doctorModel.findOne({ docNick: input.docNick }).select('+docPassword').exec();
+		const doctor = await this.doctorModel
+			.findOne({ docNick: input.docNick, memberType: MemberType.DOCTOR, deletedAt: { $exists: false } })
+			.select('+docPassword')
+			.exec();
 
 		if (!doctor || doctor.memberStatus === MemberStatus.DELETE) {
 			throw new InternalServerErrorException(Message.NO_DOCTOR_NICK);
@@ -192,7 +201,6 @@ export class DoctorService {
 		const isMatch = await this.authService.comparePassword(input.docPassword, doctor.docPassword);
 		if (!isMatch) throw new InternalServerErrorException(Message.WRONG_PASSWORD);
 
-		doctor.accessToken = await this.authService.createToken(doctor);
 		return doctor;
 	}
 
@@ -211,11 +219,12 @@ export class DoctorService {
 		const result = await this.doctorModel
 			.findOneAndUpdate(
 				{ _id: doctorId, memberType: MemberType.DOCTOR },
-				{ $set: updateData },
+				{ $set: updateData, ...(memberStatus !== MemberStatus.ACTIVE ? { $inc: { sessionVersion: 1 } } : {}) },
 				{ new: true, runValidators: true },
 			)
 			.exec();
 		if (!result) throw new InternalServerErrorException('Doctor status update failed');
+		if (memberStatus !== MemberStatus.ACTIVE) await this.authService.revokeOwnerSessions(doctorId, MemberType.DOCTOR);
 		if (memberStatus === MemberStatus.DELETE)
 			await this.roomModel.updateOne({ assignedDoctorId: doctorId }, { $unset: { assignedDoctorId: 1 } }).exec();
 		return result;

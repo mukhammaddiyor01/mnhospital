@@ -3,6 +3,7 @@ import { MemberAuthType, MemberStatus, MemberType } from '../enums/member.enum';
 
 const MemberSchema = new Schema(
 	{
+		sessionVersion: { type: Number, default: 0 },
 		memberType: {
 			type: String,
 			enum: MemberType,

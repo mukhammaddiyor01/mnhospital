@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { AuthService } from '../src/components/auth/auth.service';
 import { RolesGuard } from '../src/components/auth/guards/roles.guard';
 import { MemberType } from '../src/components/member/enums/member.enum';
@@ -44,7 +44,11 @@ describe('Admin profile GraphQL integration', () => {
 		const moduleFixture: TestingModule = await Test.createTestingModule({
 			imports: [
 				AuthModule,
-				GraphQLModule.forRoot({ driver: ApolloDriver, autoSchemaFile: true }),
+				GraphQLModule.forRoot({
+					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
+					autoSchemaFile: true,
+				}),
 			],
 			providers: [
 				DoctorResolver,
@@ -86,6 +90,7 @@ describe('Admin profile GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await adminToken()}`)
 			.send({
 				query: `query GetDoctorsByAdmin($input: AdminDoctorInquiry!) {
@@ -112,6 +117,7 @@ describe('Admin profile GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await adminToken()}`)
 			.send({
 				query: `mutation UpdatePatientStatus($input: PatientStatusUpdateInput!) {
@@ -138,6 +144,7 @@ describe('Admin profile GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await adminToken()}`)
 			.send({
 				query: `query GetReceptionistByAdmin($receptionistId: String!) {
@@ -153,6 +160,7 @@ describe('Admin profile GraphQL integration', () => {
 	it('rejects a receptionist from admin doctor queries', async () => {
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await receptionistToken()}`)
 			.send({
 				query: `query GetDoctorsByAdmin($input: AdminDoctorInquiry!) {

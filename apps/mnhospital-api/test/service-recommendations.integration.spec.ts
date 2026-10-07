@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { WithoutGuard } from '../src/components/auth/guards/without.guard';
 import { ServiceResolver } from '../src/components/service/service.resolver';
 import { ServiceService } from '../src/components/service/service.service';
@@ -24,13 +24,13 @@ describe('Recommended services GraphQL integration', () => {
 		const moduleFixture: TestingModule = await Test.createTestingModule({
 			imports: [
 				AuthModule,
-				GraphQLModule.forRoot({ driver: ApolloDriver, autoSchemaFile: true }),
+				GraphQLModule.forRoot({
+					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
+					autoSchemaFile: true,
+				}),
 			],
-			providers: [
-				ServiceResolver,
-				WithoutGuard,
-				{ provide: ServiceService, useValue: serviceService },
-			],
+			providers: [ServiceResolver, WithoutGuard, { provide: ServiceService, useValue: serviceService }],
 		}).compile();
 
 		app = moduleFixture.createNestApplication();
@@ -75,6 +75,7 @@ describe('Recommended services GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.send({
 				query: `query GetRecommendedServices($serviceId: String!, $limit: Int) {
 					getRecommendedServices(serviceId: $serviceId, limit: $limit) {

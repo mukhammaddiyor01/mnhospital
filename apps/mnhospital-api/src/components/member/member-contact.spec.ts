@@ -25,7 +25,7 @@ describe('Member contact update', () => {
 		});
 		expect(findOneAndUpdate).toHaveBeenCalledWith(
 			expect.objectContaining({ _id: memberId }),
-			expect.objectContaining({ [field]: 'value' }),
+			expect.objectContaining({ $set: expect.objectContaining({ [field]: 'value' }) }),
 			expect.objectContaining({ runValidators: true }),
 		);
 	});

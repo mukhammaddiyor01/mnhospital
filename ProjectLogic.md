@@ -31,3 +31,11 @@ This document records the conventions used while completing the MN Hospital API.
 - `AiChatModule` follows the resolver → service pattern and uses the installed Nest Axios module for the external provider. Read `docs/AI_ASSISTANT.md` for its current limits and configuration.
 - Homepage AI assistance is a public, stateless operation. Project only explicitly allowed public catalog fields; keep private profile, medical report, direct message and appointment data out of provider requests. Render plain text and use fixed application links.
 - Never log raw AI questions, answers or Axios errors. Missing provider configuration must be shown honestly; preserve drafts when requests fail. Private AI conversations and authenticated tools require their own ownership design before implementation.
+
+## Authentication session boundaries
+
+- Keep login identities in their existing role collections; the medical Patient profile is not the patient login account.
+- Login/refresh/logout use the Auth service and GraphQL session interceptors. Refresh secrets belong in HttpOnly cookies and hashed role/profile-owned session records; never expose them in GraphQL or logs.
+- Authenticated guards recheck session and active profile state. BLOCK/DELETE and password changes invalidate old profile session versions; reactivation cannot restore those credentials.
+- Preserve the current session during contact edits. Only password changes replace the browser session after revoking old sessions. Staff creation must not authenticate the administrator as that staff member.
+- Read docs/AUTH_SESSIONS.md for cookie/origin configuration, rotation/replay rules, deployment behavior and regression verification.

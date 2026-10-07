@@ -52,14 +52,17 @@ export class AdminService {
 	) {}
 
 	public async loginAdmin(input: AdminLoginInput): Promise<Admin> {
-		const admin = await this.adminModel.findOne({ adminNick: input.adminNick }).select('+adminPassword').exec();
+		const admin = await this.adminModel
+			.findOne({ adminNick: input.adminNick, memberType: MemberType.ADMIN, deletedAt: { $exists: false } })
+			.select('+adminPassword')
+			.exec();
 		if (!admin || admin.deletedAt) throw new UnauthorizedException('Invalid admin credentials');
 
 		const isMatch = await this.authService.comparePassword(input.adminPassword, admin.adminPassword);
 		if (!isMatch) throw new UnauthorizedException('Invalid admin credentials');
 
 		admin.memberType = MemberType.ADMIN;
-		admin.accessToken = await this.authService.createToken(admin);
+
 		return admin;
 	}
 
@@ -164,9 +167,38 @@ export class AdminService {
 	}
 
 	public async updateMemberByAdmin(input: MemberUpdate): Promise<Member> {
-		const result: Member = await this.memberModel.findOneAndUpdate({ _id: input._id }, input, { new: true }).exec();
+		if (input.memberType !== undefined && input.memberType !== MemberType.PATIENT)
+			throw new BadRequestException('Staff accounts use their separate administration APIs');
+		const update: T = {};
+		for (const key of [
+			'memberStatus',
+			'memberPhone',
+			'memberMail',
+			'memberNick',
+			'memberFullName',
+			'memberImage',
+			'memberDesc',
+			'memberAddress',
+		]) {
+			if (input[key] !== undefined) update[key] = input[key];
+		}
+		if (!Object.keys(update).length) throw new BadRequestException('No account changes were provided');
+		if (input.memberStatus === MemberStatus.DELETE) update.deletedAt = new Date();
+		const revoke = input.memberStatus !== undefined && input.memberStatus !== MemberStatus.ACTIVE;
+		const result: Member = await this.memberModel
+			.findOneAndUpdate(
+				{
+					_id: input._id,
+					memberType: MemberType.PATIENT,
+					memberStatus: { $ne: MemberStatus.DELETE },
+					deletedAt: { $exists: false },
+				},
+				{ $set: update, ...(revoke ? { $inc: { sessionVersion: 1 } } : {}) },
+				{ new: true, runValidators: true },
+			)
+			.exec();
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-
+		if (revoke) await this.authService.revokeOwnerSessions(input._id, MemberType.PATIENT);
 		return result;
 	}
 

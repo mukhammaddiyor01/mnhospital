@@ -4,7 +4,7 @@ import { ApolloDriver } from '@nestjs/apollo';
 import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { AuthService } from '../src/components/auth/auth.service';
 import { RolesGuard } from '../src/components/auth/guards/roles.guard';
 import { MemberType } from '../src/components/member/enums/member.enum';
@@ -28,7 +28,14 @@ describe('Workspace GraphQL role and validation integration', () => {
 	beforeAll(async () => {
 		process.env.SECRET_TOKEN = 'workspace-access-test-secret';
 		const module = await Test.createTestingModule({
-			imports: [AuthModule, GraphQLModule.forRoot({ driver: ApolloDriver, autoSchemaFile: true })],
+			imports: [
+				AuthModule,
+				GraphQLModule.forRoot({
+					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
+					autoSchemaFile: true,
+				}),
+			],
 			providers: [
 				RoomResolver,
 				BookingResolver,
@@ -48,7 +55,7 @@ describe('Workspace GraphQL role and validation integration', () => {
 	afterAll(async () => await app.close());
 	beforeEach(() => jest.clearAllMocks());
 	async function query(role: MemberType | null, query: string, variables?: unknown) {
-		const req = request(app.getHttpServer()).post('/graphql');
+		const req = request(app.getHttpServer()).post('/graphql').set('Apollo-Require-Preflight', 'true');
 		if (role)
 			req.set('Authorization', `Bearer ${await app.get(AuthService).createToken({ _id: actorId, memberType: role })}`);
 		return req.send({ query, variables });

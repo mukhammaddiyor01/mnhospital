@@ -1,5 +1,17 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsEmail, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, Length, Matches, Min } from 'class-validator';
+import {
+	IsEmail,
+	IsEnum,
+	IsIn,
+	IsInt,
+	IsNotEmpty,
+	IsOptional,
+	IsString,
+	IsUrl,
+	Length,
+	Matches,
+	Min,
+} from 'class-validator';
 import { MemberAuthType, MemberStatus, MemberType } from '../enums/member.enum';
 import { availableMemberSorts } from '../../../libs/config';
 import { Direction } from '../../../libs/enums/common.enum';
@@ -71,13 +83,15 @@ export class MemberInput {
 
 @InputType()
 export class LoginInput {
+	@IsString()
 	@IsNotEmpty()
-	@Length(3, 12)
+	@Length(3, 30)
 	@Field(() => String)
 	memberNick: string;
 
+	@IsString()
 	@IsNotEmpty()
-	@Length(5, 12)
+	@Length(5, 32)
 	@Field(() => String)
 	memberPassword: string;
 }

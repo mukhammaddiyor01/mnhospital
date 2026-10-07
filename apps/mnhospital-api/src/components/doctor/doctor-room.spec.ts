@@ -23,7 +23,11 @@ describe('Doctor room allocation', () => {
 			updateOne: jest.fn().mockReturnValue(exec({})),
 			find: jest.fn(),
 		};
-		auth = { hashPassword: jest.fn().mockResolvedValue('hash'), createToken: jest.fn().mockResolvedValue('token') };
+		auth = {
+			hashPassword: jest.fn().mockResolvedValue('hash'),
+			revokeOwnerSessions: jest.fn().mockResolvedValue(undefined),
+			createToken: jest.fn().mockResolvedValue('token'),
+		};
 		service = new DoctorService(doctors, null, null, null, null, null, auth, null, rooms);
 	});
 	it('only allows admin to request room choices', () => {

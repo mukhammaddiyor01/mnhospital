@@ -1,8 +1,11 @@
 import { Schema } from 'mongoose';
-import { MemberType } from '../../member/enums/member.enum';
+import { MemberStatus, MemberType } from '../../member/enums/member.enum';
 
 const AdminSchema = new Schema(
 	{
+		sessionVersion: { type: Number, default: 0 },
+		memberStatus: { type: String, enum: MemberStatus, default: MemberStatus.ACTIVE },
+		deletedAt: { type: Date },
 		memberType: {
 			type: String,
 			enum: MemberType,

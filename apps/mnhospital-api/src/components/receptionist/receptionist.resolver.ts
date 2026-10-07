@@ -1,3 +1,5 @@
+import { UseInterceptors } from '@nestjs/common';
+import { SessionLoginInterceptor, SessionAccessInterceptor } from '../auth/session.interceptor';
 import { UseGuards } from '@nestjs/common';
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Types } from 'mongoose';
@@ -31,6 +33,7 @@ export class ReceptionistResolver {
 	constructor(private readonly receptionistService: ReceptionistService) {}
 
 	@Mutation(() => Receptionist)
+	@UseInterceptors(SessionLoginInterceptor)
 	public async loginReceptionist(@Args('input') input: ReceptionistLoginInput): Promise<Receptionist> {
 		console.log('Mutation: loginReceptionist');
 		return await this.receptionistService.loginReceptionist(input);
@@ -55,6 +58,7 @@ export class ReceptionistResolver {
 	@Roles(MemberType.RECEPTIONIST)
 	@UseGuards(RolesGuard)
 	@Mutation(() => Receptionist)
+	@UseInterceptors(SessionAccessInterceptor)
 	public async updateMyReceptionistProfile(
 		@Args('input') input: ReceptionistProfileUpdateInput,
 		@AuthMember('_id') receptionistId: ObjectId,
@@ -188,7 +192,11 @@ export class ReceptionistResolver {
 		@AuthMember() authMember: { _id: ObjectId; memberType: MemberType },
 	): Promise<ReceptionTask> {
 		console.log('Query: getReceptionTask');
-		return await this.receptionistService.getTask(authMember._id, authMember.memberType, shapeIntoMongoObjectId(taskId));
+		return await this.receptionistService.getTask(
+			authMember._id,
+			authMember.memberType,
+			shapeIntoMongoObjectId(taskId),
+		);
 	}
 
 	@Roles(MemberType.RECEPTIONIST, MemberType.ADMIN)

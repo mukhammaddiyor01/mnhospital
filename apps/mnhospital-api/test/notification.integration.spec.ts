@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { AuthService } from '../src/components/auth/auth.service';
 import { RolesGuard } from '../src/components/auth/guards/roles.guard';
 import { WithoutGuard } from '../src/components/auth/guards/without.guard';
@@ -14,7 +14,11 @@ import { NotificationResolver } from '../src/components/notification/notificatio
 import { NoticeResolver } from '../src/components/notification/notice.resolver';
 import { NotificationService } from '../src/components/notification/notification.service';
 import { NoticeService } from '../src/components/notification/notice.service';
-import { NotificationStatus, NotificationType, NoticeStatus } from '../src/components/notification/enums/notification.enum';
+import {
+	NotificationStatus,
+	NotificationType,
+	NoticeStatus,
+} from '../src/components/notification/enums/notification.enum';
 
 const patientId = new ObjectId();
 const adminId = new ObjectId();
@@ -45,7 +49,11 @@ describe('Notification and notice GraphQL integration', () => {
 		const moduleFixture: TestingModule = await Test.createTestingModule({
 			imports: [
 				AuthModule,
-				GraphQLModule.forRoot({ driver: ApolloDriver, autoSchemaFile: true }),
+				GraphQLModule.forRoot({
+					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
+					autoSchemaFile: true,
+				}),
 			],
 			providers: [
 				NotificationResolver,
@@ -57,9 +65,9 @@ describe('Notification and notice GraphQL integration', () => {
 			],
 		}).compile();
 
-			app = moduleFixture.createNestApplication();
-			app.useGlobalPipes(new ValidationPipe());
-			await app.init();
+		app = moduleFixture.createNestApplication();
+		app.useGlobalPipes(new ValidationPipe());
+		await app.init();
 		authService = app.get(AuthService);
 	});
 
@@ -93,6 +101,7 @@ describe('Notification and notice GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
 			.send({
 				query: `query GetMyNotifications($input: NotificationInquiry!) {
@@ -128,6 +137,7 @@ describe('Notification and notice GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
 			.send({
 				query: `mutation MarkNotificationRead($notificationId: String!) {
@@ -148,6 +158,7 @@ describe('Notification and notice GraphQL integration', () => {
 	it('rejects a malformed notification ID before calling the service', async () => {
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
 			.send({ query: 'query { getMyNotification(notificationId: "not-an-id") { _id } }' });
 		expect(response.body.errors?.[0].message).toContain('Invalid notification ID');
@@ -157,6 +168,7 @@ describe('Notification and notice GraphQL integration', () => {
 	it('requires a valid page and limit for the notification inbox', async () => {
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
 			.send({ query: 'query { getMyNotifications(input: { page: 0, limit: 101 }) { metaCounter { total } } }' });
 		expect(response.body.errors).toBeDefined();
@@ -176,6 +188,7 @@ describe('Notification and notice GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(adminId, MemberType.ADMIN)}`)
 			.send({
 				query: `mutation CreateNotice($input: NoticeInput!) {
@@ -214,6 +227,7 @@ describe('Notification and notice GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.send({
 				query: `query GetPublishedNotices($input: NoticeInquiry!) {
 					getPublishedNotices(input: $input) { list { _id noticeStatus noticeTitle } }
@@ -228,6 +242,7 @@ describe('Notification and notice GraphQL integration', () => {
 	it('rejects a patient from the admin notice list', async () => {
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`)
 			.send({
 				query: `query GetNoticesByAdmin($input: NoticeInquiry!) {

@@ -54,7 +54,11 @@ export class ReceptionistService {
 
 	public async loginReceptionist(input: ReceptionistLoginInput): Promise<Receptionist> {
 		const receptionist = await this.receptionistModel
-			.findOne({ receptionistNick: input.receptionistNick })
+			.findOne({
+				receptionistNick: input.receptionistNick,
+				memberType: MemberType.RECEPTIONIST,
+				deletedAt: { $exists: false },
+			})
 			.select('+receptionistPassword')
 			.exec();
 		if (!receptionist || receptionist.memberStatus === MemberStatus.DELETE) {
@@ -64,15 +68,23 @@ export class ReceptionistService {
 			throw new InternalServerErrorException('Receptionist is blocked');
 		}
 
-		const isMatch = await this.authService.comparePassword(input.receptionistPassword, receptionist.receptionistPassword);
+		const isMatch = await this.authService.comparePassword(
+			input.receptionistPassword,
+			receptionist.receptionistPassword,
+		);
 		if (!isMatch) throw new InternalServerErrorException('Wrong receptionist password');
-		receptionist.accessToken = await this.authService.createToken(receptionist);
+
 		return receptionist;
 	}
 
 	public async getMyProfile(receptionistId: ObjectId): Promise<Receptionist> {
 		const result = await this.receptionistModel
-			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
+			.findOne({
+				_id: receptionistId,
+				memberType: MemberType.RECEPTIONIST,
+				memberStatus: MemberStatus.ACTIVE,
+				deletedAt: { $exists: false },
+			})
 			.exec();
 		if (!result) throw new InternalServerErrorException('Receptionist was not found');
 		return result;
@@ -81,13 +93,18 @@ export class ReceptionistService {
 	public async updateMyProfile(receptionistId: ObjectId, input: ReceptionistProfileUpdateInput): Promise<Receptionist> {
 		const result = await this.receptionistModel
 			.findOneAndUpdate(
-				{ _id: receptionistId, memberType: MemberType.RECEPTIONIST, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } },
+				{
+					_id: receptionistId,
+					memberType: MemberType.RECEPTIONIST,
+					memberStatus: MemberStatus.ACTIVE,
+					deletedAt: { $exists: false },
+				},
 				{ $set: input },
 				{ new: true, runValidators: true },
 			)
 			.exec();
 		if (!result) throw new InternalServerErrorException('Receptionist profile update failed');
-		result.accessToken = await this.authService.createToken(result);
+
 		return result;
 	}
 
@@ -126,15 +143,21 @@ export class ReceptionistService {
 		if (!receptionist) throw new InternalServerErrorException('Receptionist was not found');
 
 		const taskMatch = { receptionistId };
-		const [taskCount, pendingTaskCount, acceptedTaskCount, inProgressTaskCount, completedTaskCount, cancelledTaskCount] =
-			await Promise.all([
-				this.receptionTaskModel.countDocuments(taskMatch).exec(),
-				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.PENDING }).exec(),
-				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.ACCEPTED }).exec(),
-				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.IN_PROGRESS }).exec(),
-				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.COMPLETED }).exec(),
-				this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.CANCELLED }).exec(),
-			]);
+		const [
+			taskCount,
+			pendingTaskCount,
+			acceptedTaskCount,
+			inProgressTaskCount,
+			completedTaskCount,
+			cancelledTaskCount,
+		] = await Promise.all([
+			this.receptionTaskModel.countDocuments(taskMatch).exec(),
+			this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.PENDING }).exec(),
+			this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.ACCEPTED }).exec(),
+			this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.IN_PROGRESS }).exec(),
+			this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.COMPLETED }).exec(),
+			this.receptionTaskModel.countDocuments({ ...taskMatch, taskStatus: ReceptionTaskStatus.CANCELLED }).exec(),
+		]);
 
 		return {
 			receptionistId: receptionist._id,
@@ -207,7 +230,11 @@ export class ReceptionistService {
 		return result[0] ?? { list: [], metaCounter: [] };
 	}
 
-	public async checkInAppointment(receptionistId: ObjectId, appointmentId: ObjectId, reason?: string): Promise<Appointment> {
+	public async checkInAppointment(
+		receptionistId: ObjectId,
+		appointmentId: ObjectId,
+		reason?: string,
+	): Promise<Appointment> {
 		const task = await this.receptionTaskModel
 			.findOne({ appointmentId, receptionistId, taskStatus: ReceptionTaskStatus.ACCEPTED })
 			.select('_id')
@@ -231,16 +258,36 @@ export class ReceptionistService {
 	}
 
 	public async updateByAdmin(input: ReceptionistAdminUpdateInput): Promise<Receptionist> {
-		const updateData: Record<string, unknown> = { ...input };
-		delete updateData._id;
+		if (input.memberStatus !== undefined && ![MemberStatus.ACTIVE, MemberStatus.BLOCK].includes(input.memberStatus))
+			throw new BadRequestException('Use the separate remove action to archive a receptionist');
+		const updateData: Record<string, unknown> = {};
+		for (const key of [
+			'receptionistFullName',
+			'receptionistPhone',
+			'receptionistMail',
+			'receptionistImage',
+			'receptionistAddress',
+			'receptionistDesc',
+			'memberStatus',
+		]) {
+			if (input[key] !== undefined) updateData[key] = input[key];
+		}
+		if (!Object.keys(updateData).length) throw new BadRequestException('No receptionist changes were provided');
 		const result = await this.receptionistModel
 			.findOneAndUpdate(
-				{ _id: input._id, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } },
-				{ $set: updateData },
+				{
+					_id: input._id,
+					memberType: MemberType.RECEPTIONIST,
+					memberStatus: { $ne: MemberStatus.DELETE },
+					deletedAt: { $exists: false },
+				},
+				{ $set: updateData, ...(input.memberStatus === MemberStatus.BLOCK ? { $inc: { sessionVersion: 1 } } : {}) },
 				{ new: true, runValidators: true },
 			)
 			.exec();
 		if (!result) throw new InternalServerErrorException('Receptionist update failed');
+		if (input.memberStatus === MemberStatus.BLOCK)
+			await this.authService.revokeOwnerSessions(input._id, MemberType.RECEPTIONIST);
 		return result;
 	}
 
@@ -248,15 +295,22 @@ export class ReceptionistService {
 		const receptionist = await this.receptionistModel
 			.findOne({ _id: input._id, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } })
 			.exec();
-		if (!receptionist) throw new InternalServerErrorException('Receptionist was not found');
+		if (!receptionist || receptionist.memberStatus === MemberStatus.DELETE)
+			throw new InternalServerErrorException('Receptionist was not found');
 
 		const updateData: Record<string, unknown> = { memberStatus: input.memberStatus };
 		if (input.memberStatus === MemberStatus.DELETE) updateData.deletedAt = new Date();
 
 		const result = await this.receptionistModel
-			.findOneAndUpdate({ _id: input._id, memberType: MemberType.RECEPTIONIST }, { $set: updateData }, { new: true, runValidators: true })
+			.findOneAndUpdate(
+				{ _id: input._id, memberType: MemberType.RECEPTIONIST },
+				{ $set: updateData, ...(input.memberStatus !== MemberStatus.ACTIVE ? { $inc: { sessionVersion: 1 } } : {}) },
+				{ new: true, runValidators: true },
+			)
 			.exec();
 		if (!result) throw new InternalServerErrorException('Receptionist status update failed');
+		if (input.memberStatus !== MemberStatus.ACTIVE)
+			await this.authService.revokeOwnerSessions(input._id, MemberType.RECEPTIONIST);
 		return result;
 	}
 
@@ -264,19 +318,26 @@ export class ReceptionistService {
 		const result = await this.receptionistModel
 			.findOneAndUpdate(
 				{ _id: receptionistId, memberType: MemberType.RECEPTIONIST, deletedAt: { $exists: false } },
-				{ $set: { memberStatus: MemberStatus.DELETE, deletedAt: new Date() } },
+				{ $set: { memberStatus: MemberStatus.DELETE, deletedAt: new Date() }, $inc: { sessionVersion: 1 } },
 				{ new: true },
 			)
 			.exec();
 		if (!result) throw new InternalServerErrorException('Receptionist removal failed');
+		await this.authService.revokeOwnerSessions(receptionistId, MemberType.RECEPTIONIST);
 		return result;
 	}
 
-	public async createTask(memberId: ObjectId, memberType: MemberType, input: ReceptionTaskInput): Promise<ReceptionTask> {
+	public async createTask(
+		memberId: ObjectId,
+		memberType: MemberType,
+		input: ReceptionTaskInput,
+	): Promise<ReceptionTask> {
 		const appointment = await this.appointmentModel
 			.findOne({
 				_id: input.appointmentId,
-				appointmentStatus: { $in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS] },
+				appointmentStatus: {
+					$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
+				},
 			})
 			.lean()
 			.exec();
@@ -319,7 +380,11 @@ export class ReceptionistService {
 		return task;
 	}
 
-	public async getTasks(memberId: ObjectId, memberType: MemberType, input: ReceptionTaskInquiry): Promise<ReceptionTasks> {
+	public async getTasks(
+		memberId: ObjectId,
+		memberType: MemberType,
+		input: ReceptionTaskInquiry,
+	): Promise<ReceptionTasks> {
 		const match: Record<string, unknown> = {};
 		if (memberType === MemberType.RECEPTIONIST) {
 			match.$or = [{ receptionistId: memberId }, { receptionistId: { $exists: false } }];
@@ -348,7 +413,11 @@ export class ReceptionistService {
 		return task;
 	}
 
-	public async updateTask(memberId: ObjectId, memberType: MemberType, input: ReceptionTaskStatusInput): Promise<ReceptionTask> {
+	public async updateTask(
+		memberId: ObjectId,
+		memberType: MemberType,
+		input: ReceptionTaskStatusInput,
+	): Promise<ReceptionTask> {
 		const task = await this.receptionTaskModel.findById(input.taskId).exec();
 		if (!task) throw new InternalServerErrorException('Reception task was not found');
 		this.ensureTaskAccess(memberId, memberType, task.receptionistId, input.taskStatus);
@@ -398,7 +467,12 @@ export class ReceptionistService {
 
 	private async ensureReceptionist(receptionistId: ObjectId): Promise<void> {
 		const receptionist = await this.receptionistModel
-			.findOne({ _id: receptionistId, memberType: MemberType.RECEPTIONIST, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
+			.findOne({
+				_id: receptionistId,
+				memberType: MemberType.RECEPTIONIST,
+				memberStatus: MemberStatus.ACTIVE,
+				deletedAt: { $exists: false },
+			})
 			.select('_id')
 			.lean()
 			.exec();

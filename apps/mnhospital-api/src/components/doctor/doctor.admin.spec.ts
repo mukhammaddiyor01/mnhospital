@@ -19,11 +19,11 @@ describe('Admin doctor profile editing', () => {
 		deletedAt: { $exists: false },
 	};
 	let model: { findOneAndUpdate: jest.Mock };
-	let auth: { createToken: jest.Mock };
+	let auth: { createToken: jest.Mock; revokeOwnerSessions: jest.Mock };
 	let service: DoctorService;
 	beforeEach(() => {
 		model = { findOneAndUpdate: jest.fn().mockReturnValue({ exec: async () => ({ _id: id }) }) };
-		auth = { createToken: jest.fn() };
+		auth = { createToken: jest.fn(), revokeOwnerSessions: jest.fn().mockResolvedValue(undefined) };
 		service = new DoctorService(model as any, null, null, null, null, null, auth as any, null, null);
 	});
 
@@ -59,6 +59,7 @@ describe('Admin doctor profile editing', () => {
 		expect(model.findOneAndUpdate).toHaveBeenCalledWith(
 			scope,
 			{
+				$inc: { sessionVersion: 1 },
 				$set: {
 					docFullName: 'Updated Doctor',
 					docPhone: '+821012345678',
@@ -71,6 +72,7 @@ describe('Admin doctor profile editing', () => {
 			{ new: true, runValidators: true },
 		);
 		expect(auth.createToken).not.toHaveBeenCalled();
+		expect(auth.revokeOwnerSessions).toHaveBeenCalledWith(id, MemberType.DOCTOR);
 	});
 
 	it('normalizes contacts and clears optional email without violating its sparse unique index', async () => {

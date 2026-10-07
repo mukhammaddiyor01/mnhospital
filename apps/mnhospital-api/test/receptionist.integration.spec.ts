@@ -5,13 +5,17 @@ import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { AuthService } from '../src/components/auth/auth.service';
 import { RolesGuard } from '../src/components/auth/guards/roles.guard';
 import { MemberType } from '../src/components/member/enums/member.enum';
 import { ReceptionistResolver } from '../src/components/receptionist/receptionist.resolver';
 import { ReceptionistService } from '../src/components/receptionist/receptionist.service';
-import { ReceptionTaskStatus, ReceptionTaskType, ReceptionTaskPriority } from '../src/components/receptionist/enums/receptionist.enum';
+import {
+	ReceptionTaskStatus,
+	ReceptionTaskType,
+	ReceptionTaskPriority,
+} from '../src/components/receptionist/enums/receptionist.enum';
 
 const receptionistId = new ObjectId();
 const adminId = new ObjectId();
@@ -67,14 +71,11 @@ describe('Receptionist GraphQL integration', () => {
 				AuthModule,
 				GraphQLModule.forRoot({
 					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
 					autoSchemaFile: true,
 				}),
 			],
-			providers: [
-				ReceptionistResolver,
-				RolesGuard,
-				{ provide: ReceptionistService, useValue: receptionistService },
-			],
+			providers: [ReceptionistResolver, RolesGuard, { provide: ReceptionistService, useValue: receptionistService }],
 		}).compile();
 
 		app = moduleFixture.createNestApplication();
@@ -99,6 +100,7 @@ describe('Receptionist GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.send({
 				query: `
 					mutation LoginReceptionist($input: ReceptionistLoginInput!) {
@@ -124,6 +126,7 @@ describe('Receptionist GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `query { getMyReceptionistProfile { _id memberType receptionistNick } }`,
@@ -131,9 +134,11 @@ describe('Receptionist GraphQL integration', () => {
 
 		expect(response.body.errors).toBeUndefined();
 		expect(response.body.data.getMyReceptionistProfile._id).toBe(receptionistId.toString());
-		expect(receptionistService.getMyProfile).toHaveBeenCalledWith(expect.objectContaining({
-		toString: expect.any(Function),
-	}));
+		expect(receptionistService.getMyProfile).toHaveBeenCalledWith(
+			expect.objectContaining({
+				toString: expect.any(Function),
+			}),
+		);
 	});
 
 	it('allows only an admin token to create a receptionist', async () => {
@@ -142,6 +147,7 @@ describe('Receptionist GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `
@@ -170,6 +176,7 @@ describe('Receptionist GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `
@@ -196,13 +203,14 @@ describe('Receptionist GraphQL integration', () => {
 	it('creates and updates a reception task with ownership context', async () => {
 		receptionistService.createTask.mockResolvedValue(receptionTask);
 		receptionistService.updateTask.mockResolvedValue({
-		...receptionTask,
-		taskStatus: ReceptionTaskStatus.ACCEPTED,
-	});
+			...receptionTask,
+			taskStatus: ReceptionTaskStatus.ACCEPTED,
+		});
 		const token = await tokenFor(receptionistId, MemberType.RECEPTIONIST);
 
 		const createResponse = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `
@@ -230,6 +238,7 @@ describe('Receptionist GraphQL integration', () => {
 
 		const updateResponse = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `

@@ -1,4 +1,6 @@
-import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { UseInterceptors } from '@nestjs/common';
+import { SessionLoginInterceptor, SessionAccessInterceptor } from '../auth/session.interceptor';
+import { Args, Context, Int, Mutation, Parent, Query, ResolveField, Resolver } from '@nestjs/graphql';
 import { MemberService } from './member.service';
 import { LoginInput, MemberInput, SocialAuthInput } from './dto/member.input';
 import { Member } from './dto/member';
@@ -17,23 +19,58 @@ import { unlink } from 'fs/promises';
 import { checkUploadTarget, saveUploadedImage } from '../../libs/upload-image';
 import { GraphQLUpload, FileUpload } from 'graphql-upload';
 
-@Resolver()
+@Resolver(() => Member)
 export class MemberResolver {
 	constructor(private readonly memberService: MemberService) {}
 
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
+	@Query(() => Member)
+	public async getMyMemberProfile(@AuthMember('_id') memberId: ObjectId): Promise<Member> {
+		return this.memberService.getMyProfile(memberId);
+	}
+
+	private canReadAccount(profile: Member, context: any): boolean {
+		const actor = context.req.body.authMember;
+		return Boolean(
+			actor &&
+			(actor.memberType === MemberType.ADMIN ||
+				(actor.memberType === MemberType.PATIENT && String(actor._id) === String(profile._id))),
+		);
+	}
+	@ResolveField(() => String, { nullable: true })
+	public memberPhone(@Parent() profile: Member, @Context() context: any): string | null {
+		return this.canReadAccount(profile, context) ? (profile.memberPhone ?? null) : null;
+	}
+	@ResolveField(() => String, { nullable: true })
+	public memberMail(@Parent() profile: Member, @Context() context: any): string | null {
+		return this.canReadAccount(profile, context) ? (profile.memberMail ?? null) : null;
+	}
+	@ResolveField(() => String, { nullable: true })
+	public memberIdNumber(@Parent() profile: Member, @Context() context: any): string | null {
+		return this.canReadAccount(profile, context) ? (profile.memberIdNumber ?? null) : null;
+	}
+	@ResolveField(() => Int, { nullable: true })
+	public memberAddress(@Parent() profile: Member, @Context() context: any): number | null {
+		return this.canReadAccount(profile, context) ? (profile.memberAddress ?? null) : null;
+	}
+
 	@Mutation(() => Member)
+	@UseInterceptors(SessionLoginInterceptor)
 	public async signup(@Args('input') input: MemberInput): Promise<Member> {
 		console.log('Mutation: sign up');
 		return this.memberService.signup(input);
 	}
 
 	@Mutation(() => Member)
+	@UseInterceptors(SessionLoginInterceptor)
 	public async login(@Args('input') input: LoginInput): Promise<Member> {
 		console.log('Mutation: login');
 		return this.memberService.login(input);
 	}
 
 	@Mutation(() => Member)
+	@UseInterceptors(SessionLoginInterceptor)
 	public async socialAuthenticate(@Args('input') input: SocialAuthInput): Promise<Member> {
 		console.log('Mutation: social authenticate');
 		return this.memberService.socialAuthenticate(input);
@@ -55,8 +92,10 @@ export class MemberResolver {
 	}
 
 	// Authenticated
-	@UseGuards(AuthGuard)
+	@Roles(MemberType.PATIENT)
+	@UseGuards(RolesGuard)
 	@Mutation(() => Member)
+	@UseInterceptors(SessionAccessInterceptor)
 	public async updateMember(
 		@Args('input') input: MemberUpdate,
 		@AuthMember('_id') memberId: ObjectId,

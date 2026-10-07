@@ -17,3 +17,7 @@ The offline export script `scripts/export-workspace-schema.cjs` generates GraphQ
 ## Admin doctor editing
 
 `updateDoctorByAdmin(DoctorAdminUpdateInput)` requires a verified admin identity through `RolesGuard`. It edits name, contact details, description, image, experience, specialty and ACTIVE/BLOCK status of nonarchived doctor records. Explicit field projection protects login credentials, role, counters and the assigned office. Clearing optional email uses `$unset` to preserve its sparse unique index. The admin mutation never returns a new doctor session. DELETE remains the separate `updateDoctorStatusByAdmin` removal action, including room release; archived doctors cannot be restored through profile editing.
+
+## Authentication sessions
+
+Existing role login/signup/social flows set HttpOnly refresh cookies. `refreshSession` rotates an owned session and returns accessToken only; `logoutSession` revokes the cookie/bearer session. Authenticated APIs verify active profile and session state. Staff creation does not issue a staff access token to the administrator. See AUTH_SESSIONS.md for configuration and verification.

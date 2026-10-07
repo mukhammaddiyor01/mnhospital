@@ -35,13 +35,12 @@ export class MemberService {
 			throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
 		}
 		input.memberType = MemberType.PATIENT;
+		input.memberAuthType = MemberAuthType.PHONE;
 		//TODO: Hash password
 		input.memberPassword = await this.authService.hashPassword(input.memberPassword);
 
 		try {
 			const result = await this.memberModel.create(input);
-			//TODO: Authentication via Token
-			result.accessToken = await this.authService.createToken(result);
 
 			return result;
 		} catch (err) {
@@ -53,7 +52,7 @@ export class MemberService {
 	public async login(input: LoginInput): Promise<Member> {
 		const { memberNick, memberPassword } = input;
 		const response: Member = await this.memberModel
-			.findOne({ memberNick: memberNick })
+			.findOne({ memberNick, memberType: MemberType.PATIENT, deletedAt: { $exists: false } })
 			.select('+memberPassword')
 			.exec();
 
@@ -66,7 +65,6 @@ export class MemberService {
 		// TODO: Compare Passwords
 		const isMatch = await this.authService.comparePassword(memberPassword, response.memberPassword);
 		if (!isMatch) throw new InternalServerErrorException(Message.WRONG_PASSWORD);
-		response.accessToken = await this.authService.createToken(response);
 
 		return response;
 	}
@@ -74,12 +72,19 @@ export class MemberService {
 	public async socialAuthenticate(input: SocialAuthInput): Promise<Member> {
 		const profile = await this.socialAuthService.authenticate(input);
 		const memberSocialId = `${profile.provider}:${profile.subject}`;
-		let member = await this.memberModel.findOne({ memberSocialId }).exec();
+		let member = await this.memberModel
+			.findOne({ memberSocialId, memberType: MemberType.PATIENT, deletedAt: { $exists: false } })
+			.exec();
 
 		if (!member) {
 			const suffix = createHash('sha256').update(memberSocialId).digest('hex').slice(0, 7);
-			const nameBase = (profile.fullName ?? profile.provider).toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20) || 'patient';
-			const memberMail = profile.email && !(await this.memberModel.exists({ memberMail: profile.email })) ? profile.email : undefined;
+			const nameBase =
+				(profile.fullName ?? profile.provider)
+					.toLowerCase()
+					.replace(/[^a-z0-9]+/g, '')
+					.slice(0, 20) || 'patient';
+			const memberMail =
+				profile.email && !(await this.memberModel.exists({ memberMail: profile.email })) ? profile.email : undefined;
 			try {
 				member = await this.memberModel.create({
 					memberType: MemberType.PATIENT,
@@ -92,7 +97,9 @@ export class MemberService {
 					memberImage: profile.image ?? '',
 				});
 			} catch {
-				member = await this.memberModel.findOne({ memberSocialId }).exec();
+				member = await this.memberModel
+					.findOne({ memberSocialId, memberType: MemberType.PATIENT, deletedAt: { $exists: false } })
+					.exec();
 				if (!member) throw new BadRequestException('Unable to create the social patient account.');
 			}
 		}
@@ -102,17 +109,37 @@ export class MemberService {
 		if (![MemberAuthType.GOOGLE, MemberAuthType.NAVER, MemberAuthType.KAKAO].includes(member.memberAuthType)) {
 			throw new BadRequestException('This account is not linked to the selected provider.');
 		}
-		member.accessToken = await this.authService.createToken(member);
+
 		return member;
 	}
 
 	// Authenticated
 
 	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {
-		const updateData: T = { ...input };
-		delete updateData._id;
-		delete updateData.memberType;
-		delete updateData.memberStatus;
+		const updateData: T = {};
+		for (const key of [
+			'memberPhone',
+			'memberMail',
+			'memberNick',
+			'memberFullName',
+			'memberIdNumber',
+			'memberImage',
+			'memberDesc',
+			'memberAddress',
+		]) {
+			if (input[key] !== undefined) updateData[key] = input[key];
+		}
+		const passwordChanged = input.memberPassword !== undefined;
+		if (passwordChanged) {
+			if (
+				typeof input.memberPassword !== 'string' ||
+				input.memberPassword.length < 8 ||
+				input.memberPassword.length > 32
+			)
+				throw new BadRequestException('Invalid password');
+			updateData.memberPassword = await this.authService.hashPassword(input.memberPassword);
+		}
+		if (!Object.keys(updateData).length) throw new BadRequestException('No profile changes were provided');
 
 		let result: Member;
 		try {
@@ -120,9 +147,11 @@ export class MemberService {
 				.findOneAndUpdate(
 					{
 						_id: memberId,
+						memberType: MemberType.PATIENT,
 						memberStatus: MemberStatus.ACTIVE,
+						deletedAt: { $exists: false },
 					},
-					updateData,
+					{ $set: updateData, ...(passwordChanged ? { $inc: { sessionVersion: 1 } } : {}) },
 					{ new: true, runValidators: true },
 				)
 				.exec();
@@ -137,9 +166,21 @@ export class MemberService {
 			throw error;
 		}
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-
-		result.accessToken = await this.authService.createToken(result);
+		if (passwordChanged) await this.authService.revokeOwnerSessions(memberId, MemberType.PATIENT);
 		return result;
+	}
+
+	public async getMyProfile(memberId: ObjectId): Promise<Member> {
+		const member = await this.memberModel
+			.findOne({
+				_id: memberId,
+				memberType: MemberType.PATIENT,
+				memberStatus: MemberStatus.ACTIVE,
+				deletedAt: { $exists: false },
+			})
+			.exec();
+		if (!member) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		return member;
 	}
 
 	public async getMember(memberId: ObjectId, targetId: ObjectId): Promise<Member> {

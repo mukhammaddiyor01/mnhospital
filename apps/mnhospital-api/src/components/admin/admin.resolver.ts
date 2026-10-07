@@ -1,3 +1,5 @@
+import { UseInterceptors } from '@nestjs/common';
+import { SessionLoginInterceptor, SessionAccessInterceptor } from '../auth/session.interceptor';
 import { UseGuards } from '@nestjs/common';
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -30,6 +32,7 @@ export class AdminResolver {
 	constructor(private readonly adminService: AdminService) {}
 
 	@Mutation(() => Admin)
+	@UseInterceptors(SessionLoginInterceptor)
 	public async loginAdmin(@Args('input') input: AdminLoginInput): Promise<Admin> {
 		console.log('Mutation: loginAdmin');
 		return this.adminService.loginAdmin(input);

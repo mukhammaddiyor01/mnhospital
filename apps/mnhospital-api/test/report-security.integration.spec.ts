@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { AuthService } from '../src/components/auth/auth.service';
 import { RolesGuard } from '../src/components/auth/guards/roles.guard';
 import { MemberType } from '../src/components/member/enums/member.enum';
@@ -55,6 +55,7 @@ describe('Doctor report security integration', () => {
 				AuthModule,
 				GraphQLModule.forRoot({
 					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
 					autoSchemaFile: true,
 				}),
 			],
@@ -90,6 +91,7 @@ describe('Doctor report security integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `
@@ -121,6 +123,7 @@ describe('Doctor report security integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `
@@ -150,6 +153,7 @@ describe('Doctor report security integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `query GetMyPatientReport($reportId: String!) {
@@ -172,6 +176,7 @@ describe('Doctor report security integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `query GetMyReceptionistReports($input: ReceptionistReportInquiry!) {
@@ -193,6 +198,7 @@ describe('Doctor report security integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `query GetMyReceptionistReports($input: ReceptionistReportInquiry!) {

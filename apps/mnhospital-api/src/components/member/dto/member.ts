@@ -47,7 +47,7 @@ export class Member {
 	@Field(() => Int)
 	memberConversation: number;
 
-	@Field(() => Int)
+	@Field(() => Int, { nullable: true })
 	memberAddress: number;
 
 	@Field(() => Int)

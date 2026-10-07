@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import * as request from 'supertest';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { AuthModule } from '../src/components/auth/auth.module';
+import { TestAuthModule as AuthModule } from './test-auth.module';
 import { AuthService } from '../src/components/auth/auth.service';
 import { RolesGuard } from '../src/components/auth/guards/roles.guard';
 import { MemberType } from '../src/components/member/enums/member.enum';
@@ -30,13 +30,13 @@ describe('Receptionist appointment queue GraphQL integration', () => {
 		const moduleFixture: TestingModule = await Test.createTestingModule({
 			imports: [
 				AuthModule,
-				GraphQLModule.forRoot({ driver: ApolloDriver, autoSchemaFile: true }),
+				GraphQLModule.forRoot({
+					driver: ApolloDriver,
+					context: ({ req, res }) => ({ req, res }),
+					autoSchemaFile: true,
+				}),
 			],
-			providers: [
-				ReceptionistResolver,
-				RolesGuard,
-				{ provide: ReceptionistService, useValue: receptionistService },
-			],
+			providers: [ReceptionistResolver, RolesGuard, { provide: ReceptionistService, useValue: receptionistService }],
 		}).compile();
 
 		app = moduleFixture.createNestApplication();
@@ -71,6 +71,7 @@ describe('Receptionist appointment queue GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `query ReceptionistQueue($input: ReceptionistAppointmentQueueInquiry!) {
@@ -102,6 +103,7 @@ describe('Receptionist appointment queue GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `mutation CheckIn($input: ReceptionistCheckInInput!) {
@@ -117,7 +119,7 @@ describe('Receptionist appointment queue GraphQL integration', () => {
 		expect(receptionistService.checkInAppointment).toHaveBeenCalledWith(
 			expect.objectContaining({ toString: expect.any(Function) }),
 			expect.objectContaining({ toString: expect.any(Function) }),
-		'Patient arrived at reception',
+			'Patient arrived at reception',
 		);
 	});
 
@@ -126,6 +128,7 @@ describe('Receptionist appointment queue GraphQL integration', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/graphql')
+			.set('Apollo-Require-Preflight', 'true')
 			.set('Authorization', `Bearer ${token}`)
 			.send({
 				query: `mutation CheckIn($input: ReceptionistCheckInInput!) {

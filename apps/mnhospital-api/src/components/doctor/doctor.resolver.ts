@@ -1,3 +1,5 @@
+import { UseInterceptors } from '@nestjs/common';
+import { SessionLoginInterceptor, SessionAccessInterceptor } from '../auth/session.interceptor';
 import { UseGuards } from '@nestjs/common';
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Types } from 'mongoose';
@@ -38,6 +40,7 @@ export class DoctorResolver {
 	@Roles(MemberType.DOCTOR)
 	@UseGuards(RolesGuard)
 	@Mutation(() => Doctor)
+	@UseInterceptors(SessionAccessInterceptor)
 	public async updateMyDoctorProfile(
 		@Args('input') input: DoctorProfileUpdateInput,
 		@AuthMember('_id') doctorId: ObjectId,
@@ -62,6 +65,7 @@ export class DoctorResolver {
 	}
 
 	@Mutation(() => Doctor)
+	@UseInterceptors(SessionLoginInterceptor)
 	public async loginDoctor(@Args('input') input: DoctorLoginInput): Promise<Doctor> {
 		console.log('Mutation: loginDoctor');
 		return this.doctorService.loginDoctor(input);

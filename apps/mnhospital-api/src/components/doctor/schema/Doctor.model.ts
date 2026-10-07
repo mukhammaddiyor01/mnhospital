@@ -4,6 +4,7 @@ import { MemberAuthType, MemberStatus, MemberType } from '../../member/enums/mem
 
 const DoctorSchema = new Schema(
 	{
+		sessionVersion: { type: Number, default: 0 },
 		memberType: {
 			type: String,
 			enum: MemberType,
