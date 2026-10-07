@@ -97,9 +97,15 @@ export class AppointmentService {
 			.findOneAndUpdate(
 				{
 					_id: bookingOrder._id,
-					'bookingOrderItems.serviceId': input.serviceId.toString(),
-					'bookingOrderItems.doctorId': input.doctorId.toString(),
-					'bookingOrderItems.appointmentId': { $exists: false },
+					patientId,
+					bookingOrderStatus: BookingOrderStatus.CONFIRMED,
+					bookingOrderItems: {
+						$elemMatch: {
+							serviceId: input.serviceId.toString(),
+							doctorId: input.doctorId.toString(),
+							appointmentId: { $exists: false },
+						},
+					},
 				},
 				{ $set: { 'bookingOrderItems.$.appointmentId': appointment._id.toString() } },
 				{ new: true },

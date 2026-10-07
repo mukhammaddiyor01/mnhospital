@@ -71,6 +71,16 @@ describe('Appointment notification triggers', () => {
 			startsAt,
 			endsAt,
 		} as never);
+		expect(bookingOrderModel.findOneAndUpdate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				patientId,
+				bookingOrderItems: {
+					$elemMatch: { serviceId: String(serviceId), doctorId: String(doctorId), appointmentId: { $exists: false } },
+				},
+			}),
+			{ $set: { 'bookingOrderItems.$.appointmentId': String(appointmentId) } },
+			{ new: true },
+		);
 		expect(notificationEvents.toPatient).toHaveBeenCalledWith(
 			patientId,
 			expect.objectContaining({ refId: appointmentId }),
