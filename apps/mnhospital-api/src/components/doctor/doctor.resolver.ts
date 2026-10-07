@@ -9,9 +9,16 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { MemberType } from '../member/enums/member.enum';
 import { shapeIntoMongoObjectId } from '../../libs/config';
+import { HospitalRoom } from '../appointment/dto/room';
 import { DoctorService } from './doctor.service';
 import { Doctor, Doctors } from './dto/doctor';
-import { AdminDoctorInquiry, DoctorInput, DoctorLoginInput, DoctorStatusUpdateInput, DoctorsInquiry } from './dto/doctor.input';
+import {
+	AdminDoctorInquiry,
+	DoctorInput,
+	DoctorLoginInput,
+	DoctorStatusUpdateInput,
+	DoctorsInquiry,
+} from './dto/doctor.input';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
 import { DoctorProfileUpdateInput } from './dto/doctor-profile.input';
 
@@ -44,6 +51,13 @@ export class DoctorResolver {
 	public async createDoctorByAdmin(@Args('input') input: DoctorInput): Promise<Doctor> {
 		console.log('Mutation: createDoctorByAdmin');
 		return this.doctorService.createDoctorByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Query(() => [HospitalRoom])
+	public async getAvailableDoctorRooms(): Promise<HospitalRoom[]> {
+		return this.doctorService.getAvailableDoctorRooms();
 	}
 
 	@Mutation(() => Doctor)
@@ -114,10 +128,7 @@ export class DoctorResolver {
 
 	@UseGuards(WithoutGuard)
 	@Query(() => Doctor)
-	public async getDoctor(
-		@Args('doctorId') doctorId: string,
-		@AuthMember('_id') memberId: ObjectId,
-	): Promise<Doctor> {
+	public async getDoctor(@Args('doctorId') doctorId: string, @AuthMember('_id') memberId: ObjectId): Promise<Doctor> {
 		console.log('Query: getDoctor');
 		return this.doctorService.getDoctor(shapeIntoMongoObjectId(doctorId), memberId);
 	}

@@ -23,6 +23,7 @@ const RoomSchema = new Schema(
 			enum: RoomStatus,
 			default: RoomStatus.AVAILABLE,
 		},
+		assignedDoctorId: { type: Schema.Types.ObjectId, ref: 'Doctor' },
 		floor: {
 			type: Number,
 			min: 0,

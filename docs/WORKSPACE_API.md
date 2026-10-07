@@ -9,3 +9,7 @@ Appointment linkage uses one `$elemMatch` for the requested doctor/service and u
 Image uploads await multipart promises, restrict MIME types and sizes, preserve role boundaries, and remove partial files on failure. Private notifications and reports retain existing access rules.
 
 The offline export script `scripts/export-workspace-schema.cjs` generates GraphQL schema from the current resolvers without connecting to the database. Frontend contract verification is documented in that repository. Live merchant checkout requires provider configuration and separate acceptance testing.
+
+## Doctor room assignment
+
+`getAvailableDoctorRooms` is admin only. It lists registered AVAILABLE rooms without a reservation and excludes room numbers already used by nondeleted doctors, including blocked doctors and legacy records. Doctor creation normalizes the room number and atomically reserves the Room document with the new doctor ID. A failed insertion releases its own reservation; deleting the doctor releases the assignment. Room availability for appointments remains independent: assigning a doctor's office does not change `roomStatus`. Register rooms in the admin room workspace before creating a doctor. The existing `docRoom` string contract is preserved.

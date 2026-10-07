@@ -17,6 +17,8 @@ import { Service } from '../service/dto/service';
 import { Appointment } from '../appointment/dto/appointment';
 import { DoctorReport } from './doctor-reports/dto/doctor-report';
 import { ServiceStatus } from '../service/enums/service.enum';
+import { HospitalRoom } from '../appointment/dto/room';
+import { RoomStatus } from '../../libs/enums/appointment.enum';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
 import { DoctorProfileUpdateInput } from './dto/doctor-profile.input';
@@ -32,11 +34,17 @@ export class DoctorService {
 		@InjectModel('DoctorReport') private readonly doctorReportModel: Model<DoctorReport>,
 		private readonly authService: AuthService,
 		private readonly likeService: LikeService,
+		@InjectModel('Room') private readonly roomModel: Model<HospitalRoom & { assignedDoctorId?: ObjectId }>,
 	) {}
 
 	public async getMyProfile(doctorId: ObjectId): Promise<Doctor> {
 		const doctor = await this.doctorModel
-			.findOne({ _id: doctorId, memberType: MemberType.DOCTOR, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
+			.findOne({
+				_id: doctorId,
+				memberType: MemberType.DOCTOR,
+				memberStatus: MemberStatus.ACTIVE,
+				deletedAt: { $exists: false },
+			})
 			.exec();
 		if (!doctor) throw new InternalServerErrorException('Doctor was not found');
 		return doctor;
@@ -53,11 +61,18 @@ export class DoctorService {
 
 		let doctor: Doctor;
 		try {
-			doctor = await this.doctorModel.findOneAndUpdate(
-				{ _id: doctorId, memberType: MemberType.DOCTOR, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } },
-				{ $set: updates, ...(clearEmail ? { $unset: { docMail: 1 } } : {}) },
-				{ new: true, runValidators: true },
-			).exec();
+			doctor = await this.doctorModel
+				.findOneAndUpdate(
+					{
+						_id: doctorId,
+						memberType: MemberType.DOCTOR,
+						memberStatus: MemberStatus.ACTIVE,
+						deletedAt: { $exists: false },
+					},
+					{ $set: updates, ...(clearEmail ? { $unset: { docMail: 1 } } : {}) },
+					{ new: true, runValidators: true },
+				)
+				.exec();
 		} catch (err) {
 			if (err.code === 11000) throw new BadRequestException(Message.USED_DOCTOR_NICK_PHONE_OR_MAIL);
 			throw err;
@@ -67,20 +82,51 @@ export class DoctorService {
 		return doctor;
 	}
 
+	public async getAvailableDoctorRooms(): Promise<HospitalRoom[]> {
+		const assignedNumbers = await this.doctorModel
+			.distinct('docRoom', { memberStatus: { $ne: MemberStatus.DELETE }, deletedAt: { $exists: false } })
+			.exec();
+		return this.roomModel
+			.find({ roomStatus: RoomStatus.AVAILABLE, roomNumber: { $nin: assignedNumbers }, assignedDoctorId: null })
+			.sort({ roomNumber: 1 })
+			.limit(100)
+			.lean()
+			.exec();
+	}
+
 	public async createDoctorByAdmin(input: DoctorInput): Promise<Doctor> {
-		const createData: DoctorInput = {
+		const roomNumber = input.docRoom.trim();
+		const assigned = await this.doctorModel
+			.findOne({ docRoom: roomNumber, memberStatus: { $ne: MemberStatus.DELETE }, deletedAt: { $exists: false } })
+			.exec();
+		if (assigned) throw new BadRequestException('Room is already assigned to a doctor');
+		const doctorId = new Types.ObjectId();
+		const createData = {
 			...input,
+			_id: doctorId,
+			docRoom: roomNumber,
 			docPassword: await this.authService.hashPassword(input.docPassword),
 		};
-
+		const room = await this.roomModel
+			.findOneAndUpdate(
+				{ roomNumber, roomStatus: RoomStatus.AVAILABLE, assignedDoctorId: null },
+				{ $set: { assignedDoctorId: doctorId } },
+				{ new: true },
+			)
+			.exec();
+		if (!room) throw new BadRequestException('Room does not exist or is unavailable');
+		let doctor: Doctor;
 		try {
-			const doctor = await this.doctorModel.create(createData);
-			doctor.accessToken = await this.authService.createToken(doctor);
-			return doctor;
+			doctor = await this.doctorModel.create(createData);
 		} catch (err) {
-			console.log('Error, DoctorService.createDoctorByAdmin:', err.message);
-			throw new BadRequestException(Message.USED_DOCTOR_NICK_PHONE_OR_MAIL);
+			await this.roomModel
+				.updateOne({ _id: room._id, assignedDoctorId: doctorId }, { $unset: { assignedDoctorId: 1 } })
+				.exec();
+			if (err?.code === 11000) throw new BadRequestException(Message.USED_DOCTOR_NICK_PHONE_OR_MAIL);
+			throw err;
 		}
+		doctor.accessToken = await this.authService.createToken(doctor);
+		return doctor;
 	}
 
 	public async loginDoctor(input: DoctorLoginInput): Promise<Doctor> {
@@ -113,9 +159,15 @@ export class DoctorService {
 		if (memberStatus === MemberStatus.DELETE) updateData.deletedAt = new Date();
 
 		const result = await this.doctorModel
-			.findOneAndUpdate({ _id: doctorId, memberType: MemberType.DOCTOR }, { $set: updateData }, { new: true, runValidators: true })
+			.findOneAndUpdate(
+				{ _id: doctorId, memberType: MemberType.DOCTOR },
+				{ $set: updateData },
+				{ new: true, runValidators: true },
+			)
 			.exec();
 		if (!result) throw new InternalServerErrorException('Doctor status update failed');
+		if (memberStatus === MemberStatus.DELETE)
+			await this.roomModel.updateOne({ assignedDoctorId: doctorId }, { $unset: { assignedDoctorId: 1 } }).exec();
 		return result;
 	}
 
@@ -131,7 +183,10 @@ export class DoctorService {
 			this.serviceModel.countDocuments({ memberId: doctorId, serviceStatus: { $ne: ServiceStatus.DELETED } }).exec(),
 			this.appointmentModel.countDocuments({ doctorId }).exec(),
 			this.appointmentModel
-				.countDocuments({ doctorId, appointmentStatus: { $in: [AppointmentStatus.ENDED, AppointmentStatus.COMPLETED] } })
+				.countDocuments({
+					doctorId,
+					appointmentStatus: { $in: [AppointmentStatus.ENDED, AppointmentStatus.COMPLETED] },
+				})
 				.exec(),
 			this.doctorReportModel.countDocuments({ doctorId }).exec(),
 			this.appointmentModel
@@ -290,7 +345,16 @@ export class DoctorService {
 	public async doctorStatisticEditor(input: StatisticModifier): Promise<Doctor> {
 		const { _id, targetKey, modifier } = input;
 
-		const allowedKeys = ['docPoints', 'docPatients', 'docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'];
+		const allowedKeys = [
+			'docPoints',
+			'docPatients',
+			'docServices',
+			'docArticles',
+			'docLikes',
+			'docFollowers',
+			'docFollowings',
+			'docComments',
+		];
 
 		if (!allowedKeys.includes(targetKey)) {
 			throw new BadRequestException('Invalid doctor statistic key');
@@ -299,7 +363,10 @@ export class DoctorService {
 		const search: T = { _id };
 		if (targetKey !== 'docServices') search.memberStatus = MemberStatus.ACTIVE;
 
-		if (['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'].includes(targetKey) && modifier < 0) {
+		if (
+			['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'].includes(targetKey) &&
+			modifier < 0
+		) {
 			search[targetKey] = { $gte: Math.abs(modifier) };
 		}
 
@@ -307,7 +374,11 @@ export class DoctorService {
 			.findOneAndUpdate(search, { $inc: { [targetKey]: modifier } }, { new: true })
 			.exec();
 
-		if (!result && ['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'].includes(targetKey) && modifier < 0) {
+		if (
+			!result &&
+			['docServices', 'docArticles', 'docLikes', 'docFollowers', 'docFollowings', 'docComments'].includes(targetKey) &&
+			modifier < 0
+		) {
 			result = await this.doctorModel.findOne({ _id }).exec();
 		}
 

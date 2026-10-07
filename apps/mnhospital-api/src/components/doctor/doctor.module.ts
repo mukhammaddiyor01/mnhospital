@@ -12,6 +12,7 @@ import { DoctorScheduleModule } from './doctor-schedule/doctorSchedule.module';
 import { DoctorViewsModule } from './doctor-views/doctorViews.module';
 import { DoctorResolver } from './doctor.resolver';
 import { DoctorService } from './doctor.service';
+import RoomSchema from '../../libs/schemas/Room.model';
 import DoctorSchema from './schema/Doctor.model';
 import { AuthModule } from '../auth/auth.module';
 import { LikeModule } from '../like/like.module';
@@ -25,6 +26,7 @@ import DoctorFollowSchema from './doctor-follows/schema/DoctorFollow.model';
 	imports: [
 		MongooseModule.forFeature([
 			{ name: 'Doctor', schema: DoctorSchema },
+			{ name: 'Room', schema: RoomSchema },
 			{ name: 'Department', schema: DepartmentSchema },
 		]),
 
