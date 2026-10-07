@@ -43,6 +43,12 @@ export class EximbayUrlData {
 }
 
 @ObjectType()
+export class EximbaySettingsData {
+	@Field(() => String)
+	display_type: string;
+}
+
+@ObjectType()
 export class EximbayPrepare {
 	@Field(() => String)
 	fgkey: string;
@@ -61,4 +67,7 @@ export class EximbayPrepare {
 
 	@Field(() => EximbayUrlData)
 	url: EximbayUrlData;
+
+	@Field(() => EximbaySettingsData)
+	settings: EximbaySettingsData;
 }

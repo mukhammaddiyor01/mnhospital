@@ -12,7 +12,7 @@ EXIMBAY_API_BASE=https://api-test.eximbay.com
 EXIMBAY_API_KEY=test_1849705C642C217E0B2D
 EXIMBAY_MID=1849705C64
 BASE_URL=http://localhost:2001
-CLIENT_URL=http://localhost:3000
+CLIENT_URL=http://localhost:2002
 ```
 
 `BASE_URL` Eximbay ko‘ra oladigan backend manzili bo‘lishi kerak. Local webhook testi uchun `ngrok` ishlatilsa, `BASE_URL` ngrok HTTPS URL’iga almashtiriladi.
@@ -66,6 +66,7 @@ mutation PrepareEximbayPayment($input: EximbayPrepareInput!) {
     merchant { mid }
     buyer { name email }
     url { return_url status_url }
+    settings { display_type }
   }
 }
 ```
@@ -95,7 +96,7 @@ declare global {
   }
 }
 
-const SDK_URL = 'https://api-test.eximbay.com/v2/javascriptSDK.js';
+const SDK_URL = 'https://api-test.eximbay.com/v3/javascriptSDK.js';
 
 export function EximbayPayButton({ paymentId }: { paymentId: string }) {
   const [sdkReady, setSdkReady] = useState(false);
@@ -133,6 +134,7 @@ export function EximbayPayButton({ paymentId }: { paymentId: string }) {
               merchant { mid }
               buyer { name email }
               url { return_url status_url }
+              settings { display_type }
             }
           }`,
           variables: { input: { paymentId } },
@@ -149,6 +151,7 @@ export function EximbayPayButton({ paymentId }: { paymentId: string }) {
         merchant: data.merchant,
         buyer: data.buyer,
         url: data.url,
+        settings: data.settings,
       });
     } finally {
       setLoading(false);
@@ -172,3 +175,5 @@ NEXT_PUBLIC_API_URL=http://localhost:2001
 Backend `return_url` foydalanuvchini `/booking/payment/:paymentId/success` yoki `/failed` sahifasiga qaytaradi. Bu sahifada payment status’ni `getMyPayment` bilan qayta o‘qing; browser callback’ning o‘zini “to‘landi” deb qabul qilmang.
 
 Local `status_url` Eximbay serveridan `localhost`ga yetib kelmaydi. `return_url` local test uchun ishlaydi, to‘liq webhook testi uchun backendni ngrok orqali oching.
+
+The application loads SDK v3 without a jQuery dependency. Booking Pay creates/reuses the pending line payment, then calls the shared frontend checkout hook; Payments uses the same hook. The server prepares `settings.display_type=R` with the FGKey so checkout opens in the current tab without relying on popup permission. Return routes exist in the frontend and display only the authenticated `getMyPayment` record, never the success/failed URL as proof of payment. Opening the real sandbox card form was verified using synthetic USD 1.00 checkout data; no card details were entered and no transaction was submitted.

@@ -12,6 +12,7 @@ interface EximbayReadyPayload {
 	merchant: { mid: string };
 	buyer: { name: string; email: string };
 	url: { return_url: string; status_url: string };
+	settings: { display_type: 'R' };
 }
 
 @Injectable()
@@ -23,7 +24,7 @@ export class EximbayService {
 		const apiKey = this.configService.get<string>('EXIMBAY_API_KEY');
 		const mid = this.configService.get<string>('EXIMBAY_MID');
 		const serverUrl = this.configService.get<string>('BASE_URL') ?? 'http://localhost:2001';
-		const clientUrl = this.configService.get<string>('CLIENT_URL') ?? 'http://localhost:3000';
+		const clientUrl = this.configService.get<string>('CLIENT_URL') ?? 'http://localhost:2002';
 
 		if (!apiKey || !mid) {
 			throw new InternalServerErrorException('Eximbay configuration is incomplete');
@@ -40,7 +41,7 @@ export class EximbayService {
 	}
 
 	public getClientUrl(): string {
-		return (this.configService.get<string>('CLIENT_URL') ?? 'http://localhost:3000').replace(/\/$/, '');
+		return (this.configService.get<string>('CLIENT_URL') ?? 'http://localhost:2002').replace(/\/$/, '');
 	}
 
 	public async prepare(input: {
@@ -57,7 +58,11 @@ export class EximbayService {
 		merchant: EximbayReadyPayload['merchant'];
 		buyer: EximbayReadyPayload['buyer'];
 		url: EximbayReadyPayload['url'];
+		settings: EximbayReadyPayload['settings'];
 	}> {
+		if (!Number.isFinite(input.amount) || input.amount <= 0) {
+			throw new BadRequestException('Eximbay payment amount must be greater than zero');
+		}
 		const config = this.getConfig();
 		const payload: EximbayReadyPayload = {
 			payment: {
@@ -76,6 +81,7 @@ export class EximbayService {
 				return_url: `${config.serverUrl}/api/booking/payment/eximbay/return/${input.paymentId}`,
 				status_url: `${config.serverUrl}/api/booking/payment/eximbay/status/${input.paymentId}`,
 			},
+			settings: { display_type: 'R' },
 		};
 
 		const response = await fetch(`${config.baseUrl}/v1/payments/ready`, {
@@ -96,6 +102,7 @@ export class EximbayService {
 			merchant: payload.merchant,
 			buyer: payload.buyer,
 			url: payload.url,
+			settings: payload.settings,
 		};
 	}
 
