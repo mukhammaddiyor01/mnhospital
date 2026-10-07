@@ -16,6 +16,17 @@ describe('Room and appointment workspace access', () => {
 		}
 		expect(Reflect.getMetadata('roles', RoomResolver.prototype.getRooms)).toContain(MemberType.PATIENT);
 	});
+	it('keeps assigned room numbers stable during administration', async () => {
+		const id = new Types.ObjectId();
+		const findOneAndUpdate = jest.fn().mockReturnValue({ exec: async () => null });
+		const service = new RoomService({ findOneAndUpdate } as never);
+		await expect(service.updateRoom(id, { roomNumber: '202' } as never)).rejects.toThrow('assigned room number');
+		expect(findOneAndUpdate).toHaveBeenCalledWith(
+			{ _id: id, $or: [{ assignedDoctorId: null }, { roomNumber: '202' }] },
+			{ $set: { roomNumber: '202' } },
+			{ new: true, runValidators: true },
+		);
+	});
 	it('returns safe duplicate and missing room errors', async () => {
 		const service = new RoomService({
 			create: jest.fn().mockRejectedValue({ code: 11000 }),

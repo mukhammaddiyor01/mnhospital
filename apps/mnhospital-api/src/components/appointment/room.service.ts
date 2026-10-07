@@ -19,9 +19,13 @@ export class RoomService {
 	public async updateRoom(id: Types.ObjectId, input: HospitalRoomInput): Promise<HospitalRoom> {
 		try {
 			const room = await this.rooms
-				.findOneAndUpdate({ _id: id }, { $set: input }, { new: true, runValidators: true })
+				.findOneAndUpdate(
+					{ _id: id, $or: [{ assignedDoctorId: null }, { roomNumber: input.roomNumber }] },
+					{ $set: input },
+					{ new: true, runValidators: true },
+				)
 				.exec();
-			if (!room) throw new NotFoundException('Room was not found');
+			if (!room) throw new NotFoundException('Room was not found or an assigned room number cannot be changed');
 			return room;
 		} catch (error) {
 			if (error instanceof NotFoundException) throw error;
