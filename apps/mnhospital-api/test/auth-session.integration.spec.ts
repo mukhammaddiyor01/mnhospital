@@ -85,8 +85,8 @@ describe('Session GraphQL/cookie integration with production auth service', () =
 		if (cookie) req.set('Cookie', cookie);
 		return req.send({ query });
 	};
-	async function login(role: MemberType) {
-		const response = await post(`mutation { fixtureLogin(role:${role}) { accessToken } }`);
+	async function login(role: MemberType, previousCookie?: string) {
+		const response = await post(`mutation { fixtureLogin(role:${role}) { accessToken } }`, undefined, previousCookie);
 		expect(response.body.errors).toBeUndefined();
 		const cookie = response.headers['set-cookie'][0];
 		expect(cookie).toContain('HttpOnly');
@@ -94,6 +94,25 @@ describe('Session GraphQL/cookie integration with production auth service', () =
 		expect(cookie).toContain('Path=/graphql');
 		return { token: response.body.data.fixtureLogin.accessToken as string, cookie: cookie.split(';')[0] as string };
 	}
+	it.each([MemberType.ADMIN, MemberType.DOCTOR, MemberType.RECEPTIONIST])(
+		'issues a new %s session on repeated sign-in and revokes the previous browser session',
+		async (role) => {
+			const first = await login(role);
+			const second = await login(role, first.cookie);
+			expect(second.token).not.toBe(first.token);
+			expect(second.cookie).not.toBe(first.cookie);
+			const before = await fixture.jwt.verifyAsync(first.token);
+			const after = await fixture.jwt.verifyAsync(second.token);
+			expect(after.sid).not.toBe(before.sid);
+			expect(after.exp - after.iat).toBe(15 * 60);
+			await expect(fixture.auth.verifyToken(first.token)).rejects.toMatchObject({ status: 401 });
+			expect((await post('{ fixturePrivate }', second.token)).body.data.fixturePrivate).toBe(role);
+			expect(
+				(await post('mutation { refreshSession { accessToken } }', undefined, first.cookie)).body.errors[0].extensions.code,
+			).toBe('UNAUTHENTICATED');
+			expect((await post('mutation { refreshSession { accessToken } }', undefined, second.cookie)).body.errors).toBeUndefined();
+		},
+	);
 	it.each(Object.values(MemberType))(
 		'logs in, refreshes and logs out %s without exposing a refresh token field',
 		async (role) => {
