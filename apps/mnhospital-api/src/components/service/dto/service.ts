@@ -74,6 +74,9 @@ export class Service {
 	@Field(() => Date, { nullable: true })
 	openedAt?: Date;
 
+	@Field(() => [String], { nullable: true })
+	availabilityDates?: string[];
+
 	@Field(() => Date, { nullable: true })
 	closedAt?: Date;
 

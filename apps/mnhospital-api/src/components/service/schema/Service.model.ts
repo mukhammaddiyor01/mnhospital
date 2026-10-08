@@ -78,6 +78,7 @@ const ServiceSchema = new Schema(
 			type: String,
 			required: true,
 		},
+		availabilityDates: { type: [String], default: [] },
 		openedAt: {
 			type: Date,
 		},

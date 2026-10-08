@@ -1,3 +1,4 @@
+import { serviceAllowsDate, serviceAllowsInterval } from '../../service/service-availability.policy';
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -88,6 +89,7 @@ export class DoctorScheduleService {
 		}
 
 		const day = clinicDayStart(input.date);
+		if (!serviceAllowsDate(service, input.date)) return [];
 		const weekday = new Date(day.getTime() + clinicOffsetMillis()).getUTCDay();
 		const schedule = await this.scheduleModel
 			.findOne({ doctorId: input.doctorId, weekday, isActive: true })
@@ -128,7 +130,7 @@ export class DoctorScheduleService {
 			const overlapsAppointment = appointments.some(
 				(appointment) => cursor < appointment.endsAt.getTime() && slotEnd > appointment.startsAt.getTime(),
 			);
-			if (cursor > Date.now() && !overlapsBreak && !overlapsAppointment) {
+			if (cursor > Date.now() && !overlapsBreak && !overlapsAppointment && serviceAllowsInterval(service, new Date(cursor), new Date(slotEnd))) {
 				slots.push({ startsAt: new Date(cursor), endsAt: new Date(slotEnd) });
 			}
 		}

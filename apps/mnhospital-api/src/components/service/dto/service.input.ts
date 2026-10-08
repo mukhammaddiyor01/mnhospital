@@ -2,6 +2,8 @@ import { Field, Float, InputType, Int } from '@nestjs/graphql';
 import { Transform, Type } from 'class-transformer';
 import {
 	ArrayNotEmpty,
+	ArrayMaxSize,
+	ArrayUnique,
 	IsArray,
 	IsDate,
 	IsEnum,
@@ -86,6 +88,15 @@ export class ServiceInput {
 	@Matches(/^(?:[1-9]\d{0,2}|1[0-3]\d{2}|14[0-3]\d|1440)$/, { message: 'Duration must be 1 to 1440 whole minutes' })
 	@Field(() => String)
 	serviceDuration: string;
+
+	@IsOptional()
+	@IsArray()
+	@ArrayMaxSize(366)
+	@ArrayUnique()
+	@IsString({ each: true })
+	@Matches(/^\d{4}-\d{2}-\d{2}$/, { each: true })
+	@Field(() => [String], { nullable: true })
+	availabilityDates?: string[];
 
 	@IsOptional()
 	@Type(() => Date)

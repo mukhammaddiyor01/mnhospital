@@ -220,4 +220,35 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 		expect(afterExpiry.errors).toBeUndefined();
 		expect(afterExpiry.data.getAvailableDoctorSlots[0].startsAt).toBe(startsAt);
 	});
+	it('persists doctor selected service dates and enforces them for public slots and real booking writes', async () => {
+		const services = app.get<Model<any>>(getModelToken('Service'));
+		const day = clinicDate(new Date(startsAt));
+		const otherDay = clinicDate(new Date(new Date(startsAt).getTime() + 86400000));
+		const update = 'mutation($input:ServiceUpdate!){updateService(input:$input){_id availabilityDates}}';
+		const slotQuery = 'query($input:AvailableDoctorSlotsInput!){getAvailableDoctorSlots(input:$input){startsAt}}';
+		const slotInput = { input: { serviceId, doctorId, date: day } };
+		try {
+			const denied = await gql(update, { input: { _id: serviceId, availabilityDates: [day] } }, token);
+			expect(denied.errors).toBeDefined();
+			const saved = await gql(update, { input: { _id: serviceId, availabilityDates: [otherDay] } }, doctorToken);
+			expect(saved.errors).toBeUndefined();
+			expect((await services.findById(serviceId)).availabilityDates).toEqual([otherDay]);
+			expect((await gql(slotQuery, slotInput, '')).data.getAvailableDoctorSlots).toEqual([]);
+			expect((await gql(createQuery, { input: { serviceId, doctorId, requestedStartAt: startsAt, idempotencyKey: 'unselected-service-date' } })).errors).toBeDefined();
+			const selected = await gql(update, { input: { _id: serviceId, availabilityDates: [day, otherDay] } }, doctorToken);
+			expect(selected.errors).toBeUndefined();
+			expect((await gql(slotQuery, slotInput, '')).data.getAvailableDoctorSlots[0].startsAt).toBe(startsAt);
+			const order = await booking('selected-service-date');
+			expect((await choose(order._id, 'CASH')).errors).toBeUndefined();
+			expect(await appointments.countDocuments()).toBe(1);
+			for (const dates of [['2030-02-30'], [day,day], null]) {
+				expect((await gql(update, { input: { _id: serviceId, availabilityDates: dates } }, doctorToken)).errors).toBeDefined();
+			}
+			const clear = await gql(update, { input: { _id: serviceId, availabilityDates: [] } }, doctorToken);
+			expect(clear.errors).toBeUndefined();
+			expect((await services.findById(serviceId)).availabilityDates).toEqual([]);
+			expect(await appointments.countDocuments()).toBe(1); // Existing booked appointments are preserved.
+		} finally { await services.updateOne({ _id: serviceId }, { $set: { availabilityDates: [] } }); }
+	});
+
 });

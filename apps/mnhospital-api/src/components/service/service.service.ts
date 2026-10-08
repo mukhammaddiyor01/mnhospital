@@ -1,3 +1,4 @@
+import { validateServiceAvailability } from './service-availability.policy';
 import { BadRequestException, HttpException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { AuthService } from '../auth/auth.service';
@@ -59,6 +60,7 @@ export class ServiceService {
 				throw new BadRequestException(Message.SERVICE_TYPE_LIMIT_REACHED);
 			}
 
+			validateServiceAvailability(input);
 			const result = await this.serviceModel.create(input);
 			try {
 				await this.doctorService.doctorStatisticEditor({
@@ -199,6 +201,7 @@ export class ServiceService {
 
 		const currentService = await this.serviceModel.findOne(search).exec();
 		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		validateServiceAvailability({ availabilityDates: input.availabilityDates !== undefined ? input.availabilityDates : currentService.availabilityDates, openedAt: input.openedAt ?? currentService.openedAt, closedAt: input.closedAt ?? currentService.closedAt });
 		if (input.serviceType !== undefined || input.serviceStatus === ServiceStatus.ACTIVE) {
 			const doctor = await this.doctorService.getDoctorByAdmin(currentService.memberId);
 			assertSpecialtyServiceType(doctor.docSpecialty, input.serviceType ?? currentService.serviceType);

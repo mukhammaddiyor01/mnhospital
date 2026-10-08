@@ -1,3 +1,4 @@
+import { validateServiceAvailability } from '../service/service-availability.policy';
 import { CommentStatus } from '../comment/enums/comment.enum';
 import { BadRequestException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -242,6 +243,7 @@ export class AdminService {
 
 		const currentService = await this.serviceModel.findOne(search).exec();
 		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		validateServiceAvailability({ availabilityDates: input.availabilityDates !== undefined ? input.availabilityDates : currentService.availabilityDates, openedAt: input.openedAt ?? currentService.openedAt, closedAt: input.closedAt ?? currentService.closedAt });
 		if (input.serviceType !== undefined || input.serviceStatus === ServiceStatus.ACTIVE) {
 			const doctor = await this.doctorService.getDoctorByAdmin(currentService.memberId);
 			assertSpecialtyServiceType(doctor.docSpecialty, input.serviceType ?? currentService.serviceType);
