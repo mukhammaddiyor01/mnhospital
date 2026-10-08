@@ -32,6 +32,9 @@ export class Doctor {
 	@Field(() => Int)
 	docLikes: number;
 
+	@Field(() => Int, { nullable: true })
+	docViews?: number;
+
 	@Field(() => Int)
 	docFollowers: number;
 

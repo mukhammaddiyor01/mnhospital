@@ -332,6 +332,11 @@ export class DoctorService {
 	public async getDoctor(targetId: ObjectId, memberId?: ObjectId): Promise<Doctor> {
 		const doctor = await this.findPublicDoctor(targetId, memberId);
 		if (!doctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		const viewed = await this.doctorModel.findOneAndUpdate({ _id: targetId,
+			memberStatus: { $in: [MemberStatus.ACTIVE, MemberStatus.BLOCK] }, deletedAt: { $exists: false } },
+			{ $inc: { docViews: 1 } }, { new: true }).select('docViews').lean().exec();
+		if (!viewed) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		doctor.docViews = viewed.docViews;
 		return doctor;
 	}
 

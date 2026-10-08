@@ -36,6 +36,7 @@ const DoctorSchema = new Schema(
 			default: 0,
 			min: 0,
 		},
+		docViews: { type: Number, default: 0, min: 0 },
 		docLikes: {
 			type: Number,
 			default: 0,
