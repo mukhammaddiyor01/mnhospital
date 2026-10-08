@@ -11,8 +11,8 @@ NestJS backend ishlayotgan serverning `.env` fayliga quyidagilarni qo‘shing:
 
 ```env
 EXIMBAY_API_BASE=https://api-test.eximbay.com
-EXIMBAY_API_KEY=test_1849705C642C217E0B2D
-EXIMBAY_MID=1849705C64
+EXIMBAY_API_KEY= # Eximbay kabinetidagi shaxsiy test kalitini faqat .env ga kiriting
+EXIMBAY_MID= # Eximbay test merchant ID
 BASE_URL=http://localhost:2001
 CLIENT_URL=http://localhost:2002
 ```

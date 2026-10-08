@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+# Exact, artificial test passwords only. Real provider credentials are never allowed.
+[[allowlists]]
+description = "Artificial authentication regression fixtures"
+regexTarget = "secret"
+regexes = ['^Fixture(?:New)?Pass123$']
