@@ -1,4 +1,4 @@
-import { UnauthorizedException, UseGuards } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { Args, Context, Mutation, Resolver } from '@nestjs/graphql';
 import { Roles } from './decorators/roles.decorator';
 import { AuthMember } from './decorators/authMember.decorator';
@@ -13,6 +13,7 @@ import {
 	checkSessionRequest,
 	clearRefreshCookie,
 	readRefreshCookie,
+	sessionRole,
 	writeRefreshCookie,
 } from './session-cookie';
 
@@ -40,7 +41,7 @@ export class AuthResolver {
 	): Promise<AuthSession> {
 		checkSessionRequest(context);
 		const session = await this.authService.changeAccountPassword(actor._id, actor.memberType, input);
-		writeRefreshCookie(context.res, session.refreshToken, session.expiresAt);
+		writeRefreshCookie(context.res, session.refreshToken, session.expiresAt, context.req);
 		return { accessToken: session.accessToken };
 	}
 
@@ -48,11 +49,17 @@ export class AuthResolver {
 	public async refreshSession(@Context() context: SessionContext): Promise<AuthSession> {
 		checkSessionRequest(context);
 		try {
-			const session = await this.authService.refreshSession(readRefreshCookie(context.req));
-			writeRefreshCookie(context.res, session.refreshToken, session.expiresAt);
+			const authorization = context.req.headers.authorization;
+			const expected =
+				sessionRole(context.req) && typeof authorization === 'string' && /^Bearer [^\s]+$/.test(authorization)
+					? authorization.slice(7)
+					: undefined;
+			if (sessionRole(context.req) && !expected) throw new ForbiddenException('Session access token is required');
+			const session = await this.authService.refreshSession(readRefreshCookie(context.req), expected);
+			writeRefreshCookie(context.res, session.refreshToken, session.expiresAt, context.req);
 			return { accessToken: session.accessToken };
 		} catch (error) {
-			if (error instanceof UnauthorizedException) clearRefreshCookie(context.res);
+			if (error instanceof UnauthorizedException) clearRefreshCookie(context.res, context.req);
 			throw error;
 		}
 	}
@@ -60,11 +67,20 @@ export class AuthResolver {
 	@Mutation(() => Boolean)
 	public async logoutSession(@Context() context: SessionContext): Promise<boolean> {
 		checkSessionRequest(context);
-		await this.authService.logoutCredential(readRefreshCookie(context.req));
+		const credential = readRefreshCookie(context.req);
 		const authorization = context.req.headers.authorization;
-		if (typeof authorization === 'string' && /^Bearer [^\s]+$/.test(authorization))
-			await this.authService.logoutAccessToken(authorization.slice(7));
-		clearRefreshCookie(context.res);
+		if (sessionRole(context.req)) {
+			// A stale same-role tab must not revoke/clear the replacement account's cookie.
+			if (typeof authorization !== 'string' || !/^Bearer [^\s]+$/.test(authorization))
+				throw new ForbiddenException('Session access token is required');
+			const sid = await this.authService.logoutAccessToken(authorization.slice(7));
+			if (sid && credential.slice(0, 24) === sid) clearRefreshCookie(context.res, context.req);
+		} else {
+			await this.authService.logoutCredential(credential);
+			if (typeof authorization === 'string' && /^Bearer [^\s]+$/.test(authorization))
+				await this.authService.logoutAccessToken(authorization.slice(7));
+			clearRefreshCookie(context.res, context.req);
+		}
 		return true;
 	}
 }

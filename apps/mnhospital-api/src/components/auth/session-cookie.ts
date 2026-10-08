@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { CookieOptions, Request, Response } from 'express';
+import { MemberType } from '../member/enums/member.enum';
 
 export const REFRESH_COOKIE = 'mn-hospital-refresh';
 export interface SessionContext {
@@ -7,7 +8,21 @@ export interface SessionContext {
 	res: Response;
 }
 
+// This header selects a cookie only. Verified JWT/session ownership still grants access.
+export function sessionRole(req: Request): MemberType | undefined {
+	const role = req.headers['x-mn-session-role'];
+	if (role === undefined) return undefined; // Existing API clients retain the legacy cookie.
+	if (typeof role !== 'string' || !['PATIENT', 'DOCTOR', 'RECEPTIONIST', 'ADMIN'].includes(role))
+		throw new ForbiddenException('Invalid session role selector');
+	return role as MemberType;
+}
+function refreshCookieName(req?: Request): string {
+	const role = req && sessionRole(req);
+	return role ? `${REFRESH_COOKIE}-${role.toLowerCase()}` : REFRESH_COOKIE;
+}
+
 export function checkSessionRequest({ req }: SessionContext): void {
+	sessionRole(req);
 	const allowed = (
 		process.env.AUTH_ALLOWED_ORIGINS ??
 		process.env.CLIENT_URL ??
@@ -30,13 +45,14 @@ export function checkSessionRequest({ req }: SessionContext): void {
 	}
 }
 export function readRefreshCookie(req: Request): string {
+	const name = refreshCookieName(req);
 	const values = (req.headers.cookie ?? '')
 		.split(';')
 		.map((part) => part.trim())
-		.filter((part) => part.startsWith(`${REFRESH_COOKIE}=`));
+		.filter((part) => part.startsWith(`${name}=`));
 	if (values.length !== 1) return '';
 	try {
-		return decodeURIComponent(values[0].slice(REFRESH_COOKIE.length + 1));
+		return decodeURIComponent(values[0].slice(name.length + 1));
 	} catch {
 		return '';
 	}
@@ -50,9 +66,9 @@ export function cookieOptions(): CookieOptions {
 		path: '/graphql',
 	};
 }
-export function writeRefreshCookie(res: Response, token: string, expiresAt: Date): void {
-	res.cookie(REFRESH_COOKIE, token, { ...cookieOptions(), expires: expiresAt });
+export function writeRefreshCookie(res: Response, token: string, expiresAt: Date, req?: Request): void {
+	res.cookie(refreshCookieName(req), token, { ...cookieOptions(), expires: expiresAt });
 }
-export function clearRefreshCookie(res: Response): void {
-	res.clearCookie(REFRESH_COOKIE, cookieOptions());
+export function clearRefreshCookie(res: Response, req?: Request): void {
+	res.clearCookie(refreshCookieName(req), cookieOptions());
 }

@@ -1,8 +1,14 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor, ForbiddenException } from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { mergeMap } from 'rxjs/operators';
 import { AuthService } from './auth.service';
-import { checkSessionRequest, readRefreshCookie, SessionContext, writeRefreshCookie } from './session-cookie';
+import {
+	checkSessionRequest,
+	readRefreshCookie,
+	sessionRole,
+	SessionContext,
+	writeRefreshCookie,
+} from './session-cookie';
 
 @Injectable()
 export class SessionLoginInterceptor implements NestInterceptor {
@@ -12,9 +18,12 @@ export class SessionLoginInterceptor implements NestInterceptor {
 		checkSessionRequest(http);
 		return next.handle().pipe(
 			mergeMap(async (profile) => {
+				const selectedRole = sessionRole(http.req);
+				if (selectedRole && selectedRole !== profile.memberType)
+					throw new ForbiddenException('Session role does not match login');
 				await this.authService.logoutCredential(readRefreshCookie(http.req));
 				const session = await this.authService.startSession(profile);
-				writeRefreshCookie(http.res, session.refreshToken, session.expiresAt);
+				writeRefreshCookie(http.res, session.refreshToken, session.expiresAt, http.req);
 				profile.accessToken = session.accessToken;
 				http.req.body.authMember = {
 					_id: profile._id,
@@ -39,7 +48,7 @@ export class SessionAccessInterceptor implements NestInterceptor {
 			mergeMap(async (profile) => {
 				if (passwordChanged) {
 					const session = await this.authService.startSession(profile);
-					writeRefreshCookie(http.res, session.refreshToken, session.expiresAt);
+					writeRefreshCookie(http.res, session.refreshToken, session.expiresAt, http.req);
 					profile.accessToken = session.accessToken;
 				} else profile.accessToken = await this.authService.createToken(profile, http.req.body.authMember.sid);
 				return profile;

@@ -1,5 +1,6 @@
 import {
 	BadRequestException,
+	ForbiddenException,
 	HttpException,
 	Injectable,
 	InternalServerErrorException,
@@ -339,7 +340,17 @@ export class AuthService {
 		return { ...claims, _id: profile._id };
 	}
 
-	public async refreshSession(token: string) {
+	public async refreshSession(token: string, expectedAccessToken?: string) {
+		let expected: T | undefined;
+		if (expectedAccessToken) {
+			try {
+				expected = await this.jwtService.verifyAsync(expectedAccessToken, { ignoreExpiration: true });
+			} catch {
+				throw new ForbiddenException('Session was replaced');
+			}
+			if (expected.tokenType !== 'access' || expected.sid !== token.slice(0, 24))
+				throw new ForbiddenException('Session was replaced');
+		}
 		const credential = this.parseCredential(token);
 		const session = await this.database(() =>
 			this.sessions
@@ -349,6 +360,8 @@ export class AuthService {
 				.exec(),
 		);
 		if (!session) throw new UnauthorizedException('Invalid refresh session');
+		if (expected && (String(session.ownerId) !== expected._id || session.ownerType !== expected.memberType))
+			throw new ForbiddenException('Session was replaced');
 		if (!this.equalHash(session.tokenHash, credential.hash)) {
 			if ((session.usedTokenHashes ?? []).includes(credential.hash)) await this.revokeSession(String(session._id));
 			throw new UnauthorizedException('Invalid refresh session');
@@ -399,7 +412,7 @@ export class AuthService {
 		);
 		if (session) await this.revokeSession(String(session._id));
 	}
-	public async logoutAccessToken(token: string): Promise<void> {
+	public async logoutAccessToken(token: string): Promise<string | undefined> {
 		let claims: T;
 		try {
 			claims = await this.jwtService.verifyAsync(token, { ignoreExpiration: true });
@@ -424,6 +437,7 @@ export class AuthService {
 				.exec(),
 		);
 		if (session) await this.revokeSession(String(session._id));
+		return claims.sid;
 	}
 
 	public async revokeOwnerSessions(id: Types.ObjectId, role: MemberType): Promise<void> {

@@ -48,3 +48,5 @@ This document records the conventions used while completing the MN Hospital API.
 - Read docs/AUTH_SESSIONS.md for cookie/origin configuration, rotation/replay rules, deployment behavior and regression verification.
 
 - Self-service account edits use the verified role/profile ID and allow only stored personal fields. Doctor specialty and room, roles, statuses, derived counters and clinical assignments remain under their existing management flows. All roles may upload their own avatar and change their password after verifying the current password; a password change revokes previous sessions.
+
+- Browser parallel roles use the existing role collections and auth sessions: per-tab access JWT, four role-scoped HttpOnly refresh cookies, unchanged verified JWT/role/owner guards. The header selects a cookie and never grants privileges. One active account per role per browser profile; same-role replacement must not affect the other three roles. Read docs/ROLE_SESSIONS.md.

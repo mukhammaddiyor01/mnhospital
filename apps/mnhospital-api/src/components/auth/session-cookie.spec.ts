@@ -1,4 +1,10 @@
-import { checkSessionRequest, cookieOptions, readRefreshCookie } from './session-cookie';
+import {
+	checkSessionRequest,
+	cookieOptions,
+	readRefreshCookie,
+	writeRefreshCookie,
+	clearRefreshCookie,
+} from './session-cookie';
 describe('Session cookie/origin configuration', () => {
 	const original = {
 		node: process.env.NODE_ENV,
@@ -43,5 +49,38 @@ describe('Session cookie/origin configuration', () => {
 			'',
 		);
 		expect(readRefreshCookie({ headers: { cookie: 'mn-hospital-refresh=%ZZ' } } as any)).toBe('');
+	});
+	it('selects only the requested role cookie from a shared browser cookie jar', () => {
+		const cookie =
+			'mn-hospital-refresh=legacy; ' +
+			['patient', 'doctor', 'receptionist', 'admin']
+				.map((role) => `mn-hospital-refresh-${role}=${role}-secret`)
+				.join('; ');
+		for (const role of ['PATIENT', 'DOCTOR', 'RECEPTIONIST', 'ADMIN']) {
+			const req = { headers: { cookie, 'x-mn-session-role': role } } as any;
+			expect(readRefreshCookie(req)).toBe(`${role.toLowerCase()}-secret`);
+			const res = { cookie: jest.fn(), clearCookie: jest.fn() } as any;
+			writeRefreshCookie(res, 'rotated', new Date(), req);
+			clearRefreshCookie(res, req);
+			expect(res.cookie.mock.calls[0][0]).toBe(`mn-hospital-refresh-${role.toLowerCase()}`);
+			expect(res.cookie.mock.calls[0][2].httpOnly).toBe(true);
+			expect(res.clearCookie.mock.calls[0][0]).toBe(`mn-hospital-refresh-${role.toLowerCase()}`);
+		}
+		expect(readRefreshCookie({ headers: { cookie } } as any)).toBe('legacy');
+		expect(
+			readRefreshCookie({ headers: { cookie: 'mn-hospital-refresh=legacy', 'x-mn-session-role': 'PATIENT' } } as any),
+		).toBe('');
+	});
+	it('rejects arbitrary cookie selectors and duplicate selected cookies', () => {
+		for (const role of ['admin', 'OTHER', ['PATIENT'], '../admin', ''])
+			expect(() => readRefreshCookie({ headers: { 'x-mn-session-role': role } } as any)).toThrow();
+		expect(
+			readRefreshCookie({
+				headers: {
+					'x-mn-session-role': 'PATIENT',
+					cookie: 'mn-hospital-refresh-patient=a; mn-hospital-refresh-patient=b',
+				},
+			} as any),
+		).toBe('');
 	});
 });

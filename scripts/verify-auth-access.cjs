@@ -152,13 +152,14 @@ async function main() {
 		});
 		actors['PATIENT' + n].patientId = profile._id;
 	}
-	async function gql(query, variables, actor, cookie, requestOrigin = origin) {
+	async function gql(query, variables, actor, cookie, requestOrigin = origin, scope) {
 		const req = request(app.getHttpServer())
 			.post('/graphql')
 			.set('Origin', requestOrigin)
 			.set('Apollo-Require-Preflight', 'true');
 		if (actor?.token) req.set('Authorization', 'Bearer ' + actor.token);
 		if (cookie) req.set('Cookie', cookie);
+		if (scope) req.set('X-MN-Session-Role', scope);
 		return req.send({ query, variables });
 	}
 	async function login(actor) {
@@ -177,6 +178,51 @@ async function main() {
 		);
 	}
 	for (const actor of Object.values(actors)) await login(actor);
+	// Four role cookies coexist in one browser; tab JWTs stay independent.
+	const roleCookies = new Map();
+	const scoped = {};
+	const jar = () => [...roleCookies.values()].join('; ');
+	const updateJar = res => {
+		for (const raw of res.headers['set-cookie'] ?? []) {
+			const value = raw.split(';')[0];
+			roleCookies.set(value.split('=')[0], value);
+		}
+	};
+	for (const role of ['PATIENT', 'DOCTOR', 'RECEPTIONIST', 'ADMIN']) {
+		const actor = { ...actors[role + 1] };
+		const res = await gql(`mutation($input:${actor.type}!){${actor.field}(input:$input){accessToken}}`, { input: actor.input }, null, jar(), origin, role);
+		checked(!res.body.errors, role + ' isolated login');
+		actor.token = res.body.data[actor.field].accessToken;
+		updateJar(res);
+		scoped[role] = actor;
+		checked(roleCookies.has('mn-hospital-refresh-' + role.toLowerCase()), role + ' named HttpOnly cookie');
+		for (const previous of Object.values(scoped))
+			checked(!(await gql('{getMyPreferences{theme}}', null, previous, jar(), origin, previous.role)).body.errors, previous.role + ' remains active after another role login');
+	}
+	for (const role of Object.keys(scoped)) {
+		const res = await gql('mutation{refreshSession{accessToken}}', null, scoped[role], jar(), origin, role);
+		checked(!res.body.errors, role + ' shared-jar refresh');
+		scoped[role].token = res.body.data.refreshSession.accessToken;
+		updateJar(res);
+	}
+	const logout = await gql('mutation{logoutSession}', null, scoped.PATIENT, jar(), origin, 'PATIENT');
+	checked(logout.body.data?.logoutSession, 'patient isolated logout');
+	checked(logout.headers['set-cookie']?.length === 1 && logout.headers['set-cookie'][0].startsWith('mn-hospital-refresh-patient='), 'logout clears only selected role cookie');
+	checked((await gql('{getMyPreferences{theme}}', null, scoped.PATIENT)).body.errors?.[0]?.code === 'UNAUTHENTICATED', 'patient logout revokes its token');
+	for (const role of ['DOCTOR', 'RECEPTIONIST', 'ADMIN'])
+		checked(!(await gql('{getMyPreferences{theme}}', null, scoped[role], jar(), origin, role)).body.errors, role + ' survives patient logout');
+	checked((await gql('{getMyMemberProfile{memberPhone}}', null, scoped.DOCTOR, jar(), origin, 'PATIENT')).body.errors?.[0]?.code === 'FORBIDDEN', 'cookie selector cannot grant another role privileges');
+	const nextAdmin = { ...actors.ADMIN2 };
+	const replacement = await gql(`mutation($input:${nextAdmin.type}!){${nextAdmin.field}(input:$input){accessToken}}`, { input: nextAdmin.input }, null, jar(), origin, 'ADMIN');
+	checked(!replacement.body.errors, 'same-role replacement login');
+	nextAdmin.token = replacement.body.data[nextAdmin.field].accessToken;
+	updateJar(replacement);
+	const staleRefresh = await gql('mutation{refreshSession{accessToken}}', null, scoped.ADMIN, jar(), origin, 'ADMIN');
+	checked(staleRefresh.body.errors?.[0]?.code === 'FORBIDDEN' && !staleRefresh.headers['set-cookie'], 'stale tab refresh cannot rotate or clear replacement session');
+	const staleLogout = await gql('mutation{logoutSession}', null, scoped.ADMIN, jar(), origin, 'ADMIN');
+	checked(staleLogout.body.data?.logoutSession && !staleLogout.headers['set-cookie'], 'stale tab logout preserves replacement cookie');
+	const nextRefresh = await gql('mutation{refreshSession{accessToken}}', null, nextAdmin, jar(), origin, 'ADMIN');
+	checked(!nextRefresh.body.errors, 'replacement account survives stale-tab refresh/logout');
 	const ownContact = await gql('{getMyMemberProfile{memberPhone}}', null, actors.PATIENT1);
 	checked(
 		ownContact.body.data?.getMyMemberProfile.memberPhone === '+82100000011',
