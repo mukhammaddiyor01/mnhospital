@@ -18,13 +18,15 @@ describe('Admin doctor profile editing', () => {
 		memberStatus: { $in: [MemberStatus.ACTIVE, MemberStatus.BLOCK] },
 		deletedAt: { $exists: false },
 	};
-	let model: { findOneAndUpdate: jest.Mock };
+	let model: { findOneAndUpdate: jest.Mock; findOne: jest.Mock };
+	let serviceModel: { countDocuments: jest.Mock };
 	let auth: { createToken: jest.Mock; revokeOwnerSessions: jest.Mock };
 	let service: DoctorService;
 	beforeEach(() => {
-		model = { findOneAndUpdate: jest.fn().mockReturnValue({ exec: async () => ({ _id: id }) }) };
+		model = { findOneAndUpdate: jest.fn().mockReturnValue({ exec: async () => ({ _id: id }) }), findOne: jest.fn().mockReturnValue({ exec: async () => ({ _id: id, docSpecialty: DoctorSpecialty.CARDIOLOGIST }) }) };
+		serviceModel = { countDocuments: jest.fn().mockReturnValue({ exec: async () => 0 }) };
 		auth = { createToken: jest.fn(), revokeOwnerSessions: jest.fn().mockResolvedValue(undefined) };
-		service = new DoctorService(model as any, null, null, null, null, null, auth as any, null, null);
+		service = new DoctorService(model as any, null, null, serviceModel as any, null, null, auth as any, null, null);
 	});
 
 	it('restricts the mutation to verified admin tokens', async () => {
@@ -88,6 +90,18 @@ describe('Admin doctor profile editing', () => {
 			{ $set: { docImage: '', docDesc: '' }, $unset: { docMail: 1 } },
 			{ new: true, runValidators: true },
 		);
+	});
+
+	it('rejects a specialty change that would invalidate active services', async () => {
+		serviceModel.countDocuments.mockReturnValue({ exec: async () => 1 });
+		await expect(service.updateDoctorByAdmin(id, { _id: id, docSpecialty: DoctorSpecialty.UROLOGIST })).rejects.toThrow('incompatible services');
+		expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+	});
+
+	it('allows a new specialty after incompatible services have been deactivated', async () => {
+		await service.updateDoctorByAdmin(id, { _id: id, docSpecialty: DoctorSpecialty.UROLOGIST });
+		expect(serviceModel.countDocuments).toHaveBeenCalledWith(expect.objectContaining({ memberId: id, serviceType: { $nin: expect.arrayContaining(['UROLOGY']) } }));
+		expect(model.findOneAndUpdate).toHaveBeenCalled();
 	});
 
 	it('allows restoring a blocked account without restoring archived accounts', async () => {

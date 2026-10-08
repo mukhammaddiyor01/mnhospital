@@ -12,6 +12,8 @@ This document records the conventions used while completing the MN Hospital API.
 
 ## Hospital-specific boundaries
 
+- Doctor specialties are distinct from service categories. `doctor-specialty.policy.ts` maps all 13 specialties to allowed service types: five generic categories plus the matching clinical direction. Create, type changes and reactivation check the stored doctor's specialty; admin edits use the same policy. A specialty change cannot invalidate ACTIVE/RESERVED/STARTED services. Existing enum values and historical records remain unchanged.
+
 - Public signup creates a patient account; staff roles are managed through their existing administrative flows.
 - Notification records are private to `receiverId` and `receiverType`. Public notices are a separate model and only published notices are visible without authentication.
 - Notification creation is internal to the API. Appointment, booking, payment, reception task, report, and direct message changes emit the events recorded in `docs/NOTIFICATION_EVENTS.md`; the API does not expose a public create mutation.

@@ -21,6 +21,7 @@ import { HospitalRoom } from '../appointment/dto/room';
 import { RoomStatus } from '../../libs/enums/appointment.enum';
 import { AppointmentStatus } from '../../libs/enums/appointment.enum';
 import { DoctorDashboardStats } from './dto/doctor-dashboard';
+import { serviceTypesForSpecialty } from './doctor-specialty.policy';
 import { DoctorProfileUpdateInput } from './dto/doctor-profile.input';
 import { DoctorAdminUpdateInput } from './dto/doctor-admin.input';
 
@@ -98,6 +99,17 @@ export class DoctorService {
 	public async updateDoctorByAdmin(doctorId: ObjectId, input: DoctorAdminUpdateInput): Promise<Doctor> {
 		if (input.memberStatus !== undefined && ![MemberStatus.ACTIVE, MemberStatus.BLOCK].includes(input.memberStatus)) {
 			throw new BadRequestException('Use the separate remove action to archive a doctor');
+		}
+		if (input.docSpecialty !== undefined) {
+			const currentDoctor = await this.getDoctorByAdmin(doctorId);
+			if (input.docSpecialty !== currentDoctor.docSpecialty) {
+				const incompatible = await this.serviceModel.countDocuments({
+					memberId: doctorId,
+					serviceStatus: { $in: [ServiceStatus.ACTIVE, ServiceStatus.RESERVED, ServiceStatus.STARTED] },
+					serviceType: { $nin: serviceTypesForSpecialty(input.docSpecialty) },
+				}).exec();
+				if (incompatible) throw new BadRequestException('Change or deactivate incompatible services before changing the doctor specialty');
+			}
 		}
 		const updates: Record<string, unknown> = {};
 		for (const key of [

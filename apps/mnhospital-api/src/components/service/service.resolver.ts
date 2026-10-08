@@ -13,10 +13,18 @@ import { WithoutGuard } from '../auth/guards/without.guard';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { ServiceUpdate } from './dto/service.update';
+import { ServiceType } from './enums/service.enum';
 
 @Resolver()
 export class ServiceResolver {
 	constructor(private readonly serviceService: ServiceService) {}
+
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Query(() => [ServiceType])
+	public async getMyDoctorServiceTypes(@AuthMember('_id') doctorId: ObjectId): Promise<ServiceType[]> {
+		return this.serviceService.getDoctorServiceTypes(doctorId);
+	}
 
 	@Roles(MemberType.DOCTOR)
 	@UseGuards(RolesGuard)

@@ -13,6 +13,7 @@ import { ServiceSearch, ServicesInquiry } from '../service/dto/service.input';
 import { ServiceUpdate } from '../service/dto/service.update';
 import { ServiceStatus, MAX_SERVICES_PER_TYPE } from '../service/enums/service.enum';
 import { DoctorService } from '../doctor/doctor.service';
+import { assertSpecialtyServiceType } from '../doctor/doctor-specialty.policy';
 import { AuthService } from '../auth/auth.service';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
@@ -241,6 +242,10 @@ export class AdminService {
 
 		const currentService = await this.serviceModel.findOne(search).exec();
 		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		if (input.serviceType !== undefined || input.serviceStatus === ServiceStatus.ACTIVE) {
+			const doctor = await this.doctorService.getDoctorByAdmin(currentService.memberId);
+			assertSpecialtyServiceType(doctor.docSpecialty, input.serviceType ?? currentService.serviceType);
+		}
 
 		if (
 			serviceStatus !== ServiceStatus.DELETED &&

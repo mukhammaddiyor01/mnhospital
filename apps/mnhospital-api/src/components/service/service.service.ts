@@ -9,7 +9,8 @@ import { MemberService } from '../member/member.service';
 import { DoctorServicesInquiry, OrdinaryInquiry, ServiceInput, ServicesInquiry } from './dto/service.input';
 import { Direction, Message } from '../../libs/enums/common.enum';
 import { StatisticModifier, T } from '../../libs/types/common';
-import { MAX_SERVICES_PER_TYPE, ServiceStatus } from './enums/service.enum';
+import { MAX_SERVICES_PER_TYPE, ServiceStatus, ServiceType } from './enums/service.enum';
+import { assertSpecialtyServiceType, serviceTypesForSpecialty } from '../doctor/doctor-specialty.policy';
 import { ViewGroup } from '../view/enums/view.enum';
 import { ServiceUpdate } from './dto/service.update';
 import { DoctorService } from '../doctor/doctor.service';
@@ -30,6 +31,11 @@ export class ServiceService {
 		private likeService: LikeService,
 	) {}
 
+	public async getDoctorServiceTypes(doctorId: ObjectId): Promise<ServiceType[]> {
+		const doctor = await this.doctorService.getDoctorByAdmin(doctorId);
+		return serviceTypesForSpecialty(doctor.docSpecialty);
+	}
+
 	public async createService(input: ServiceInput): Promise<Service> {
 		try {
 			if (!input.memberId) {
@@ -38,6 +44,8 @@ export class ServiceService {
 			if (input.serviceStatus === ServiceStatus.DELETED) {
 				throw new BadRequestException('A new service cannot be created as deleted');
 			}
+			const doctor = await this.doctorService.getDoctorByAdmin(input.memberId);
+			assertSpecialtyServiceType(doctor.docSpecialty, input.serviceType);
 
 			const sameTypeServiceCount = await this.serviceModel
 				.countDocuments({
@@ -191,6 +199,10 @@ export class ServiceService {
 
 		const currentService = await this.serviceModel.findOne(search).exec();
 		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		if (input.serviceType !== undefined || input.serviceStatus === ServiceStatus.ACTIVE) {
+			const doctor = await this.doctorService.getDoctorByAdmin(currentService.memberId);
+			assertSpecialtyServiceType(doctor.docSpecialty, input.serviceType ?? currentService.serviceType);
+		}
 
 		if (input.serviceType && input.serviceType !== currentService.serviceType) {
 			const sameTypeServiceCount = await this.serviceModel
