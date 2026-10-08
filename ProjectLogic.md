@@ -44,3 +44,5 @@ This document records the conventions used while completing the MN Hospital API.
 - Authenticated guards recheck session and active profile state. BLOCK/DELETE and password changes invalidate old profile session versions; reactivation cannot restore those credentials.
 - Preserve the current session during contact edits. Only password changes replace the browser session after revoking old sessions. Staff creation must not authenticate the administrator as that staff member.
 - Read docs/AUTH_SESSIONS.md for cookie/origin configuration, rotation/replay rules, deployment behavior and regression verification.
+
+- Self-service account edits use the verified role/profile ID and allow only stored personal fields. Doctor specialty and room, roles, statuses, derived counters and clinical assignments remain under their existing management flows. All roles may upload their own avatar and change their password after verifying the current password; a password change revokes previous sessions.

@@ -35,11 +35,11 @@ const AdminSchema = new Schema(
 		},
 		adminImage: {
 			type: String,
-			required: true,
+			default: '',
 		},
 		adminDesc: {
 			type: String,
-			required: true,
+			default: '',
 		},
 	},
 	{ timestamps: true, collection: 'admin' },

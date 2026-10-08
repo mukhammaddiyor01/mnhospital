@@ -10,6 +10,9 @@ describe('Workspace image upload', () => {
 		expect(() => checkUploadTarget('advertisement', MemberType.DOCTOR)).toThrow();
 		expect(() => checkUploadTarget('service', MemberType.PATIENT)).toThrow();
 		expect(() => checkUploadTarget('service', MemberType.DOCTOR)).not.toThrow();
+		expect(() => checkUploadTarget('admin', MemberType.ADMIN)).not.toThrow();
+		for (const role of [MemberType.PATIENT, MemberType.DOCTOR, MemberType.RECEPTIONIST])
+			expect(() => checkUploadTarget('admin', role)).toThrow();
 	});
 	it('awaits uploads, writes images and removes oversized files', async () => {
 		const before = process.cwd();

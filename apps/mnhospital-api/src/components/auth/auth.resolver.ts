@@ -1,5 +1,11 @@
-import { UnauthorizedException } from '@nestjs/common';
-import { Context, Mutation, Resolver } from '@nestjs/graphql';
+import { UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Args, Context, Mutation, Resolver } from '@nestjs/graphql';
+import { Roles } from './decorators/roles.decorator';
+import { AuthMember } from './decorators/authMember.decorator';
+import { RolesGuard } from './guards/roles.guard';
+import { MemberType } from '../member/enums/member.enum';
+import { T } from '../../libs/types/common';
+import { AccountPasswordInput, AccountProfileInput } from './dto/account-profile.input';
 import { AuthService } from './auth.service';
 import { AuthSession } from './dto/auth-session';
 import {
@@ -13,6 +19,30 @@ import {
 @Resolver()
 export class AuthResolver {
 	constructor(private readonly authService: AuthService) {}
+
+	@Roles(MemberType.PATIENT, MemberType.DOCTOR, MemberType.RECEPTIONIST, MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => AuthSession)
+	public async updateMyAccountProfile(
+		@Args('input') input: AccountProfileInput,
+		@AuthMember() actor: T,
+	): Promise<AuthSession> {
+		return { accessToken: await this.authService.updateAccountProfile(actor._id, actor.memberType, input, actor.sid) };
+	}
+
+	@Roles(MemberType.PATIENT, MemberType.DOCTOR, MemberType.RECEPTIONIST, MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => AuthSession)
+	public async changeMyAccountPassword(
+		@Args('input') input: AccountPasswordInput,
+		@AuthMember() actor: T,
+		@Context() context: SessionContext,
+	): Promise<AuthSession> {
+		checkSessionRequest(context);
+		const session = await this.authService.changeAccountPassword(actor._id, actor.memberType, input);
+		writeRefreshCookie(context.res, session.refreshToken, session.expiresAt);
+		return { accessToken: session.accessToken };
+	}
 
 	@Mutation(() => AuthSession)
 	public async refreshSession(@Context() context: SessionContext): Promise<AuthSession> {

@@ -136,6 +136,8 @@ const policies: [MemberType[], string[]][] = [
 		Object.values(MemberType),
 		[
 			'getMyPreferences',
+			'updateMyAccountProfile',
+			'changeMyAccountPassword',
 			'updateMyPreferences',
 			'getMyNotifications',
 			'getMyNotification',

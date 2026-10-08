@@ -12,6 +12,7 @@ export function checkUploadTarget(target: string, role: MemberType): void {
 		member: [MemberType.PATIENT, MemberType.ADMIN],
 		doctor: [MemberType.DOCTOR, MemberType.ADMIN],
 		receptionist: [MemberType.RECEPTIONIST, MemberType.ADMIN],
+		admin: [MemberType.ADMIN],
 		service: [MemberType.DOCTOR, MemberType.ADMIN],
 		article: [MemberType.DOCTOR, MemberType.ADMIN],
 		department: [MemberType.DOCTOR, MemberType.ADMIN],

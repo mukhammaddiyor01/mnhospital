@@ -1,4 +1,10 @@
-import { HttpException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {
+	BadRequestException,
+	HttpException,
+	Injectable,
+	InternalServerErrorException,
+	UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Model, Types } from 'mongoose';
@@ -7,6 +13,7 @@ import * as bcrypt from 'bcryptjs';
 import { Subject } from 'rxjs';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
 import { T } from '../../libs/types/common';
+import { AccountPasswordInput, AccountProfileInput } from './dto/account-profile.input';
 
 export interface SessionRevocation {
 	sessionId?: string;
@@ -54,6 +61,151 @@ export class AuthService {
 	}
 	public async comparePassword(password: string, hash: string): Promise<boolean> {
 		return bcrypt.compare(password, hash);
+	}
+
+	private accountConfig(role: MemberType) {
+		const configs = {
+			[MemberType.PATIENT]: {
+				model: this.members,
+				password: 'memberPassword',
+				fields: {
+					nickname: 'memberNick',
+					fullName: 'memberFullName',
+					phone: 'memberPhone',
+					email: 'memberMail',
+					image: 'memberImage',
+					description: 'memberDesc',
+				},
+			},
+			[MemberType.DOCTOR]: {
+				model: this.doctors,
+				password: 'docPassword',
+				fields: {
+					nickname: 'docNick',
+					fullName: 'docFullName',
+					phone: 'docPhone',
+					email: 'docMail',
+					image: 'docImage',
+					address: 'docAddress',
+					description: 'docDesc',
+					experience: 'docExperience',
+				},
+			},
+			[MemberType.RECEPTIONIST]: {
+				model: this.receptionists,
+				password: 'receptionistPassword',
+				fields: {
+					nickname: 'receptionistNick',
+					fullName: 'receptionistFullName',
+					phone: 'receptionistPhone',
+					email: 'receptionistMail',
+					image: 'receptionistImage',
+					address: 'receptionistAddress',
+					description: 'receptionistDesc',
+				},
+			},
+			[MemberType.ADMIN]: {
+				model: this.admins,
+				password: 'adminPassword',
+				fields: {
+					nickname: 'adminNick',
+					phone: 'adminPhone',
+					email: 'adminMail',
+					image: 'adminImage',
+					description: 'adminDesc',
+				},
+			},
+		};
+		if (!configs[role]) throw new UnauthorizedException('Invalid session identity');
+		return configs[role];
+	}
+
+	private accountWriteFilter(profile: T) {
+		return {
+			_id: profile._id,
+			memberType: profile.memberType,
+			deletedAt: { $exists: false },
+			...(profile.memberType === MemberType.ADMIN
+				? { $or: [{ memberStatus: MemberStatus.ACTIVE }, { memberStatus: { $exists: false } }] }
+				: { memberStatus: MemberStatus.ACTIVE }),
+			sessionVersion: profile.sessionVersion ?? { $exists: false },
+		};
+	}
+
+	public async updateAccountProfile(
+		id: Types.ObjectId,
+		role: MemberType,
+		input: AccountProfileInput,
+		sessionId: string,
+	): Promise<string> {
+		const profile = await this.getActiveProfile(id, role);
+		const config = this.accountConfig(role);
+		const updates: T = {},
+			unset: T = {};
+		for (const [key, value] of Object.entries(input)) {
+			if (value === undefined) continue;
+			const field = config.fields[key];
+			if (!field || value === null)
+				throw new BadRequestException('This field cannot be changed in your account profile');
+			if (key === 'email' && value === '') {
+				if (![MemberType.PATIENT, MemberType.DOCTOR].includes(role)) throw new BadRequestException('Email is required');
+				unset[field] = 1;
+			} else updates[field] = key === 'email' ? String(value).toLowerCase() : value;
+		}
+		if (!Object.keys(updates).length && !Object.keys(unset).length)
+			throw new BadRequestException('No profile changes were provided');
+		let updated: T;
+		try {
+			updated = await config.model
+				.findOneAndUpdate(
+					this.accountWriteFilter(profile),
+					{
+						$set: updates,
+						...(Object.keys(unset).length ? { $unset: unset } : {}),
+					},
+					{ new: true, runValidators: true },
+				)
+				.lean()
+				.exec();
+		} catch (error) {
+			if (error?.code === 11000) throw new BadRequestException('Nickname, phone or email is already in use');
+			if (error?.name === 'ValidationError') throw new BadRequestException('Invalid profile values');
+			throw new InternalServerErrorException('Profile update failed');
+		}
+		if (!updated) throw new UnauthorizedException('Account changed; please sign in again');
+		return this.createToken(updated, sessionId);
+	}
+
+	public async changeAccountPassword(id: Types.ObjectId, role: MemberType, input: AccountPasswordInput) {
+		const profile = await this.getActiveProfile(id, role);
+		const config = this.accountConfig(role);
+		const credentials = await this.database(() =>
+			config.model.findOne(this.accountWriteFilter(profile)).select(`+${config.password}`).lean().exec(),
+		);
+		if (
+			!credentials?.[config.password] ||
+			!(await this.comparePassword(input.currentPassword, credentials[config.password]))
+		) {
+			throw new BadRequestException('Current password is incorrect');
+		}
+		if (input.currentPassword === input.newPassword) throw new BadRequestException('Choose a different new password');
+		const hash = await this.hashPassword(input.newPassword);
+		const updated = await this.database(() =>
+			config.model
+				.findOneAndUpdate(
+					{
+						...this.accountWriteFilter(profile),
+						[config.password]: credentials[config.password],
+					},
+					{ $set: { [config.password]: hash }, $inc: { sessionVersion: 1 } },
+					{ new: true, runValidators: true },
+				)
+				.lean()
+				.exec(),
+		);
+		if (!updated) throw new UnauthorizedException('Account changed; please sign in again');
+		await this.revokeOwnerSessions(id, role);
+		return this.startSession(updated);
 	}
 
 	private hash(token: string): string {

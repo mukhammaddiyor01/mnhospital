@@ -500,6 +500,42 @@ async function main() {
 		),
 		'doctor cannot edit Member collection',
 	);
+	for (const role of ['PATIENT', 'DOCTOR', 'RECEPTIONIST', 'ADMIN']) {
+		const actor = actors[role + '2'];
+		await login(actor);
+		const oldToken = actor.token;
+		const prefix = { PATIENT: 'member', DOCTOR: 'doc', RECEPTIONIST: 'receptionist', ADMIN: 'admin' }[role];
+		const nickname = 'edited-' + role.toLowerCase();
+		const contact = await gql('mutation($input:AccountProfileInput!){updateMyAccountProfile(input:$input){accessToken}}', {
+			input: { nickname, description: 'Owned profile fixture', image: `uploads/${prefix}/fixture.png`, ...(role === 'DOCTOR' ? { experience: 12 } : {}) },
+		}, actor);
+		checked(!contact.body.errors, role + ' owned account edit');
+		actor.token = contact.body.data.updateMyAccountProfile.accessToken;
+		actor.input[prefix + 'Nick'] = nickname;
+		const storedProfile = await model(actor.name).findById(actor.id).lean().exec();
+		checked(storedProfile[prefix + 'Image'] === `uploads/${prefix}/fixture.png` && storedProfile[prefix + 'Desc'] === 'Owned profile fixture', role + ' image and description persisted');
+		checked((await gql('{getMyPreferences{theme}}', null, { ...actor, token: oldToken })).body.data?.getMyPreferences, role + ' contact edit preserves the existing session');
+		const wrong = await gql('mutation($input:AccountPasswordInput!){changeMyAccountPassword(input:$input){accessToken}}', {
+			input: { currentPassword: 'WrongFixturePass', newPassword: 'UpdatedFixturePass123' },
+		}, actor, actor.cookie);
+		checked(Boolean(wrong.body.errors), role + ' wrong current password rejected');
+		const oldCookie = actor.cookie;
+		const oldAccess = actor.token;
+		const passwordResult = await gql('mutation($input:AccountPasswordInput!){changeMyAccountPassword(input:$input){accessToken}}', {
+			input: { currentPassword: actor.input[prefix + 'Password'], newPassword: 'UpdatedFixturePass123' },
+		}, actor, actor.cookie);
+		checked(!passwordResult.body.errors, role + ' password change');
+		checked(passwordResult.headers['set-cookie']?.[0]?.includes('HttpOnly'), role + ' replacement refresh cookie');
+		actor.token = passwordResult.body.data.changeMyAccountPassword.accessToken;
+		actor.cookie = passwordResult.headers['set-cookie'][0].split(';')[0];
+		actor.input[prefix + 'Password'] = 'UpdatedFixturePass123';
+		checked((await gql('{getMyPreferences{theme}}', null, { ...actor, token: oldAccess })).body.errors?.[0]?.code === 'UNAUTHENTICATED', role + ' prior access revoked');
+		checked((await gql('mutation{refreshSession{accessToken}}', null, null, oldCookie)).body.errors?.[0]?.code === 'UNAUTHENTICATED', role + ' prior refresh revoked');
+		checked(!(await gql('{getMyPreferences{theme}}', null, actor)).body.errors, role + ' replacement session accepted');
+		const credentials = await model(actor.name).findById(actor.id).select('+' + prefix + 'Password').lean().exec();
+		checked(await auth.comparePassword('UpdatedFixturePass123', credentials[prefix + 'Password']), role + ' replacement password hashed');
+		await login(actor);
+	}
 	const collection = connection.collection('refreshToken');
 	const stored = await collection.findOne({ ownerId: sharedId, ownerType: 'DOCTOR', revokedAt: null });
 	checked(Boolean(stored?.tokenHash && !stored.refreshToken), 'Mongo stores hash only');
