@@ -11,6 +11,7 @@ import {
 	IsOptional,
 	IsString,
 	Length,
+	Matches,
 	Min,
 } from 'class-validator';
 import { Types } from 'mongoose';
@@ -86,7 +87,7 @@ export class ServiceUpdate {
 
 	@IsOptional()
 	@IsString()
-	@Length(1, 50)
+	@Matches(/^(?:[1-9]\d{0,2}|1[0-3]\d{2}|14[0-3]\d|1440)$/, { message: 'Duration must be 1 to 1440 whole minutes' })
 	@Field(() => String, { nullable: true })
 	serviceDuration?: string;
 

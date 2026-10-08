@@ -4,6 +4,7 @@ import DoctorScheduleSchema from './schema/DoctorSchedule.model';
 import DoctorSchema from '../schema/Doctor.model';
 import ServiceSchema from '../../service/schema/Service.model';
 import AppointmentSchema from '../../../libs/schemas/Appointment.model';
+import RoomSchema from '../../../libs/schemas/Room.model';
 import { DoctorScheduleResolver } from './doctorSchedule.resolver';
 import { DoctorScheduleService } from './doctorSchedule.service';
 import { AuthModule } from '../../auth/auth.module';
@@ -15,10 +16,11 @@ import { AuthModule } from '../../auth/auth.module';
 			{ name: 'Doctor', schema: DoctorSchema },
 			{ name: 'Service', schema: ServiceSchema },
 			{ name: 'Appointment', schema: AppointmentSchema },
+			{ name: 'Room', schema: RoomSchema },
 		]),
 		AuthModule,
 	],
-	exports: [MongooseModule],
+	exports: [MongooseModule, DoctorScheduleService],
 	providers: [DoctorScheduleService, DoctorScheduleResolver],
 })
 export class DoctorScheduleModule {}

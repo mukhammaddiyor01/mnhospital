@@ -6,6 +6,9 @@ import { TotalCounter } from '../../member/dto/member';
 
 @ObjectType()
 export class Payment {
+	activeIntent?: boolean;
+	@Field(() => Boolean)
+	testPayment: boolean = false;
 	@Field(() => String)
 	_id: ObjectId;
 

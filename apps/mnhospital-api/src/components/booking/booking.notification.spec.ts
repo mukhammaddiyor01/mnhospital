@@ -14,7 +14,7 @@ describe('Booking and payment notification triggers', () => {
 	const cartModel = { findOne: jest.fn(), findByIdAndUpdate: jest.fn() };
 	const cartItemModel = { find: jest.fn() };
 	const bookingOrderModel = { findOne: jest.fn(), create: jest.fn(), findOneAndUpdate: jest.fn(), findById: jest.fn(), deleteOne: jest.fn() };
-	const paymentModel = { findById: jest.fn(), find: jest.fn(), findOneAndUpdate: jest.fn() };
+	const paymentModel = { findById: jest.fn(), find: jest.fn(), findOneAndUpdate: jest.fn(), updateMany: jest.fn() };
 	const patientService = { resolveProfileId: jest.fn() };
 	const eximbayService = { verify: jest.fn(), retrieve: jest.fn() };
 	const notificationEvents = { toPatient: jest.fn(), toDoctor: jest.fn() };
@@ -26,6 +26,7 @@ describe('Booking and payment notification triggers', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 		patientService.resolveProfileId.mockResolvedValue(patientId);
+		paymentModel.updateMany.mockReturnValue({ exec: async () => ({}) });
 	});
 
 	it('notifies after checkout succeeds', async () => {
@@ -93,6 +94,35 @@ describe('Booking and payment notification triggers', () => {
 		expect(notificationEvents.toPatient).toHaveBeenCalledWith(patientId, expect.objectContaining({ key: `booking-order:${orderId}:confirmed` }));
 	});
 
+	it('only accepts gateway-confirmed amount, currency, order, transaction and SALE state', async () => {
+		const payment = { _id: paymentId, patientId, bookingOrderId: orderId, paymentProvider: PaymentProvider.EXIMBAY,
+			providerPaymentId: 'PAY-123', paymentCurrency: 'KRW', paymentAmount: 100 };
+		paymentModel.findById.mockReturnValue({ lean: () => ({ exec: async () => payment }) });
+		eximbayService.verify.mockResolvedValue(undefined);
+		const valid = { amount: '100', order_id: 'PAY-123', currency: 'KRW', transaction_id: 'TX-123', status: 'SALE' };
+		for (const patch of [{ amount: '100junk' }, { amount: '101' }, { currency: 'USD' }, { order_id: 'foreign-order' }, { transaction_id: 'foreign-tx' }, { status: 'AUTH' }]) {
+			eximbayService.retrieve.mockResolvedValue({ payment: { ...valid, ...patch } });
+			await expect(service.verifyEximbayPayment(paymentId, 'transaction_id=TX-123')).rejects.toThrow();
+		}
+		expect(paymentModel.findOneAndUpdate).not.toHaveBeenCalled();
+	});
+
+	it('records a verified gateway failure without accepting an unverified browser status', async () => {
+		const payment = { _id: paymentId, patientId, bookingOrderId: orderId, paymentProvider: PaymentProvider.EXIMBAY,
+			providerPaymentId: 'PAY-123', paymentCurrency: 'KRW', paymentAmount: 100 };
+		paymentModel.findById.mockReturnValue({ lean: () => ({ exec: async () => payment }) });
+		const callback = 'rescode=9999&order_id=PAY-123&currency=KRW&amount=100';
+		eximbayService.verify.mockRejectedValueOnce(new Error('Invalid signature'));
+		await expect(service.verifyEximbayPayment(paymentId, callback)).rejects.toThrow('Invalid signature');
+		expect(paymentModel.findOneAndUpdate).not.toHaveBeenCalled();
+		eximbayService.verify.mockResolvedValue(undefined);
+		paymentModel.findOneAndUpdate.mockReturnValue({ exec: async () => ({ ...payment, paymentStatus: PaymentStatus.FAILED }) });
+		await service.verifyEximbayPayment(paymentId, callback);
+		expect(paymentModel.findOneAndUpdate).toHaveBeenCalledWith(expect.objectContaining({ paymentStatus: PaymentStatus.PENDING }),
+			expect.objectContaining({ $set: { paymentStatus: PaymentStatus.FAILED, activeIntent: false } }), expect.anything());
+		expect(eximbayService.retrieve).not.toHaveBeenCalled();
+	});
+
 	it('notifies for an Eximbay callback only when it changes a pending payment', async () => {
 		const payment = {
 			_id: paymentId, patientId, bookingOrderId: orderId, paymentProvider: PaymentProvider.EXIMBAY,
@@ -100,8 +130,8 @@ describe('Booking and payment notification triggers', () => {
 		};
 		paymentModel.findById.mockReturnValue({ lean: () => ({ exec: async () => payment }) });
 		eximbayService.verify.mockResolvedValue(undefined);
-		eximbayService.retrieve.mockResolvedValue({ payment: { amount: '100', order_id: 'PAY-123' } });
-		bookingOrderModel.findById.mockReturnValue({ exec: async () => null });
+		eximbayService.retrieve.mockResolvedValue({ payment: { amount: '100', order_id: 'PAY-123', currency: 'KRW', transaction_id: 'TX-123', status: 'SALE' } });
+		bookingOrderModel.findById.mockReturnValue({ lean: () => ({ exec: async () => ({ bookingOrderStatus: 'CONFIRMED' }) }), exec: async () => null });
 		bookingOrderModel.findOneAndUpdate.mockReturnValue({ exec: async () => null });
 		paymentModel.findOneAndUpdate
 			.mockReturnValueOnce({ exec: async () => ({ ...payment, paymentStatus: PaymentStatus.PAID }) })

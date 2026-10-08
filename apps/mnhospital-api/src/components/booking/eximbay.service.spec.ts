@@ -25,6 +25,11 @@ describe('Eximbay checkout preparation', () => {
 		expect(service.getClientUrl()).toBe('http://localhost:2002');
 	});
 
+	it('does not open the sandbox merchant with a currency that failed the live checkout', async () => {
+		await expect(service.prepare({ ...input, currency: 'UZS' })).rejects.toThrow('requires KRW');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects zero or invalid amounts before calling the gateway', async () => {
 		for (const amount of [0, -1, Number.NaN]) await expect(service.prepare({ ...input, amount })).rejects.toThrow('greater than zero');
 		expect(fetchMock).not.toHaveBeenCalled();
@@ -53,5 +58,19 @@ describe('Eximbay checkout preparation', () => {
 		await expect(service.verify('fixture')).rejects.toThrow('restricted to sandbox');
 		await expect(service.retrieve({ ...input, transactionId: 'fixture' })).rejects.toThrow('restricted to sandbox');
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+});
+
+describe('Eximbay test mode boundaries', () => {
+	const service = (values: Record<string, string>) => new EximbayService({ get: (key: string) => values[key] } as never);
+	it('requires an explicit development test mode for simulation', () => {
+		expect(service({ NODE_ENV: 'development', EXIMBAY_TEST_MODE: 'simulated' }).getTestMode()).toBe('SIMULATED');
+		expect(service({ NODE_ENV: 'production', EXIMBAY_TEST_MODE: 'simulated' }).getTestMode()).toBe('DISABLED');
+		expect(service({ NODE_ENV: 'development' }).getTestMode()).toBe('DISABLED');
+	});
+	it('does not advertise a live or incomplete merchant as a test gateway', () => {
+		expect(service({ EXIMBAY_API_KEY: 'live_fixture', EXIMBAY_MID: 'fixture' }).getTestMode()).toBe('DISABLED');
+		expect(service({ EXIMBAY_API_KEY: 'test_fixture' }).getTestMode()).toBe('DISABLED');
+		expect(service({ EXIMBAY_API_KEY: 'test_fixture', EXIMBAY_MID: 'fixture' }).getTestMode()).toBe('SANDBOX');
 	});
 });

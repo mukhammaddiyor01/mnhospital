@@ -32,10 +32,13 @@ describe('Appointment notification triggers', () => {
 	const service = new AppointmentService(
 		appointmentModel as never,
 		bookingOrderModel as never,
-		{} as never,
+		{ updateMany: () => ({ exec: async () => ({}) }) } as never,
 		patientService as never,
 		notificationEvents as never,
 		{ findOne: () => ({ lean: () => ({ exec: async () => ({ _id: new Types.ObjectId() }) }) }) } as never,
+		{} as never,
+		{ findOne: () => ({ lean: () => ({ exec: async () => ({ paymentProvider: 'CASH', paymentStatus: 'PENDING' }) }) }) } as never,
+		{ getAvailableSlots: async () => [{ startsAt, endsAt }] } as never,
 	);
 
 	beforeEach(() => {

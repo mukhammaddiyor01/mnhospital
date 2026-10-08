@@ -1,0 +1,38 @@
+require('dotenv').config({ path: process.argv[2], override: true });
+const { Types } = require('mongoose');
+const { NestFactory } = require('@nestjs/core');
+const { ValidationPipe } = require('@nestjs/common');
+const { WsAdapter } = require('@nestjs/platform-ws');
+const { getConnectionToken, getModelToken } = require('@nestjs/mongoose');
+const databaseName = `mn_ui_${new Types.ObjectId()}`;
+const uri = new URL(process.env.MONGO_DEV);
+uri.pathname = `/${databaseName}`;
+process.env.MONGO_DEV = uri.toString();
+process.env.NODE_ENV = 'development';
+process.env.SECRET_TOKEN = 'isolated-checkout-preview-secret';
+process.env.EXIMBAY_TEST_MODE = process.argv.includes('--sandbox') ? 'sandbox' : 'simulated';
+process.env.AI_CHAT_ENABLED = 'false';
+process.env.BASE_URL = 'http://localhost:2201';
+process.env.CLIENT_URL = 'http://localhost:2202';
+const { AppModule } = require('../apps/mnhospital-api/src/app.module');
+const { AuthService } = require('../apps/mnhospital-api/src/components/auth/auth.service');
+(async () => {
+ const app = await NestFactory.create(AppModule, { logger: false });
+ app.useWebSocketAdapter(new WsAdapter(app));
+ app.useGlobalPipes(new ValidationPipe({ transform: true }));
+ app.enableCors({ origin: 'http://localhost:2202', credentials: true });
+ await app.init();
+ const connection = app.get(getConnectionToken());
+ await Promise.all(connection.modelNames().map(name => connection.model(name).init()));
+ const password = await app.get(AuthService).hashPassword('PreviewPass123');
+ await app.get(getModelToken('Member')).create({ memberNick: 'flow-preview', memberPassword: password, memberPhone: '+998900009001', memberFullName: 'Flow preview patient' });
+ const doctor = await app.get(getModelToken('Doctor')).create({ docNick: 'flow-doctor', docPassword: password, docPhone: '+998900009002', docFullName: 'Dr. Flow Preview', docExperience: 5, docSpecialty: 'CARDIOLOGIST', docRoom: '101' });
+ await app.get(getModelToken('Room')).create({ roomNumber: '101', roomType: 'CONSULTATION', assignedDoctorId: doctor._id });
+ await app.get(getModelToken('Service')).create({ memberId: doctor._id, departmentId: new Types.ObjectId(), serviceType: 'CONSULTATION', serviceName: 'Consultation', serviceTitle: 'Kardiolog konsultatsiyasi', serviceRoomName: 'CONSULTATION', serviceRoom: 'ROOM101', servicePrice: 150000, serviceDuration: '30', serviceImages: [], serviceDesc: 'Temporary checkout preview service' });
+ await app.get(getModelToken('DoctorSchedule')).insertMany(Array.from({length:7}, (_,weekday)=>({doctorId:doctor._id,weekday,startTime:'09:00',endTime:'18:00',slotDurationMinutes:30,isActive:true})));
+ let closing=false;
+ async function close() { if(closing)return;closing=true;try {if(connection.name===databaseName)await connection.dropDatabase();}finally{await app.close();process.exit(0);} }
+ process.on('SIGINT',close);process.on('SIGTERM',close);
+ await app.listen(2201);
+ console.log('Isolated checkout preview ready on port 2201. Patient: flow-preview. Password: PreviewPass123.');
+})().catch(error=>{console.error(error.name, error.message);process.exitCode=1});

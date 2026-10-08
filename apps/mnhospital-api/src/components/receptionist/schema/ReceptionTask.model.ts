@@ -68,7 +68,7 @@ const ReceptionTaskSchema = new Schema(
 			type: Date,
 		},
 	},
-	{ timestamps: true, collection: 'receptionTasks' },
+	{ timestamps: true, optimisticConcurrency: true, collection: 'receptionTasks' },
 );
 
 export default ReceptionTaskSchema;

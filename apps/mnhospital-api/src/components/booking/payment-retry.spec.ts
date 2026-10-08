@@ -50,7 +50,7 @@ describe('Patient payment retry ownership', () => {
 		findOne.mockReturnValueOnce({ exec: async () => null }).mockReturnValueOnce({ exec: async () => paid });
 		expect(await service.createPayment(memberId, input)).toBe(paid);
 		expect(findOne).toHaveBeenLastCalledWith(
-			expect.objectContaining({ patientId, bookingOrderId: input.bookingOrderId, paymentStatus: PaymentStatus.PAID }),
+			expect.objectContaining({ patientId, bookingOrderId: input.bookingOrderId, paymentStatus: { $in: [PaymentStatus.PENDING, PaymentStatus.PAID] } }),
 		);
 		expect(create).not.toHaveBeenCalled();
 	});

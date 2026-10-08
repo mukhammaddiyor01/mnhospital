@@ -74,7 +74,7 @@ describe('Room and appointment workspace access', () => {
 				endsAt,
 			} as never),
 		).rejects.toThrow('selected room is not available');
-		expect(roomFind).toHaveBeenCalledWith({ _id: roomId, roomStatus: RoomStatus.AVAILABLE });
+		expect(roomFind).toHaveBeenCalledWith({ _id: roomId, roomStatus: RoomStatus.AVAILABLE, $or: [{ assignedDoctorId: null }, { assignedDoctorId: doctorId }] });
 		expect(create).not.toHaveBeenCalled();
 	});
 	it('scopes receptionist appointment reads to active assigned task references', async () => {

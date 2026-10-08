@@ -1,3 +1,4 @@
+import MemberSchema from '../member/schema/Member.model';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import BookingOrderSchema from './schema/BookingOrder.model';
@@ -13,6 +14,7 @@ import { PatientService } from './patient.service';
 	imports: [
 		MongooseModule.forFeature([
 			{ name: 'Patient', schema: PatientSchema },
+			{ name: 'Member', schema: MemberSchema },
 			{ name: 'Cart', schema: CartSchema },
 			{ name: 'CartItem', schema: CartItemSchema },
 			{ name: 'BookingOrder', schema: BookingOrderSchema },

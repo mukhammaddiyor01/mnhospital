@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const fields = ['patientPhone', 'patientMail', 'patientNick'];
+const fields = ['patientPhone', 'patientMail', 'patientNick', 'patientIdNumber'];
 const apply = process.argv.includes('--apply');
 
 async function main() {

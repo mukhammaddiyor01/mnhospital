@@ -24,12 +24,10 @@ const PatientSchema = new Schema(
 		patientBloodType: {
 			type: String,
 			enum: PatientBloodType,
-			required: true,
 		},
 		patientGender: {
 			type: String,
 			enum: PatientGender,
-			required: true,
 		},
 		memberAuthType: {
 			type: String,
@@ -58,12 +56,11 @@ const PatientSchema = new Schema(
 		},
 		patientBirthDate: {
 			type: Date,
-			required: true,
 		},
 		patientIdNumber: {
 			type: String,
-			required: true,
 			unique: true,
+			sparse: true,
 		},
 		patientImage: {
 			type: String,

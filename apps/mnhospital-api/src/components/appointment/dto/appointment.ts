@@ -24,6 +24,9 @@ export class AppointmentStatusHistory {
 
 @ObjectType()
 export class Appointment {
+	slotKeys?: string[];
+	@Field(() => Date, { nullable: true })
+	holdExpiresAt?: Date;
 	@Field(() => String)
 	_id: ObjectId;
 

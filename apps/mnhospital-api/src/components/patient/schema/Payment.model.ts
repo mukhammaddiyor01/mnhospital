@@ -3,6 +3,8 @@ import { PaymentMethod, PaymentProvider, PaymentStatus } from '../enums/patient.
 
 const PaymentSchema = new Schema(
 	{
+		activeIntent: { type: Boolean, default: true },
+		testPayment: { type: Boolean, default: false },
 		serviceId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Service',
@@ -73,5 +75,7 @@ const PaymentSchema = new Schema(
 	},
 	{ timestamps: true, collection: 'payment' },
 );
+
+PaymentSchema.index({ bookingOrderId: 1, serviceId: 1, doctorId: 1 }, { unique: true, partialFilterExpression: { activeIntent: true } });
 
 export default PaymentSchema;

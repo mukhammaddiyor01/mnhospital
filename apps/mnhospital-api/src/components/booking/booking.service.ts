@@ -1,3 +1,5 @@
+import { clinicCurrency } from '../../libs/booking/clinic-time';
+import { AppointmentService } from '../appointment/appointment.service';
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -38,16 +40,18 @@ export class BookingService {
 		private readonly patientService: PatientService,
 		private readonly eximbayService: EximbayService,
 		private readonly notificationEvents: NotificationEventService,
+		private readonly appointmentService?: AppointmentService,
 	) {}
 
 	public async createCart(memberId: ObjectId, input: CartInput): Promise<Cart> {
+		if (input.currency && input.currency !== clinicCurrency()) throw new BadRequestException('Cart currency must match the clinic catalog');
 		const patientId = await this.patientService.resolveProfileId(memberId);
 		const existingCart = await this.cartModel.findOne({ patientId, cartStatus: CartStatus.ACTIVE }).exec();
 		if (existingCart) return existingCart;
 
 		return await this.cartModel.create({
 			patientId,
-			currency: input.currency ?? 'UZS',
+			currency: input.currency ?? clinicCurrency(),
 			cartStatus: CartStatus.ACTIVE,
 			subtotalAmount: 0,
 			discountAmount: 0,
@@ -77,8 +81,8 @@ export class BookingService {
 			.exec();
 		if (!service) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
-		const serviceDuration = Number.parseInt(service.serviceDuration, 10);
-		if (!Number.isFinite(serviceDuration) || serviceDuration <= 0) {
+		const serviceDuration = Number(service.serviceDuration);
+		if (!Number.isInteger(serviceDuration) || serviceDuration <= 0 || serviceDuration > 1440) {
 			throw new BadRequestException('Service duration must be a positive number');
 		}
 
@@ -86,7 +90,7 @@ export class BookingService {
 		if (!cart) {
 			cart = await this.cartModel.create({
 				patientId,
-				currency: 'UZS',
+				currency: clinicCurrency(),
 				cartStatus: CartStatus.ACTIVE,
 				subtotalAmount: 0,
 				discountAmount: 0,
@@ -94,6 +98,7 @@ export class BookingService {
 			});
 		}
 
+		if (cart.currency !== clinicCurrency()) throw new BadRequestException('Cart currency must match the clinic catalog');
 		const item = await this.cartItemModel.create({
 			cartId: cart._id,
 			serviceId: service._id,
@@ -145,6 +150,7 @@ export class BookingService {
 		if (!cart) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		const items = await this.cartItemModel.find({ cartId: cart._id }).sort({ addedAt: 1 }).lean().exec();
+		if (new Set(items.map((item) => `${item.serviceId}:${item.doctorId}`)).size !== items.length) throw new BadRequestException('Each service may appear only once in a booking');
 		if (!items.length) throw new BadRequestException('Cannot create a booking order from an empty cart');
 
 		const existingOrder = await this.bookingOrderModel
@@ -169,6 +175,7 @@ export class BookingService {
 				servicePrice: item.servicePrice.toString(),
 				serviceDuration: item.serviceDuration.toString(),
 				requestedStartAt: item.requestedStartAt.toISOString(),
+				patientNote: item.patientNote,
 			})),
 			bookingOrderSubtotalAmount: cart.subtotalAmount,
 			bookingOrderDiscountAmount: cart.discountAmount,
@@ -237,6 +244,7 @@ export class BookingService {
 
 	public async cancelBookingOrder(memberId: ObjectId, bookingOrderId: ObjectId): Promise<BookingOrder> {
 		const patientId = await this.patientService.resolveProfileId(memberId);
+		if (this.appointmentService) await this.appointmentService.assertOrderCancellable(await this.getMyBookingOrder(memberId, bookingOrderId));
 		const result = await this.bookingOrderModel
 			.findOneAndUpdate(
 				{
@@ -250,6 +258,8 @@ export class BookingService {
 			.exec();
 
 		if (!result) throw new InternalServerErrorException(Message.UPDATE_FAILED);
+		await this.paymentModel.updateMany({ bookingOrderId: result._id, patientId, paymentStatus: PaymentStatus.PENDING }, { $set: { paymentStatus: PaymentStatus.CANCELLED, activeIntent: false } }).exec();
+		await this.appointmentService?.cancelOrderReservations(result, memberId);
 		await this.notificationEvents.toPatient(patientId, {
 			key: `booking-order:${result._id}:cancelled`,
 			type: NotificationType.SYSTEM,
@@ -264,6 +274,10 @@ export class BookingService {
 	}
 
 	public async createPayment(memberId: ObjectId, input: PaymentInput): Promise<Payment> {
+		if (![PaymentProvider.CASH, PaymentProvider.EXIMBAY].includes(input.paymentProvider) ||
+			(input.paymentProvider === PaymentProvider.CASH ? input.paymentMethod !== 'CASH' : input.paymentMethod !== 'CARD')) {
+			throw new BadRequestException('Choose cash or Eximbay card payment');
+		}
 		const patientId = await this.patientService.resolveProfileId(memberId);
 		const order = await this.bookingOrderModel
 			.findOne({
@@ -274,6 +288,10 @@ export class BookingService {
 			.lean()
 			.exec();
 		if (!order) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (input.paymentProvider === PaymentProvider.EXIMBAY) {
+			const mode = this.eximbayService.getTestMode?.();
+			if (mode === 'DISABLED' || mode === 'SANDBOX' && order.bookingOrderCurrency === 'UZS') throw new BadRequestException('Online sandbox payment is unavailable for this booking currency');
+		}
 
 		const orderItem = order.bookingOrderItems.find(
 			(item) => item.serviceId === input.serviceId.toString() && item.doctorId === input.doctorId.toString(),
@@ -305,17 +323,22 @@ export class BookingService {
 				bookingOrderId: order._id,
 				serviceId: input.serviceId,
 				doctorId: input.doctorId,
-				paymentStatus: PaymentStatus.PAID,
+				paymentStatus: { $in: [PaymentStatus.PENDING, PaymentStatus.PAID] },
 			})
 			.exec();
-		if (paidPayment) return paidPayment;
+		if (paidPayment) {
+			if (paidPayment.paymentStatus === PaymentStatus.PENDING && paidPayment.paymentProvider !== input.paymentProvider) throw new BadRequestException('A payment with another method is already pending');
+			return paidPayment;
+		}
 
 		const paymentAmount = Number(orderItem.servicePrice);
 		if (!Number.isFinite(paymentAmount) || paymentAmount < 0) {
 			throw new BadRequestException('Booking order contains an invalid payment amount');
 		}
 
+		try {
 		return await this.paymentModel.create({
+			testPayment: input.paymentProvider === PaymentProvider.EXIMBAY && this.eximbayService.getTestMode() === 'SIMULATED',
 			serviceId: input.serviceId,
 			patientId,
 			doctorId: input.doctorId,
@@ -328,6 +351,13 @@ export class BookingService {
 			paymentMethod: input.paymentMethod,
 			paymentStatus: PaymentStatus.PENDING,
 		});
+		} catch (error) {
+			if (error?.code !== 11000) throw error;
+			const winner = await this.paymentModel.findOne({ patientId, bookingOrderId: order._id, serviceId: input.serviceId,
+				doctorId: input.doctorId, paymentStatus: { $in: [PaymentStatus.PENDING, PaymentStatus.PAID] } }).exec();
+			if (winner && (winner.paymentStatus === PaymentStatus.PAID || winner.paymentProvider === input.paymentProvider)) return winner;
+			throw new BadRequestException('Another payment method is already pending');
+		}
 	}
 
 	public async updatePaymentStatus(
@@ -342,6 +372,7 @@ export class BookingService {
 
 		const payment = await this.paymentModel.findById(paymentId).exec();
 		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (payment.paymentProvider === PaymentProvider.EXIMBAY && paymentStatus === PaymentStatus.PAID) throw new BadRequestException('Online payment requires gateway confirmation');
 
 		const allowedStatuses: Record<PaymentStatus, PaymentStatus[]> = {
 			[PaymentStatus.PENDING]: [PaymentStatus.PAID, PaymentStatus.FAILED, PaymentStatus.CANCELLED],
@@ -355,6 +386,7 @@ export class BookingService {
 		}
 
 		payment.paymentStatus = paymentStatus;
+		payment.activeIntent = [PaymentStatus.PENDING, PaymentStatus.PAID].includes(paymentStatus);
 		if (paymentStatus === PaymentStatus.PAID) payment.paidAt = new Date();
 		if (paymentStatus === PaymentStatus.REFUNDED) payment.refundedAt = new Date();
 		const result = await payment.save();
@@ -362,8 +394,23 @@ export class BookingService {
 
 		if (paymentStatus === PaymentStatus.PAID) {
 			await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
+			await this.appointmentService?.settlePaymentReservation(result);
 		}
 
+		return result;
+	}
+
+	public async settleTestPayment(payment: Payment, outcome: PaymentStatus): Promise<Payment> {
+		const result = await this.paymentModel.findOneAndUpdate({ _id: payment._id, patientId: payment.patientId, testPayment: true, paymentStatus: PaymentStatus.PENDING },
+			{ $set: { paymentStatus: outcome, activeIntent: outcome === PaymentStatus.PAID, ...(outcome === PaymentStatus.PAID ? { paidAt: new Date(), gatewayTransactionId: `TEST-${payment._id}` } : {}) } }, { new: true }).exec();
+		if (!result) throw new BadRequestException('The test payment was already completed');
+		if (outcome === PaymentStatus.PAID) {
+			await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
+			await this.appointmentService.settlePaymentReservation(result);
+		} else {
+			await this.appointmentService.cancelPaymentReservation(result);
+		}
+		await this.notifyPaymentStatus(result, outcome);
 		return result;
 	}
 
@@ -423,10 +470,19 @@ export class BookingService {
 		if (payment.paymentProvider !== PaymentProvider.EXIMBAY)
 			throw new BadRequestException('Payment provider must be EXIMBAY');
 
-		const transactionId = new URLSearchParams(rawData).get('transaction_id');
-		if (!transactionId) throw new BadRequestException('Eximbay transaction_id is missing');
-
+		if (payment.testPayment) throw new BadRequestException('A simulated payment cannot receive a gateway callback');
+		const callback = new URLSearchParams(rawData);
 		await this.eximbayService.verify(rawData);
+		if (callback.get('rescode') && callback.get('rescode') !== '0000') {
+			if (callback.get('order_id') !== payment.providerPaymentId || callback.get('currency') !== payment.paymentCurrency
+				|| Number(callback.get('amount')) !== payment.paymentAmount) throw new BadRequestException('Eximbay callback does not match the payment');
+			const failed = await this.paymentModel.findOneAndUpdate({ _id: payment._id, paymentStatus: PaymentStatus.PENDING },
+				{ $set: { paymentStatus: PaymentStatus.FAILED, activeIntent: false } }, { new: true }).exec();
+			if (failed) { await this.appointmentService?.cancelPaymentReservation(failed); await this.notifyPaymentStatus(failed, PaymentStatus.FAILED); }
+			return { firstTime: Boolean(failed) };
+		}
+		const transactionId = callback.get('transaction_id');
+		if (!transactionId) throw new BadRequestException('Eximbay transaction_id is missing');
 		const retrieved = await this.eximbayService.retrieve({
 			providerPaymentId: payment.providerPaymentId,
 			currency: payment.paymentCurrency,
@@ -434,15 +490,20 @@ export class BookingService {
 			transactionId,
 		});
 
-		const paidAmount = Number.parseFloat(retrieved.payment?.amount ?? '0');
+		const paidAmount = Number(retrieved.payment?.amount);
 		if (!Number.isFinite(paidAmount) || Math.abs(paidAmount - payment.paymentAmount) > 0.001) {
 			throw new BadRequestException(
 				`Eximbay amount mismatch: expected ${payment.paymentAmount}, received ${retrieved.payment?.amount ?? '0'}`,
 			);
 		}
-		if (retrieved.payment?.order_id && retrieved.payment.order_id !== payment.providerPaymentId) {
+		if (retrieved.payment?.order_id !== payment.providerPaymentId) {
 			throw new BadRequestException('Eximbay order_id does not match the payment');
 		}
+
+		if (retrieved.payment?.currency !== payment.paymentCurrency || retrieved.payment?.transaction_id !== transactionId) throw new BadRequestException('Eximbay transaction or currency does not match the payment');
+		if (retrieved.payment?.status !== 'SALE') throw new BadRequestException('Eximbay payment has not completed');
+		const order = await this.bookingOrderModel.findById(payment.bookingOrderId).lean().exec();
+		if (!order || order.bookingOrderStatus === BookingOrderStatus.CANCELLED) throw new BadRequestException('Booking is unavailable for payment');
 
 		const updated = await this.paymentModel
 			.findOneAndUpdate(
@@ -455,6 +516,7 @@ export class BookingService {
 		if (updated) {
 			await this.notifyPaymentStatus(updated, PaymentStatus.PAID);
 			await this.confirmBookingOrderIfAllPaymentsPaid(payment.bookingOrderId);
+			await this.appointmentService?.settlePaymentReservation(updated);
 		}
 		return { firstTime: Boolean(updated) };
 	}
@@ -488,6 +550,7 @@ export class BookingService {
 	}
 
 	public async prepareEximbayPayment(memberId: ObjectId, paymentId: ObjectId) {
+		if (this.eximbayService.getTestMode() !== 'SANDBOX') throw new BadRequestException('Eximbay sandbox is not enabled');
 		const patientId = await this.patientService.resolveProfileId(memberId);
 		const payment = await this.paymentModel.findOne({ _id: paymentId, patientId }).lean().exec();
 		if (!payment) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
@@ -500,6 +563,8 @@ export class BookingService {
 			throw new BadRequestException('Booking order is not available for payment');
 		}
 
+		if (payment.testPayment) throw new BadRequestException('A simulated payment cannot open the gateway');
+		await this.appointmentService.assertPaymentReservation(payment);
 		const member = await this.memberModel.findById(memberId).select('memberFullName memberMail').lean().exec();
 		return await this.eximbayService.prepare({
 			paymentId: payment._id.toString(),

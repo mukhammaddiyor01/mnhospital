@@ -25,7 +25,9 @@ This document records the conventions used while completing the MN Hospital API.
 
 ## Change discipline
 
-- The public appointment wizard creates a booking order. Payment confirmation makes the order eligible for the patient to create an appointment; it does not create one automatically.
+- Public booking selects a clinic date, a real catalog service and a server-provided time, then opens the owned checkout. `createAppointmentBooking` snapshots a single booking in an isolated checked-out cart. `chooseBookingPayment` creates its payment intent and appointment automatically in the doctor assigned room. Cash remains pending until reception confirms payment; online checkout reserves the time for 15 minutes. Local test outcomes require explicit development simulation and persisted test intents. Payment and appointment status are separate. Read `docs/BOOKING_CHECKOUT.md`.
+- Booking cancellation also cancels pending payments, appointments and their active reception tasks. A started appointment prevents order cancellation. Paid orders become COMPLETED after all linked appointments complete. Clinic currency and time zone come from server settings.
+
 - Doctor booking requests use the authenticated doctor ID, filter each order line again after unwinding multi-doctor orders, and expose scheduling fields only. Receptionists use their existing booking list, while their appointment queue remains limited to active assigned reception tasks.
 
 - Commit one coherent behavior with its relevant verification. Keep unrelated domain changes in separate commits.

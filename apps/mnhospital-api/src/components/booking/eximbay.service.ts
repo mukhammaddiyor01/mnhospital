@@ -19,6 +19,13 @@ interface EximbayReadyPayload {
 export class EximbayService {
 	constructor(private readonly configService: ConfigService) {}
 
+	public getTestMode(): 'SIMULATED' | 'SANDBOX' | 'DISABLED' {
+		const mode = this.configService.get<string>('EXIMBAY_TEST_MODE');
+		if (mode === 'disabled') return 'DISABLED';
+		if (mode === 'simulated') return (this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV) === 'production' ? 'DISABLED' : 'SIMULATED';
+		try { this.getConfig(); return 'SANDBOX'; } catch { return 'DISABLED'; }
+	}
+
 	private getConfig() {
 		const baseUrl = this.configService.get<string>('EXIMBAY_API_BASE') ?? 'https://api-test.eximbay.com';
 		const apiKey = this.configService.get<string>('EXIMBAY_API_KEY');
@@ -66,6 +73,7 @@ export class EximbayService {
 		if (!Number.isFinite(input.amount) || input.amount <= 0) {
 			throw new BadRequestException('Eximbay payment amount must be greater than zero');
 		}
+		if (input.currency === 'UZS') throw new BadRequestException('This Eximbay sandbox merchant requires KRW checkout');
 		const config = this.getConfig();
 		const payload: EximbayReadyPayload = {
 			payment: {
@@ -90,6 +98,7 @@ export class EximbayService {
 		const response = await fetch(`${config.baseUrl}/v1/payments/ready`, {
 			method: 'POST',
 			headers: this.getHeaders(config.apiKey),
+			signal: AbortSignal.timeout(15000),
 			body: JSON.stringify(payload),
 		});
 		const data = (await response.json()) as { rescode?: string; resmsg?: string; fgkey?: string };
@@ -114,6 +123,7 @@ export class EximbayService {
 		const response = await fetch(`${config.baseUrl}/v1/payments/verify`, {
 			method: 'POST',
 			headers: this.getHeaders(config.apiKey),
+			signal: AbortSignal.timeout(15000),
 			body: JSON.stringify({ data: rawData }),
 		});
 		const data = (await response.json()) as { rescode?: string; resmsg?: string };
@@ -133,6 +143,7 @@ export class EximbayService {
 		const response = await fetch(`${config.baseUrl}/v1/payments/retrieve`, {
 			method: 'POST',
 			headers: this.getHeaders(config.apiKey),
+			signal: AbortSignal.timeout(15000),
 			body: JSON.stringify({
 				mid: config.mid,
 				key_field: 'transaction_id',
@@ -148,7 +159,7 @@ export class EximbayService {
 		const data = (await response.json()) as {
 			rescode?: string;
 			resmsg?: string;
-			payment?: { order_id?: string; amount?: string; transaction_id?: string };
+			payment?: { order_id?: string; amount?: string; transaction_id?: string; currency?: string; status?: string };
 		};
 
 		if (!response.ok || data.rescode !== '0000') {

@@ -19,17 +19,17 @@ export class Patient {
 	@Field(() => MemberStatus)
 	memberStatus: MemberStatus;
 
-	@Field(() => PatientBloodType)
-	patientBloodType: PatientBloodType;
+	@Field(() => PatientBloodType, { nullable: true })
+	patientBloodType?: PatientBloodType;
 
-	@Field(() => PatientGender)
-	patientGender: PatientGender;
+	@Field(() => PatientGender, { nullable: true })
+	patientGender?: PatientGender;
 
-	@Field(() => Date)
-	patientBirthDate: Date;
+	@Field(() => Date, { nullable: true })
+	patientBirthDate?: Date;
 
-	@Field(() => String)
-	patientIdNumber: string;
+	@Field(() => String, { nullable: true })
+	patientIdNumber?: string;
 
 	@Field(() => String, { nullable: true })
 	patientFullName?: string;

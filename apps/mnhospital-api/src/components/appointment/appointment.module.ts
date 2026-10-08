@@ -1,3 +1,4 @@
+import { DoctorScheduleModule } from '../doctor/doctor-schedule/doctorSchedule.module';
 import RoomSchema from '../../libs/schemas/Room.model';
 import { RoomResolver } from './room.resolver';
 import { RoomService } from './room.service';
@@ -20,6 +21,7 @@ import { NotificationModule } from '../notification/notification.module';
 		]),
 		AuthModule,
 		PatientModule,
+		DoctorScheduleModule,
 		NotificationModule,
 	],
 	providers: [AppointmentService, AppointmentResolver, RoomService, RoomResolver],

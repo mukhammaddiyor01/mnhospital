@@ -4,6 +4,8 @@ import StatusHistorySchema from './StatusHistory.model';
 
 const AppointmentSchema = new Schema(
 	{
+		slotKeys: { type: [String], default: undefined },
+		holdExpiresAt: { type: Date },
 		appointmentCode: {
 			type: String,
 			required: true,
@@ -83,11 +85,14 @@ const AppointmentSchema = new Schema(
 			type: Date,
 		},
 	},
-	{ timestamps: true, collection: 'appointment' },
+	{ timestamps: true, optimisticConcurrency: true, collection: 'appointment' },
 );
 
 AppointmentSchema.index({ doctorId: 1, startsAt: 1, endsAt: 1 });
 AppointmentSchema.index({ patientId: 1, startsAt: -1 });
 AppointmentSchema.index({ roomId: 1, startsAt: 1, endsAt: 1 });
+
+// Each occupied resource-minute can belong to only one appointment, across API processes.
+AppointmentSchema.index({ slotKeys: 1 }, { unique: true, partialFilterExpression: { slotKeys: { $type: 'string' } } });
 
 export default AppointmentSchema;

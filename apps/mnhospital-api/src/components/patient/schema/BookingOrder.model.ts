@@ -27,6 +27,7 @@ const BookingOrderItemSchema = new Schema(
 			type: String,
 			required: true,
 		},
+		patientNote: { type: String },
 		appointmentId: {
 			type: String,
 		},
@@ -36,6 +37,7 @@ const BookingOrderItemSchema = new Schema(
 
 const BookingOrderSchema = new Schema(
 	{
+		checkoutKey: { type: String },
 		patientId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Patient',
@@ -91,5 +93,7 @@ const BookingOrderSchema = new Schema(
 	},
 	{ timestamps: true, collection: 'bookingOrder' },
 );
+
+BookingOrderSchema.index({ patientId: 1, checkoutKey: 1 }, { unique: true, partialFilterExpression: { checkoutKey: { $type: 'string' } } });
 
 export default BookingOrderSchema;

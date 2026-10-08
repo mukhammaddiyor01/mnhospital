@@ -21,9 +21,10 @@ export class BookingController {
 		const clientUrl = this.eximbayService.getClientUrl();
 		try {
 			await this.bookingService.verifyEximbayPayment(new ObjectId(paymentId), this.toRawData(request));
-			response.redirect(`${clientUrl}/booking/payment/${paymentId}/success`);
+			const succeeded = new URLSearchParams(this.toRawData(request)).get('rescode') === '0000';
+			response.redirect(`${clientUrl}/booking/payment/${paymentId}/${succeeded ? 'success' : 'failed'}`);
 		} catch (error) {
-			console.error('[eximbay/return]', error);
+			console.warn('[eximbay/return] Payment verification failed');
 			response.redirect(`${clientUrl}/booking/payment/${paymentId}/failed`);
 		}
 	}
@@ -37,7 +38,9 @@ export class BookingController {
 		try {
 			await this.bookingService.verifyEximbayPayment(new ObjectId(paymentId), this.toRawData(request));
 		} catch (error) {
-			console.error('[eximbay/status]', error);
+			console.warn('[eximbay/status] Payment verification failed');
+			response.status(400).send('verification failed');
+			return;
 		}
 		response.status(200).send('ok');
 	}

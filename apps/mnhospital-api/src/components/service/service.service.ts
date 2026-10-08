@@ -194,7 +194,7 @@ export class ServiceService {
 		const search: T = {
 			_id: input._id,
 			memberId,
-			serviceStatus: ServiceStatus.ACTIVE,
+			serviceStatus: { $ne: ServiceStatus.DELETED },
 		};
 
 		const currentService = await this.serviceModel.findOne(search).exec();

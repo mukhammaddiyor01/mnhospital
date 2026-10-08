@@ -2,7 +2,10 @@ import { BadRequestException, Injectable, InternalServerErrorException } from '@
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
+import { clinicDayStart, clinicOffsetMillis } from '../../../libs/booking/clinic-time';
 import { Appointment } from '../../appointment/dto/appointment';
+import { HospitalRoom } from '../../appointment/dto/room';
+import { RoomStatus } from '../../../libs/enums/appointment.enum';
 import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
 import { MemberStatus } from '../../member/enums/member.enum';
 import { Service } from '../../service/dto/service';
@@ -18,6 +21,7 @@ export class DoctorScheduleService {
 		@InjectModel('Doctor') private readonly doctorModel: Model<Doctor>,
 		@InjectModel('Service') private readonly serviceModel: Model<Service>,
 		@InjectModel('Appointment') private readonly appointmentModel: Model<Appointment>,
+		@InjectModel('Room') private readonly roomModel?: Model<HospitalRoom>,
 	) {}
 
 	public async upsertMySchedule(doctorId: ObjectId, input: DoctorScheduleInput): Promise<DoctorSchedule> {
@@ -60,7 +64,13 @@ export class DoctorScheduleService {
 	}
 
 	public async getAvailableSlots(input: AvailableDoctorSlotsInput): Promise<AvailableDoctorSlot[]> {
-		await this.ensureActiveDoctor(input.doctorId);
+		const doctor = await this.ensureActiveDoctor(input.doctorId);
+		if (this.roomModel) {
+			if (!doctor.docRoom) return [];
+			const room = await this.roomModel.findOne({ roomNumber: doctor.docRoom, roomStatus: RoomStatus.AVAILABLE,
+				$or: [{ assignedDoctorId: null }, { assignedDoctorId: input.doctorId }] }).select('_id').lean().exec();
+			if (!room) return [];
+		}
 		const service = await this.serviceModel
 			.findOne({
 				_id: input.serviceId,
@@ -72,21 +82,27 @@ export class DoctorScheduleService {
 			.exec();
 		if (!service) throw new BadRequestException('The service is not available for this doctor');
 
-		const serviceDuration = Number.parseInt(service.serviceDuration, 10);
-		if (!Number.isFinite(serviceDuration) || serviceDuration <= 0) {
+		const serviceDuration = Number(service.serviceDuration);
+		if (!Number.isInteger(serviceDuration) || serviceDuration <= 0 || serviceDuration > 1440) {
 			throw new BadRequestException('Service duration must be a positive number');
 		}
 
-		const day = this.parseDate(input.date);
+		const day = clinicDayStart(input.date);
+		const weekday = new Date(day.getTime() + clinicOffsetMillis()).getUTCDay();
 		const schedule = await this.scheduleModel
-			.findOne({ doctorId: input.doctorId, weekday: day.getUTCDay(), isActive: true })
+			.findOne({ doctorId: input.doctorId, weekday, isActive: true })
 			.lean()
 			.exec();
 		if (!schedule) return [];
 
+		if (!Number.isInteger(schedule.slotDurationMinutes) || schedule.slotDurationMinutes < 1) throw new BadRequestException('Invalid schedule slot interval');
 		const range = this.validateTimeRange(schedule);
 		const dayStart = day.getTime();
 		const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+		await this.appointmentModel.updateMany(
+			{ appointmentStatus: AppointmentStatus.PENDING, holdExpiresAt: { $lte: new Date() } },
+			{ $set: { appointmentStatus: AppointmentStatus.CANCELLED, cancelledAt: new Date(), cancellationReason: 'Payment reservation expired', slotKeys: [] } },
+		).exec();
 		const appointments = await this.appointmentModel
 			.find({
 				doctorId: input.doctorId,
@@ -112,7 +128,7 @@ export class DoctorScheduleService {
 			const overlapsAppointment = appointments.some(
 				(appointment) => cursor < appointment.endsAt.getTime() && slotEnd > appointment.startsAt.getTime(),
 			);
-			if (!overlapsBreak && !overlapsAppointment) {
+			if (cursor > Date.now() && !overlapsBreak && !overlapsAppointment) {
 				slots.push({ startsAt: new Date(cursor), endsAt: new Date(slotEnd) });
 			}
 		}
@@ -120,13 +136,14 @@ export class DoctorScheduleService {
 		return slots;
 	}
 
-	private async ensureActiveDoctor(doctorId: ObjectId): Promise<void> {
+	private async ensureActiveDoctor(doctorId: ObjectId): Promise<Doctor> {
 		const doctor = await this.doctorModel
 			.findOne({ _id: doctorId, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
-			.select('_id')
+			.select('_id docRoom')
 			.lean()
 			.exec();
 		if (!doctor) throw new InternalServerErrorException('Doctor was not found');
+		return doctor;
 	}
 
 	private validateTimeRange(input: { startTime: string; endTime: string; breakStart?: string; breakEnd?: string }) {
@@ -164,16 +181,4 @@ export class DoctorScheduleService {
 		return hours * 60 + minutes;
 	}
 
-	private parseDate(value: string): Date {
-		const [year, month, date] = value.split('-').map(Number);
-		const result = new Date(Date.UTC(year, month - 1, date));
-		if (
-			result.getUTCFullYear() !== year ||
-			result.getUTCMonth() !== month - 1 ||
-			result.getUTCDate() !== date
-		) {
-			throw new BadRequestException('Date must be a valid YYYY-MM-DD value');
-		}
-		return result;
-	}
 }

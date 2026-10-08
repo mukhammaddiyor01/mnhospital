@@ -25,11 +25,15 @@ export class BookingOrderItem {
 	requestedStartAt: string;
 
 	@Field(() => String, { nullable: true })
+	patientNote?: string;
+
+	@Field(() => String, { nullable: true })
 	appointmentId?: string;
 }
 
 @ObjectType()
 export class BookingOrder {
+	checkoutKey?: string;
 	@Field(() => String)
 	_id: ObjectId;
 

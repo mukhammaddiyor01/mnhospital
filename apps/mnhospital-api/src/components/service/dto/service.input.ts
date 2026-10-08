@@ -13,6 +13,7 @@ import {
 	IsOptional,
 	IsString,
 	Length,
+	Matches,
 	Max,
 	Min,
 	ValidateNested,
@@ -82,7 +83,7 @@ export class ServiceInput {
 
 	@IsString()
 	@IsNotEmpty()
-	@Length(1, 50)
+	@Matches(/^(?:[1-9]\d{0,2}|1[0-3]\d{2}|14[0-3]\d|1440)$/, { message: 'Duration must be 1 to 1440 whole minutes' })
 	@Field(() => String)
 	serviceDuration: string;
 

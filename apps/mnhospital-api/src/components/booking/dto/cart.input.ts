@@ -6,6 +6,6 @@ export class CartInput {
 	@IsOptional()
 	@IsString()
 	@Length(3, 3)
-	@Field(() => String, { nullable: true, defaultValue: 'UZS' })
-	currency?: string = 'UZS';
+	@Field(() => String, { nullable: true })
+	currency?: string;
 }

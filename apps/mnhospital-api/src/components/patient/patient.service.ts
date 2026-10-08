@@ -3,13 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { Message } from '../../libs/enums/common.enum';
+import { Member } from '../member/dto/member';
 import { Patient, Patients } from './dto/patient';
 import { AdminPatientInquiry, PatientProfileInput } from './dto/patient.input';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
 
 @Injectable()
 export class PatientService {
-	constructor(@InjectModel('Patient') private readonly patientModel: Model<Patient>) {}
+	constructor(@InjectModel('Patient') private readonly patientModel: Model<Patient>, @InjectModel('Member') private readonly memberModel?: Model<Member>) {}
 
 	public async createProfile(memberId: ObjectId, input: PatientProfileInput): Promise<Patient> {
 		const existing = await this.patientModel.findOne({ memberId }).exec();
@@ -89,12 +90,18 @@ export class PatientService {
 	}
 
 	public async resolveProfileId(memberId: ObjectId): Promise<ObjectId> {
-		const patient = await this.patientModel
-			.findOne({ memberId, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
-			.select('_id')
-			.lean()
-			.exec();
-		if (!patient) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-		return patient._id;
+		const profile = await this.patientModel.findOne({ memberId }).exec();
+		if (profile) {
+			if (profile.memberStatus !== MemberStatus.ACTIVE || profile['deletedAt']) throw new BadRequestException('Patient profile is unavailable');
+			return profile._id;
+		}
+		const member = await this.memberModel.findOne({ _id: memberId, memberType: MemberType.PATIENT, memberStatus: MemberStatus.ACTIVE, deletedAt: { $exists: false } })
+			.select('memberFullName').lean().exec();
+		if (!member) throw new BadRequestException('Active patient account is required');
+		const created = await this.patientModel.findOneAndUpdate({ memberId },
+			{ $setOnInsert: { memberId, memberType: MemberType.PATIENT, memberStatus: MemberStatus.ACTIVE, patientFullName: member.memberFullName || '' } },
+			{ new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }).exec();
+		if (created.memberStatus !== MemberStatus.ACTIVE || created['deletedAt']) throw new BadRequestException('Patient profile is unavailable');
+		return created._id;
 	}
 }

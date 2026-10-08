@@ -1,3 +1,7 @@
+import { CheckoutService } from './checkout.service';
+import { CheckoutResolver } from './checkout.resolver';
+import { AppointmentModule } from '../appointment/appointment.module';
+import { DoctorScheduleModule } from '../doctor/doctor-schedule/doctorSchedule.module';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
@@ -11,8 +15,8 @@ import { BookingController } from './booking.controller';
 import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-	imports: [AuthModule, ConfigModule, MemberModule, PatientModule, ServiceModule, NotificationModule],
+	imports: [AuthModule, ConfigModule, MemberModule, PatientModule, ServiceModule, NotificationModule, AppointmentModule, DoctorScheduleModule],
 	controllers: [BookingController],
-	providers: [BookingService, BookingResolver, EximbayService],
+	providers: [BookingService, BookingResolver, EximbayService, CheckoutService, CheckoutResolver],
 })
 export class BookingModule {}
