@@ -5,6 +5,14 @@ import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
 import { TotalCounter } from '../../member/dto/member';
 
 @ObjectType()
+export class AppointmentPatientPreview {
+	@Field(() => String, { nullable: true })
+	patientFullName?: string;
+	@Field(() => String, { nullable: true })
+	patientImage?: string;
+}
+
+@ObjectType()
 export class AppointmentStatusHistory {
 	@Field(() => String, { nullable: true })
 	previousStatus?: string;
@@ -24,6 +32,8 @@ export class AppointmentStatusHistory {
 
 @ObjectType()
 export class Appointment {
+	@Field(() => AppointmentPatientPreview, { nullable: true })
+	patientPreview?: AppointmentPatientPreview;
 	slotKeys?: string[];
 	@Field(() => Date, { nullable: true })
 	holdExpiresAt?: Date;

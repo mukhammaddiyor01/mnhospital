@@ -1,3 +1,4 @@
+import { appointmentPatientPreview } from '../appointment/patient-preview';
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -221,7 +222,7 @@ export class ReceptionistService {
 				{ $sort: { startsAt: 1 } },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }, ...appointmentPatientPreview()],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
