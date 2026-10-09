@@ -37,6 +37,13 @@ export class ServiceService {
 		return serviceTypesForSpecialty(doctor.docSpecialty);
 	}
 
+	public async setDiscountByAdmin(id: string, percent: number): Promise<Service> {
+		if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new BadRequestException('Discount must be between 0 and 100');
+		const result = await this.serviceModel.findOneAndUpdate({ _id: id, serviceStatus: { $ne: ServiceStatus.DELETED } }, { $set: { serviceDiscountPercent: percent } }, { new: true, runValidators: true }).exec();
+		if (!result) throw new BadRequestException('Service is unavailable');
+		return result;
+	}
+
 	public async createService(input: ServiceInput): Promise<Service> {
 		try {
 			if (!input.memberId) {

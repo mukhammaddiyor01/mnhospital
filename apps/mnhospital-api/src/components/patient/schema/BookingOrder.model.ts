@@ -27,6 +27,7 @@ const BookingOrderItemSchema = new Schema(
 			type: String,
 			required: true,
 		},
+		serviceBasePrice: Number, serviceDiscountAmount: Number, promoDiscountAmount: Number,
 		patientNote: { type: String },
 		appointmentId: {
 			type: String,
@@ -38,6 +39,8 @@ const BookingOrderItemSchema = new Schema(
 const BookingOrderSchema = new Schema(
 	{
 		checkoutKey: { type: String },
+		pricingVersion: Number, pricingRevision: { type: Number, default: 0 }, pricingLockedAt: Date,
+		promoCode: String, promoCodeId: Schema.Types.ObjectId, serviceDiscountAmount: { type: Number, default: 0 }, promoDiscountAmount: { type: Number, default: 0 },
 		patientId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Patient',

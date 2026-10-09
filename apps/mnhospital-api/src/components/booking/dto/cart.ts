@@ -25,6 +25,7 @@ export class CartItem {
 
 	@Field(() => Float)
 	servicePrice: number;
+	serviceBasePrice?: number; serviceDiscountAmount?: number;
 
 	@Field(() => Float)
 	serviceDuration: number;

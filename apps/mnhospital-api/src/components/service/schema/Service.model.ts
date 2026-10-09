@@ -49,6 +49,7 @@ const ServiceSchema = new Schema(
 			type: Number,
 			required: true,
 		},
+		serviceDiscountPercent: { type: Number, default: 0, min: 0, max: 100 },
 		serviceLikes: {
 			type: Number,
 			default: 0,

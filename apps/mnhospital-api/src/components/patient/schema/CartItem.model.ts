@@ -33,6 +33,7 @@ const CartItemSchema = new Schema(
 			required: true,
 			min: 0,
 		},
+		serviceBasePrice: Number, serviceDiscountAmount: Number,
 		serviceDuration: {
 			type: Number,
 			required: true,

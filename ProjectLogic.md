@@ -52,3 +52,5 @@ This document records the conventions used while completing the MN Hospital API.
 - Browser parallel roles use the existing role collections and auth sessions: per-tab access JWT, four role-scoped HttpOnly refresh cookies, unchanged verified JWT/role/owner guards. The header selects a cookie and never grants privileges. One active account per role per browser profile; same-role replacement must not affect the other three roles. Read docs/ROLE_SESSIONS.md.
 
 - Service availabilityDates selects clinic calendar dates on a single service (empty/missing means weekly schedule). Public slots and new booking writes intersect these dates with existing doctor schedules, breaks, service duration, room and appointments; date edits preserve existing bookings. Read docs/SERVICE_CALENDAR.md.
+
+- Admin service discount percentages preserve the service base price. Booking snapshots include base/service/promo amounts; one patient-owned promo code applies after the service discount. First payment atomically locks pricing. Archive promo codes without deleting historical references; legacy unsnapshotted orders retain their original flow. Read docs/PROMOTIONS.md.

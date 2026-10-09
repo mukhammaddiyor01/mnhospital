@@ -1,4 +1,4 @@
-import { Field, Int, ObjectType } from '@nestjs/graphql';
+import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { ServiceRoom, ServiceRoomName, ServiceStatus, ServiceType } from '../enums/service.enum';
@@ -34,6 +34,9 @@ export class Service {
 
 	@Field(() => Number)
 	servicePrice: number;
+
+	@Field(() => Float, { nullable: true })
+	serviceDiscountPercent?: number;
 
 	@Field(() => Int)
 	serviceViews: number;

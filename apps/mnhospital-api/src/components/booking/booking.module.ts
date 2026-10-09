@@ -1,3 +1,7 @@
+import { MongooseModule } from '@nestjs/mongoose';
+import PromoCodeSchema from './schema/PromoCode.model';
+import { PromotionService } from './promotion.service';
+import { PromotionResolver } from './promotion.resolver';
 import { CheckoutService } from './checkout.service';
 import { CheckoutResolver } from './checkout.resolver';
 import { AppointmentModule } from '../appointment/appointment.module';
@@ -15,8 +19,8 @@ import { BookingController } from './booking.controller';
 import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-	imports: [AuthModule, ConfigModule, MemberModule, PatientModule, ServiceModule, NotificationModule, AppointmentModule, DoctorScheduleModule],
+	imports: [MongooseModule.forFeature([{ name: 'PromoCode', schema: PromoCodeSchema }]), AuthModule, ConfigModule, MemberModule, PatientModule, ServiceModule, NotificationModule, AppointmentModule, DoctorScheduleModule],
 	controllers: [BookingController],
-	providers: [BookingService, BookingResolver, EximbayService, CheckoutService, CheckoutResolver],
+	providers: [PromotionService, PromotionResolver, BookingService, BookingResolver, EximbayService, CheckoutService, CheckoutResolver],
 })
 export class BookingModule {}

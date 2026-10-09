@@ -1,3 +1,5 @@
+import { PromotionService } from './promotion.service';
+import { discountedServicePrice } from './pricing.policy';
 import { clinicCurrency } from '../../libs/booking/clinic-time';
 import { AppointmentService } from '../appointment/appointment.service';
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
@@ -41,6 +43,7 @@ export class BookingService {
 		private readonly eximbayService: EximbayService,
 		private readonly notificationEvents: NotificationEventService,
 		private readonly appointmentService?: AppointmentService,
+		private readonly promotions?: PromotionService,
 	) {}
 
 	public async createCart(memberId: ObjectId, input: CartInput): Promise<Cart> {
@@ -99,13 +102,14 @@ export class BookingService {
 		}
 
 		if (cart.currency !== clinicCurrency()) throw new BadRequestException('Cart currency must match the clinic catalog');
+		const price = discountedServicePrice(service.servicePrice, service.serviceDiscountPercent ?? 0, cart.currency);
 		const item = await this.cartItemModel.create({
 			cartId: cart._id,
 			serviceId: service._id,
 			doctorId: service.memberId,
 			serviceType: service.serviceType,
 			serviceName: service.serviceName,
-			servicePrice: service.servicePrice,
+			serviceBasePrice: price.base, serviceDiscountAmount: price.discount, servicePrice: price.total,
 			serviceDuration,
 			patientNote: input.patientNote,
 			requestedStartAt: input.requestedStartAt,
@@ -114,8 +118,8 @@ export class BookingService {
 		await this.cartModel
 			.findByIdAndUpdate(cart._id, {
 				$inc: {
-					subtotalAmount: service.servicePrice,
-					totalAmount: service.servicePrice,
+					subtotalAmount: price.base, discountAmount: price.discount,
+					totalAmount: price.total,
 				},
 			})
 			.exec();
@@ -135,7 +139,7 @@ export class BookingService {
 		await this.cartModel
 			.findByIdAndUpdate(cart._id, {
 				$inc: {
-					subtotalAmount: -item.servicePrice,
+					subtotalAmount: -(item.serviceBasePrice ?? item.servicePrice), discountAmount: -(item.serviceDiscountAmount ?? 0),
 					totalAmount: -item.servicePrice,
 				},
 			})
@@ -165,6 +169,7 @@ export class BookingService {
 		const order = await this.bookingOrderModel.create({
 			patientId,
 			cartId: cart._id,
+			pricingVersion: 1, pricingRevision: 0, serviceDiscountAmount: cart.discountAmount, promoDiscountAmount: 0,
 			orderCode: `BO-${uuidv4()}`,
 			bookingOrderStatus: BookingOrderStatus.PENDING,
 			bookingOrderCurrency: cart.currency,
@@ -172,6 +177,7 @@ export class BookingService {
 				serviceId: item.serviceId.toString(),
 				doctorId: item.doctorId.toString(),
 				serviceName: item.serviceName,
+				serviceBasePrice: item.serviceBasePrice ?? item.servicePrice, serviceDiscountAmount: item.serviceDiscountAmount ?? 0, promoDiscountAmount: 0,
 				servicePrice: item.servicePrice.toString(),
 				serviceDuration: item.serviceDuration.toString(),
 				requestedStartAt: item.requestedStartAt.toISOString(),
@@ -279,7 +285,7 @@ export class BookingService {
 			throw new BadRequestException('Choose cash or Eximbay card payment');
 		}
 		const patientId = await this.patientService.resolveProfileId(memberId);
-		const order = await this.bookingOrderModel
+		let order = await this.bookingOrderModel
 			.findOne({
 				_id: input.bookingOrderId,
 				patientId,
@@ -288,12 +294,13 @@ export class BookingService {
 			.lean()
 			.exec();
 		if (!order) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+
 		if (input.paymentProvider === PaymentProvider.EXIMBAY) {
 			const mode = this.eximbayService.getTestMode?.();
 			if (mode === 'DISABLED' || mode === 'SANDBOX' && order.bookingOrderCurrency === 'UZS') throw new BadRequestException('Online sandbox payment is unavailable for this booking currency');
 		}
 
-		const orderItem = order.bookingOrderItems.find(
+		let orderItem = order.bookingOrderItems.find(
 			(item) => item.serviceId === input.serviceId.toString() && item.doctorId === input.doctorId.toString(),
 		);
 		if (!orderItem) throw new BadRequestException('The selected service is not included in this booking order');
@@ -331,7 +338,15 @@ export class BookingService {
 			return paidPayment;
 		}
 
+		if (order.pricingVersion === 1) {
+			if (!order.pricingLockedAt) await this.promotions.assertAvailable(order);
+			order = await this.bookingOrderModel.findOneAndUpdate({ _id: order._id, patientId, bookingOrderStatus: { $in: [BookingOrderStatus.PENDING, BookingOrderStatus.CONFIRMED] } }, { $set: { pricingLockedAt: new Date() } }, { new: true }).lean().exec();
+			if (!order) throw new BadRequestException('Booking is no longer available for payment');
+		}
+
+		orderItem = order.bookingOrderItems.find(item => item.serviceId === String(input.serviceId) && item.doctorId === String(input.doctorId));
 		const paymentAmount = Number(orderItem.servicePrice);
+		if (paymentAmount === 0 && input.paymentProvider === PaymentProvider.EXIMBAY) throw new BadRequestException('No online charge is needed. Choose cash confirmation for a zero-price booking');
 		if (!Number.isFinite(paymentAmount) || paymentAmount < 0) {
 			throw new BadRequestException('Booking order contains an invalid payment amount');
 		}

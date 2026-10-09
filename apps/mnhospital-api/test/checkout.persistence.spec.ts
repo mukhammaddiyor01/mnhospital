@@ -20,6 +20,7 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 	let otherToken: string;
 	let doctorToken: string;
 	let receptionToken: string;
+	let adminToken: string;
 	let serviceId: string;
 	let doctorId: string;
 	let roomId: string;
@@ -34,6 +35,7 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 		const response = await req.send({ query, variables });
 		return response.body;
 	}
+	const promoQuery = 'mutation($input:BookingPromoInput!){applyBookingPromoCode(input:$input){_id bookingOrderSubtotalAmount bookingOrderDiscountAmount bookingOrderTotalAmount serviceDiscountAmount promoDiscountAmount promoCode}}';
 	const createQuery = 'mutation($input:AppointmentBookingInput!){createAppointmentBooking(input:$input){_id bookingOrderTotalAmount bookingOrderCurrency}}';
 	const chooseQuery = 'mutation($input:BookingCheckoutInput!){chooseBookingPayment(input:$input){order{_id bookingOrderStatus}payments{_id paymentStatus paymentProvider testPayment}appointments{_id appointmentCode roomId holdExpiresAt}}}';
 	const testQuery = 'mutation($input:TestOnlinePaymentInput!){completeTestOnlinePayment(input:$input){_id paymentStatus testPayment}}';
@@ -76,6 +78,8 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 		const receptionist = await app.get(getModelToken('Receptionist')).create({ receptionistNick: 'checkout-reception', receptionistPassword: password, receptionistPhone: '+998900001002', receptionistFullName: 'Checkout Test Reception', receptionistMail: 'checkout-reception@example.test' });
 		doctorToken = (await auth.startSession(doctor)).accessToken;
 		receptionToken = (await auth.startSession(receptionist)).accessToken;
+		const admin = await app.get(getModelToken('Admin')).create({ adminNick: 'promo-admin', adminPassword: password, adminPhone: '+998900009999', adminMail: 'promo-admin@example.test' });
+		adminToken = (await auth.startSession(admin)).accessToken;
 		const service = await app.get(getModelToken('Service')).create({ memberId: doctor._id, departmentId: new Types.ObjectId(), serviceType: 'CONSULTATION', serviceName: 'Test consultation', serviceTitle: 'Test consultation', serviceRoomName: 'CONSULTATION', serviceRoom: 'ROOM101', servicePrice: 150000, serviceDuration: '30', serviceImages: [], serviceDesc: 'Isolated test consultation' });
 		serviceId = String(service._id);
 		const future = new Date(Date.now() + 7 * 86400000);
@@ -90,6 +94,8 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 	});
 	afterEach(async () => {
 		if (!connection || !orders) return;
+		await app.get(getModelToken('Service')).updateOne({ _id: serviceId }, { $set: { servicePrice: 150000, serviceDiscountPercent: 0 } });
+		await app.get(getModelToken('PromoCode')).deleteMany({});
 		await Promise.all([orders.deleteMany({}), payments.deleteMany({}), appointments.deleteMany({}), app.get(getModelToken('Cart')).deleteMany({}), app.get(getModelToken('CartItem')).deleteMany({})]);
 	});
 	afterAll(async () => {
@@ -251,4 +257,104 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 		} finally { await services.updateOne({ _id: serviceId }, { $set: { availabilityDates: [] } }); }
 	});
 
+
+ it('allows only admin discount and promo CRUD, normalizes codes and archives removal', async () => {
+  const mutation = 'mutation($input:PromoCodeInput!){createPromoCodeByAdmin(input:$input){_id code currency}}';
+  const input = { code: ' visit10 ', discountType: 'PERCENT', discountValue: 10, isActive: true };
+  for (const bearer of [token, doctorToken, receptionToken, '']) expect((await gql(mutation, { input }, bearer)).errors).toBeDefined();
+  const created = await gql(mutation, { input }, adminToken); expect(created.errors).toBeUndefined();
+  expect(created.data.createPromoCodeByAdmin.code).toBe('VISIT10');
+  const id = created.data.createPromoCodeByAdmin._id;
+  expect((await gql(mutation, { input }, adminToken)).errors).toBeDefined();
+  const updated = await gql('mutation($input:PromoCodeUpdate!){updatePromoCodeByAdmin(input:$input){discountValue}}', { input: { ...input, code: 'VISIT10', _id: id, discountValue: 15 } }, adminToken);
+  expect(updated.data.updatePromoCodeByAdmin.discountValue).toBe(15);
+  expect((await gql('mutation($id:String!){removePromoCodeByAdmin(promoCodeId:$id){isActive}}', { id }, adminToken)).data.removePromoCodeByAdmin.isActive).toBe(false);
+  expect(await app.get(getModelToken('PromoCode')).countDocuments({ _id: id, deletedAt: { $exists: true } })).toBe(1);
+  for (const bearer of [token, doctorToken, receptionToken]) expect((await gql('mutation($input:ServiceDiscountInput!){setServiceDiscountByAdmin(input:$input){_id}}', { input: { serviceId, discountPercent: 20 } }, bearer)).errors).toBeDefined();
+ });
+ it('snapshots admin service discount then promo discount into actual cash payment', async () => {
+  expect((await gql('mutation($input:ServiceDiscountInput!){setServiceDiscountByAdmin(input:$input){serviceDiscountPercent}}', { input: { serviceId, discountPercent: 20 } }, adminToken)).errors).toBeUndefined();
+  const order = await booking(); expect(order.bookingOrderTotalAmount).toBe(120000);
+  await app.get(getModelToken('PromoCode')).create({ code: 'VISIT10', discountType: 'PERCENT', discountValue: 10, currency: 'UZS', isActive: true, createdBy: new Types.ObjectId() });
+  const applied = await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'visit10' } }); expect(applied.errors).toBeUndefined();
+  expect(applied.data.applyBookingPromoCode).toMatchObject({ bookingOrderSubtotalAmount: 150000, serviceDiscountAmount: 30000, promoDiscountAmount: 12000, bookingOrderTotalAmount: 108000 });
+  expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'VISIT10' } }, otherToken)).errors).toBeDefined();
+  expect((await choose(order._id, 'CASH')).errors).toBeUndefined();
+  expect((await payments.findOne({ bookingOrderId: order._id })).paymentAmount).toBe(108000);
+  expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: null } })).errors).toBeDefined();
+  await app.get(getModelToken('Service')).updateOne({ _id: serviceId }, { $set: { servicePrice: 999999, serviceDiscountPercent: 50 } });
+  expect((await payments.findOne({ bookingOrderId: order._id })).paymentAmount).toBe(108000);
+ });
+ it('removes or replaces promo without compounding and rejects invalid codes and minimum amounts', async () => {
+  const order = await booking();
+  const model = app.get(getModelToken('PromoCode'));
+  await model.create({ code: 'SAVE20', discountType: 'FIXED', discountValue: 20000, currency: 'UZS', isActive: true, minSubtotal: 100000, createdBy: new Types.ObjectId() });
+  expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'SAVE20' } })).data.applyBookingPromoCode.bookingOrderTotalAmount).toBe(130000);
+  expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'SAVE20' } })).data.applyBookingPromoCode.bookingOrderTotalAmount).toBe(130000);
+  expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: null } })).data.applyBookingPromoCode.bookingOrderTotalAmount).toBe(150000);
+  for (const patch of [{ isActive: false }, { currency: 'KRW' }, { expiresAt: new Date(Date.now()-60000) }, { startsAt: new Date(Date.now()+60000) }, { minSubtotal: 999999 }, { serviceIds: [String(new Types.ObjectId())] }]) {
+   await model.updateOne({ code: 'SAVE20' }, { $set: { isActive: true, currency: 'UZS', startsAt: null, expiresAt: null, minSubtotal: 0, serviceIds: [], ...patch } });
+   expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'SAVE20' } })).errors).toBeDefined();
+  }
+  expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'UNKNOWN' } })).errors).toBeDefined();
+ });
+ it('uses the discounted snapshot for simulated online payment and rejects changes after payment starts', async () => {
+  const order = await booking();
+  await app.get(getModelToken('PromoCode')).create({ code: 'ONLINE10', discountType: 'PERCENT', discountValue: 10, currency: 'UZS', isActive: true, createdBy: new Types.ObjectId() });
+  await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'ONLINE10' } });
+  const result = await choose(order._id, 'EXIMBAY'); expect(result.errors).toBeUndefined();
+  const payment = await payments.findOne({ bookingOrderId: order._id }); expect(payment.paymentAmount).toBe(135000);
+  expect((await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: null } })).errors).toBeDefined();
+  expect((await gql(testQuery, { input: { paymentId: String(payment._id), outcome: 'PAID' } })).errors).toBeUndefined();
+ });
+ it('rejects expiry before first payment but preserves existing pending payment after admin disables the code', async () => {
+  const order = await booking();
+  const promo = await app.get(getModelToken('PromoCode')).create({ code: 'ENDING10', discountType: 'PERCENT', discountValue: 10, currency: 'UZS', isActive: true, createdBy: new Types.ObjectId() });
+  await gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'ENDING10' } });
+  await promo.updateOne({ $set: { isActive: false } });
+  expect((await choose(order._id, 'CASH')).errors).toBeDefined();
+  await promo.updateOne({ $set: { isActive: true } });
+  expect((await choose(order._id, 'CASH')).errors).toBeUndefined();
+  await promo.updateOne({ $set: { isActive: false } });
+  expect((await choose(order._id, 'CASH')).errors).toBeUndefined();
+ });
+ it('keeps parallel promo/payment updates consistent with the actual persisted payment amount', async () => {
+  const order = await booking();
+  await app.get(getModelToken('PromoCode')).create({ code: 'RACE10', discountType: 'PERCENT', discountValue: 10, currency: 'UZS', isActive: true, createdBy: new Types.ObjectId() });
+  const [, chosen] = await Promise.all([gql(promoQuery, { input: { bookingOrderId: order._id, promoCode: 'RACE10' } }), choose(order._id, 'CASH')]);
+  expect(chosen.errors).toBeUndefined();
+  const stored = await orders.findById(order._id); const payment = await payments.findOne({ bookingOrderId: order._id });
+  expect(payment.paymentAmount).toBe(stored.bookingOrderTotalAmount);
+  expect(Number(stored.bookingOrderItems[0].servicePrice)).toBe(payment.paymentAmount);
+ });
+
+ it('applies service discounts to the existing cart and preserves them when removing promo', async () => {
+  await app.get(getModelToken('Service')).updateOne({ _id: serviceId }, { $set: { serviceDiscountPercent: 30 } });
+  const added = await gql('mutation($input:CartItemInput!){addCartItem(input:$input){_id servicePrice}}', { input: { serviceId, doctorId, requestedStartAt: startsAt } });
+  expect(added.errors).toBeUndefined(); expect(added.data.addCartItem.servicePrice).toBe(105000);
+  const created = await gql('mutation{createBookingOrder{_id bookingOrderSubtotalAmount bookingOrderDiscountAmount bookingOrderTotalAmount}}');
+  expect(created.errors).toBeUndefined(); expect(created.data.createBookingOrder).toMatchObject({ bookingOrderSubtotalAmount: 150000, bookingOrderDiscountAmount: 45000, bookingOrderTotalAmount: 105000 });
+  await app.get(getModelToken('PromoCode')).create({ code: 'CART10', discountType: 'PERCENT', discountValue: 10, currency: 'UZS', isActive: true, createdBy: new Types.ObjectId() });
+  const id=created.data.createBookingOrder._id;
+  expect((await gql(promoQuery, { input: { bookingOrderId:id, promoCode:'CART10' } })).data.applyBookingPromoCode.bookingOrderTotalAmount).toBe(94500);
+  expect((await gql(promoQuery, { input: { bookingOrderId:id, promoCode:null } })).data.applyBookingPromoCode.bookingOrderTotalAmount).toBe(105000);
+ });
+ it('supports a fully discounted booking through cash confirmation without opening a zero-value online charge', async () => {
+  const order=await booking();
+  await app.get(getModelToken('PromoCode')).create({code:'FREEVISIT',discountType:'PERCENT',discountValue:100,currency:'UZS',isActive:true,createdBy:new Types.ObjectId()});
+  expect((await gql(promoQuery,{input:{bookingOrderId:order._id,promoCode:'FREEVISIT'}})).data.applyBookingPromoCode.bookingOrderTotalAmount).toBe(0);
+  expect((await choose(order._id,'EXIMBAY')).errors).toBeDefined();
+  expect(await payments.countDocuments({bookingOrderId:order._id})).toBe(0);
+  expect((await choose(order._id,'CASH')).errors).toBeUndefined();
+  expect((await payments.findOne({bookingOrderId:order._id})).paymentAmount).toBe(0);
+ });
+
+ it('rejects online checkout before any intent when a multi-service order contains a free line', async () => {
+  const order = await booking();
+  const stored = await orders.findById(order._id);
+  const freeLine = { ...stored.bookingOrderItems[0].toObject(), serviceId: String(new Types.ObjectId()), servicePrice: '0', serviceBasePrice: 150000, serviceDiscountAmount: 150000 };
+  await orders.updateOne({ _id: order._id }, { $push: { bookingOrderItems: freeLine }, $set: { bookingOrderSubtotalAmount: 300000, bookingOrderDiscountAmount: 150000, serviceDiscountAmount: 150000 } });
+  expect((await choose(order._id, 'EXIMBAY')).errors).toBeDefined();
+  expect(await payments.countDocuments({ bookingOrderId: order._id })).toBe(0);
+ });
 });

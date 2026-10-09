@@ -1,4 +1,4 @@
-import { Field, Float, ObjectType } from '@nestjs/graphql';
+import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { BookingOrderStatus } from '../../patient/enums/patient.enum';
@@ -18,6 +18,10 @@ export class BookingOrderItem {
 	@Field(() => String)
 	servicePrice: string;
 
+	@Field(() => Float, { nullable: true }) serviceBasePrice?: number;
+	@Field(() => Float, { nullable: true }) serviceDiscountAmount?: number;
+	@Field(() => Float, { nullable: true }) promoDiscountAmount?: number;
+
 	@Field(() => String)
 	serviceDuration: string;
 
@@ -34,6 +38,11 @@ export class BookingOrderItem {
 @ObjectType()
 export class BookingOrder {
 	checkoutKey?: string;
+	@Field(() => Int, { nullable: true }) pricingVersion?: number; pricingRevision?: number; promoCodeId?: ObjectId;
+	@Field(() => Date, { nullable: true }) pricingLockedAt?: Date;
+	@Field(() => String, { nullable: true }) promoCode?: string;
+	@Field(() => Float, { nullable: true }) serviceDiscountAmount?: number;
+	@Field(() => Float, { nullable: true }) promoDiscountAmount?: number;
 	@Field(() => String)
 	_id: ObjectId;
 

@@ -1,3 +1,4 @@
+import { discountedServicePrice } from './pricing.policy';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -49,15 +50,17 @@ export class CheckoutService {
 		if (!slots.some((slot) => slot.startsAt.getTime() === input.requestedStartAt.getTime())) throw new BadRequestException('Choose an available appointment time');
 		const service = await this.services.findOne({ _id: input.serviceId, memberId: input.doctorId, serviceStatus: ServiceStatus.ACTIVE, deletedAt: { $exists: false } }).lean().exec();
 		if (!service || !Number.isFinite(service.servicePrice) || service.servicePrice < 0) throw new BadRequestException('Service is unavailable');
+		const price = discountedServicePrice(service.servicePrice, service.serviceDiscountPercent ?? 0, clinicCurrency());
 		// A direct booking has its own checked-out cart; it never consumes an unrelated active patient cart.
-		const cart = await this.carts.create({ patientId, cartStatus: CartStatus.CHECKED_OUT, currency: clinicCurrency(), subtotalAmount: service.servicePrice, discountAmount: 0, totalAmount: service.servicePrice });
+		const cart = await this.carts.create({ patientId, cartStatus: CartStatus.CHECKED_OUT, currency: clinicCurrency(), subtotalAmount: price.base, discountAmount: price.discount, totalAmount: price.total });
 		let order: BookingOrder;
 		try {
 			order = await this.orders.create({ patientId, cartId: cart._id, checkoutKey: input.idempotencyKey,
+				pricingVersion: 1, pricingRevision: 0, serviceDiscountAmount: price.discount, promoDiscountAmount: 0,
 				orderCode: `BO-${uuid()}`, bookingOrderStatus: BookingOrderStatus.PENDING, bookingOrderCurrency: clinicCurrency(),
 				bookingOrderItems: [{ serviceId: String(service._id), doctorId: String(service.memberId), serviceName: service.serviceTitle || service.serviceName,
-					servicePrice: String(service.servicePrice), serviceDuration: String(service.serviceDuration), requestedStartAt: input.requestedStartAt.toISOString(), patientNote: input.patientNote }],
-				bookingOrderSubtotalAmount: service.servicePrice, bookingOrderDiscountAmount: 0, bookingOrderTotalAmount: service.servicePrice });
+					serviceBasePrice: price.base, serviceDiscountAmount: price.discount, promoDiscountAmount: 0, servicePrice: String(price.total), serviceDuration: String(service.serviceDuration), requestedStartAt: input.requestedStartAt.toISOString(), patientNote: input.patientNote }],
+				bookingOrderSubtotalAmount: price.base, bookingOrderDiscountAmount: price.discount, bookingOrderTotalAmount: price.total });
 		} catch (error) {
 			await this.carts.deleteOne({ _id: cart._id, patientId }).exec();
 			if (error?.code === 11000) {
@@ -98,6 +101,9 @@ export class CheckoutService {
 		if (![BookingOrderStatus.PENDING, BookingOrderStatus.CONFIRMED].includes(order.bookingOrderStatus)) throw new BadRequestException('Booking is unavailable for checkout');
 		if (input.paymentProvider === PaymentProvider.EXIMBAY && this.eximbay.getTestMode() === 'SANDBOX' && order.bookingOrderCurrency === 'UZS') {
 			throw new BadRequestException('This booking uses UZS. Choose cash or create a new KRW booking.');
+		}
+		if (input.paymentProvider === PaymentProvider.EXIMBAY && order.bookingOrderItems.some(line => Number(line.servicePrice) === 0)) {
+			throw new BadRequestException('Choose cash confirmation for a booking containing a zero-price service');
 		}
 		for (const line of order.bookingOrderItems) {
 			const payment = await this.booking.createPayment(memberId, {

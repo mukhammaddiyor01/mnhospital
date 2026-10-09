@@ -13,11 +13,17 @@ import { WithoutGuard } from '../auth/guards/without.guard';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { ServiceUpdate } from './dto/service.update';
+import { ServiceDiscountInput } from './dto/service.discount.input';
 import { ServiceType } from './enums/service.enum';
 
 @Resolver()
 export class ServiceResolver {
 	constructor(private readonly serviceService: ServiceService) {}
+
+	@Roles(MemberType.ADMIN) @UseGuards(RolesGuard) @Mutation(() => Service)
+	setServiceDiscountByAdmin(@Args('input') input: ServiceDiscountInput) {
+		return this.serviceService.setDiscountByAdmin(input.serviceId, input.discountPercent);
+	}
 
 	@Roles(MemberType.DOCTOR)
 	@UseGuards(RolesGuard)
