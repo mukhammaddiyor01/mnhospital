@@ -46,5 +46,6 @@ const MessageSchema = new Schema(
 );
 
 MessageSchema.index({ conversationId: 1, createdAt: -1 });
+MessageSchema.index({ conversationId: 1, readAt: 1, deletedAt: 1 });
 
 export default MessageSchema;

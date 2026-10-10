@@ -31,6 +31,7 @@ describe('Notification and notice GraphQL integration', () => {
 	let authService: AuthService;
 	const notificationService = {
 		getMyNotifications: jest.fn(),
+        getUnreadCount: jest.fn(),
 		getMyNotification: jest.fn(),
 		markMyNotificationRead: jest.fn(),
 		markAllMyNotificationsRead: jest.fn(),
@@ -82,6 +83,17 @@ describe('Notification and notice GraphQL integration', () => {
 	async function tokenFor(memberId: ObjectId, memberType: MemberType): Promise<string> {
 		return authService.createToken({ _id: memberId, memberType });
 	}
+
+    it('protects the unread badge count with the authenticated receiver role and ID', async () => {
+        notificationService.getUnreadCount.mockResolvedValue(4);
+        const query = '{getMyUnreadNotificationCount}';
+        const guest = await request(app.getHttpServer()).post('/graphql').set('Apollo-Require-Preflight','true').send({query});
+        expect(guest.body.errors).toBeDefined(); expect(notificationService.getUnreadCount).not.toHaveBeenCalled();
+        const result = await request(app.getHttpServer()).post('/graphql').set('Apollo-Require-Preflight','true')
+            .set('Authorization', `Bearer ${await tokenFor(patientId, MemberType.PATIENT)}`).send({query});
+        expect(result.body.errors).toBeUndefined(); expect(result.body.data.getMyUnreadNotificationCount).toBe(4);
+        expect(notificationService.getUnreadCount).toHaveBeenCalledWith(patientId, MemberType.PATIENT);
+    });
 
 	it('reads only the authenticated profile notifications with variables', async () => {
 		notificationService.getMyNotifications.mockResolvedValue({

@@ -22,6 +22,15 @@ export class NotificationResolver {
 
 	@Roles(...notificationRoles)
 	@UseGuards(RolesGuard)
+	@Query(() => Int)
+	public async getMyUnreadNotificationCount(
+		@AuthMember() actor: { _id: ObjectId; memberType: MemberType },
+	): Promise<number> {
+		return this.notificationService.getUnreadCount(actor._id, actor.memberType);
+	}
+
+	@Roles(...notificationRoles)
+	@UseGuards(RolesGuard)
 	@Query(() => Notifications)
 	public async getMyNotifications(
 		@Args('input') input: NotificationInquiry,

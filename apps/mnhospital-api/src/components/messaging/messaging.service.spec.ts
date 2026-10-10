@@ -14,13 +14,14 @@ describe('Messaging ownership', () => {
 	const actor = { _id: patientId, memberType: MemberType.PATIENT };
 
 	const models = () => {
-		const conversationModel = { findOneAndUpdate: jest.fn(), findOne: jest.fn(), updateOne: jest.fn() };
-		const messageModel = { create: jest.fn(), exists: jest.fn(), updateMany: jest.fn() };
+		const conversationModel = { findOneAndUpdate: jest.fn(), findOne: jest.fn(), updateOne: jest.fn(), distinct: jest.fn() };
+		const messageModel = { create: jest.fn(), exists: jest.fn(), updateMany: jest.fn(), countDocuments: jest.fn() };
 		const memberModel = { findOne: jest.fn().mockReturnValue(profileQuery({ memberNick: 'patient' })) };
 		const doctorModel = { findOne: jest.fn().mockReturnValue(profileQuery({ docNick: 'doctor' })) };
 		const receptionistModel = { findOne: jest.fn() };
 		const adminModel = { findById: jest.fn() };
 		const notificationEvents = { toRecipient: jest.fn().mockResolvedValue(undefined) };
+		const notifications = { markConversationRead: jest.fn().mockResolvedValue(undefined) };
 		const messagingEvents = { publishMessageCreated: jest.fn(), publishMessagesRead: jest.fn() };
 		const service = new MessagingService(
 			conversationModel as any,
@@ -31,9 +32,26 @@ describe('Messaging ownership', () => {
 			adminModel as any,
 			notificationEvents as any,
 			messagingEvents as any,
+            notifications as any,
 		);
-		return { service, conversationModel, messageModel, memberModel, doctorModel, notificationEvents, messagingEvents };
+		return { service, conversationModel, messageModel, memberModel, doctorModel, notificationEvents, messagingEvents, notifications };
 	};
+
+    it('counts incoming unread messages across owned direct conversations only, using both sender ID and role', async () => {
+        const { service, conversationModel, messageModel } = models();
+        conversationModel.distinct.mockReturnValue(conversationQuery([conversationId]));
+        messageModel.countDocuments.mockReturnValue(conversationQuery(123));
+        expect(await service.getUnreadCount(actor)).toBe(123);
+        expect(conversationModel.distinct).toHaveBeenCalledWith('_id', { conversationType: ConversationType.DIRECT, participantKeys: `PATIENT:${patientId}` });
+        expect(messageModel.countDocuments).toHaveBeenCalledWith({ conversationId: { $in: [conversationId] }, readAt: { $exists: false }, deletedAt: { $exists: false },
+            $or: [{ senderId: { $ne: patientId } }, { senderType: { $ne: MemberType.PATIENT } }] });
+    });
+    it('has no unread messages when there are no owned conversations', async () => {
+        const { service, conversationModel, messageModel } = models();
+        conversationModel.distinct.mockReturnValue(conversationQuery([]));
+        expect(await service.getUnreadCount(actor)).toBe(0);
+        expect(messageModel.countDocuments).not.toHaveBeenCalled();
+    });
 
 	it('uses one canonical key for a patient and doctor regardless of who starts the chat', async () => {
 		const { service, conversationModel } = models();
@@ -109,7 +127,7 @@ describe('Messaging ownership', () => {
 	});
 
 	it('marks only the other participant’s messages as read', async () => {
-		const { service, conversationModel, messageModel, messagingEvents } = models();
+		const { service, conversationModel, messageModel, messagingEvents, notifications } = models();
 		conversationModel.findOne.mockReturnValue(conversationQuery({
 			_id: conversationId,
 			participants: [
@@ -119,6 +137,7 @@ describe('Messaging ownership', () => {
 		}));
 		messageModel.updateMany.mockReturnValue(conversationQuery({ modifiedCount: 2 }));
 		expect(await service.markMyMessagesRead(actor, conversationId)).toBe(2);
+        expect(notifications.markConversationRead).toHaveBeenCalledWith(patientId, MemberType.PATIENT, conversationId, expect.any(Date));
 		expect(messageModel.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({ senderId: doctorId, senderType: MemberType.DOCTOR }),
 			expect.objectContaining({ $set: { readAt: expect.any(Date) } }),

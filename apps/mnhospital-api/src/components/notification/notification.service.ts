@@ -33,15 +33,45 @@ export class NotificationService {
 
 	public async createEventNotification(eventKey: string, input: CreateNotificationData): Promise<Notification> {
 		try {
-			return await this.notificationModel.findOneAndUpdate(
-				{ notificationEventKey: eventKey },
-				{ $setOnInsert: { ...input, notificationStatus: NotificationStatus.UNREAD, notificationEventKey: eventKey } },
-				{ upsert: true, new: true, setDefaultsOnInsert: true },
-			).exec();
+			return await this.notificationModel
+			.findOneAndUpdate(
+					{ notificationEventKey: eventKey },
+					{ $setOnInsert: { ...input, notificationStatus: NotificationStatus.UNREAD, notificationEventKey: eventKey } },
+					{ upsert: true, new: true, setDefaultsOnInsert: true },
+				)
+				.exec();
 		} catch (error) {
 			if ((error as { code?: number }).code !== 11000) throw error;
 			return this.notificationModel.findOne({ notificationEventKey: eventKey }).select('+notificationEventKey').exec();
 		}
+	}
+
+	public async getUnreadCount(receiverId: ObjectId, receiverType: MemberType): Promise<number> {
+		return this.notificationModel
+			.countDocuments({ receiverId, receiverType, notificationStatus: NotificationStatus.UNREAD })
+			.exec();
+	}
+
+	public async markConversationRead(
+		receiverId: ObjectId,
+		receiverType: MemberType,
+		conversationId: ObjectId,
+		readAt: Date,
+	): Promise<void> {
+		await this.notificationModel
+			.updateMany(
+				{
+					receiverId,
+					receiverType,
+					notificationGroup: NotificationGroup.CONVERSATION,
+					notificationType: NotificationType.MESSAGE,
+					notificationRefId: conversationId,
+					notificationStatus: NotificationStatus.UNREAD,
+					createdAt: { $lte: readAt },
+				},
+				{ $set: { notificationStatus: NotificationStatus.READ } },
+			)
+			.exec();
 	}
 
 	public async getMyNotifications(
@@ -75,9 +105,7 @@ export class NotificationService {
 		receiverType: MemberType,
 		notificationId: ObjectId,
 	): Promise<Notification> {
-		const notification = await this.notificationModel
-			.findOne({ _id: notificationId, receiverId, receiverType })
-			.exec();
+		const notification = await this.notificationModel.findOne({ _id: notificationId, receiverId, receiverType }).exec();
 		if (!notification) throw new NotFoundException('Notification not found');
 		return notification;
 	}

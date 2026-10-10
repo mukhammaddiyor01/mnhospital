@@ -1,3 +1,4 @@
+import { NotificationService } from '../notification/notification.service';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -30,9 +31,13 @@ export class MessagingService {
 		@InjectModel('Admin') private readonly adminModel: Model<any>,
 		private readonly notificationEvents: NotificationEventService,
 		private readonly messagingEvents: MessagingEventsService,
+		private readonly notifications: NotificationService,
 	) {}
 
-	public async startDirectConversation(actor: MessageActor, input: StartDirectConversationInput): Promise<ChatConversation> {
+	public async startDirectConversation(
+		actor: MessageActor,
+		input: StartDirectConversationInput,
+	): Promise<ChatConversation> {
 		const targetId = parseId(input.targetId);
 		if (actor.memberType === input.targetType && actor._id.equals(targetId)) {
 			throw new BadRequestException('Cannot start a conversation with yourself');
@@ -49,22 +54,58 @@ export class MessagingService {
 		const keys = [participantKey(actor.memberType, actor._id), participantKey(input.targetType, targetId)].sort();
 		const directKey = keys.join('|');
 		try {
-			return await this.conversationModel.findOneAndUpdate(
-				{ conversationType: ConversationType.DIRECT, directKey },
-				{ $setOnInsert: { conversationType: ConversationType.DIRECT, directKey, participantKeys: keys, participants: [sender, receiver] } },
-				{ upsert: true, new: true, setDefaultsOnInsert: true },
-			).exec();
+			return await this.conversationModel
+				.findOneAndUpdate(
+					{ conversationType: ConversationType.DIRECT, directKey },
+					{
+						$setOnInsert: {
+							conversationType: ConversationType.DIRECT,
+							directKey,
+							participantKeys: keys,
+							participants: [sender, receiver],
+						},
+					},
+					{ upsert: true, new: true, setDefaultsOnInsert: true },
+				)
+				.exec();
 		} catch (error) {
 			if ((error as { code?: number }).code !== 11000) throw error;
 			return this.conversationModel.findOne({ conversationType: ConversationType.DIRECT, directKey }).exec();
 		}
 	}
 
+	public async getUnreadCount(actor: MessageActor): Promise<number> {
+		await this.requireActiveActor(actor);
+		const ids = await this.conversationModel
+			.distinct('_id', {
+				conversationType: ConversationType.DIRECT,
+				participantKeys: participantKey(actor.memberType, actor._id),
+			})
+			.exec();
+		if (!ids.length) return 0;
+		return this.messageModel
+			.countDocuments({
+				conversationId: { $in: ids },
+				readAt: { $exists: false },
+				deletedAt: { $exists: false },
+				$or: [{ senderId: { $ne: actor._id } }, { senderType: { $ne: actor.memberType } }],
+			})
+			.exec();
+	}
+
 	public async getMyConversations(actor: MessageActor, input: ChatInquiry): Promise<ChatConversations> {
 		await this.requireActiveActor(actor);
-		const filter = { conversationType: ConversationType.DIRECT, participantKeys: participantKey(actor.memberType, actor._id) };
+		const filter = {
+			conversationType: ConversationType.DIRECT,
+			participantKeys: participantKey(actor.memberType, actor._id),
+		};
 		const [list, total] = await Promise.all([
-			this.conversationModel.find(filter).sort({ lastMessageAt: -1, createdAt: -1 }).skip((input.page - 1) * input.limit).limit(input.limit).exec(),
+			this.conversationModel
+				.find(filter)
+				.sort({ lastMessageAt: -1, createdAt: -1 })
+				.skip((input.page - 1) * input.limit)
+				.limit(input.limit)
+				.exec(),
 			this.conversationModel.countDocuments(filter).exec(),
 		]);
 		return { list, total };
@@ -72,26 +113,41 @@ export class MessagingService {
 
 	public async getMyConversation(actor: MessageActor, conversationId: Types.ObjectId): Promise<ChatConversation> {
 		await this.requireActiveActor(actor);
-		const conversation = await this.conversationModel.findOne({
+		const conversation = await this.conversationModel
+			.findOne({
 			_id: conversationId,
 			conversationType: ConversationType.DIRECT,
 			participantKeys: participantKey(actor.memberType, actor._id),
-		}).exec();
+		})
+			.exec();
 		if (!conversation) throw new NotFoundException('Conversation not found');
 		return conversation;
 	}
 
-	public async getMyMessages(actor: MessageActor, conversationId: Types.ObjectId, input: ChatInquiry): Promise<ChatMessages> {
+	public async getMyMessages(
+		actor: MessageActor,
+		conversationId: Types.ObjectId,
+		input: ChatInquiry,
+	): Promise<ChatMessages> {
 		await this.getMyConversation(actor, conversationId);
 		const filter = { conversationId, deletedAt: { $exists: false } };
 		const [list, total] = await Promise.all([
-			this.messageModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip((input.page - 1) * input.limit).limit(input.limit).exec(),
+			this.messageModel
+				.find(filter)
+				.sort({ createdAt: -1, _id: -1 })
+				.skip((input.page - 1) * input.limit)
+				.limit(input.limit)
+				.exec(),
 			this.messageModel.countDocuments(filter).exec(),
 		]);
 		return { list, total };
 	}
 
-	public async sendDirectMessage(actor: MessageActor, conversationId: Types.ObjectId, input: SendDirectMessageInput): Promise<ChatMessage> {
+	public async sendDirectMessage(
+		actor: MessageActor,
+		conversationId: Types.ObjectId,
+		input: SendDirectMessageInput,
+	): Promise<ChatMessage> {
 		const conversation = await this.getMyConversation(actor, conversationId);
 		const content = input.messageContent.trim();
 		if (!content) throw new BadRequestException('Message cannot be empty');
@@ -99,7 +155,11 @@ export class MessagingService {
 		let replyToMessageId: Types.ObjectId | undefined;
 		if (input.replyToMessageId) {
 			replyToMessageId = parseId(input.replyToMessageId);
-			const reply = await this.messageModel.exists({ _id: replyToMessageId, conversationId, deletedAt: { $exists: false } });
+			const reply = await this.messageModel.exists({
+				_id: replyToMessageId,
+				conversationId,
+				deletedAt: { $exists: false },
+			});
 			if (!reply) throw new BadRequestException('Reply message is not in this conversation');
 		}
 
@@ -110,10 +170,14 @@ export class MessagingService {
 			messageContent: content,
 			replyToMessageId,
 		});
-		await this.conversationModel.updateOne({ _id: conversationId }, { $set: { lastMessageAt: message.createdAt } }).exec();
-		this.messagingEvents.publishMessageCreated({ conversationId, participants: conversation.participants, message });
+		await this.conversationModel
+			.updateOne({ _id: conversationId }, { $set: { lastMessageAt: message.createdAt } })
+			.exec();
+
 		const recipient = conversation.participants.find(
-			(participant) => participantKey(participant.participantType, participant.participantId) !== participantKey(actor.memberType, actor._id),
+			(participant) =>
+				participantKey(participant.participantType, participant.participantId) !==
+				participantKey(actor.memberType, actor._id),
 		);
 		if (recipient) {
 			await this.notificationEvents.toRecipient(recipient.participantId, recipient.participantType, {
@@ -127,28 +191,46 @@ export class MessagingService {
 				authorType: actor.memberType,
 			});
 		}
+		this.messagingEvents.publishMessageCreated({ conversationId, participants: conversation.participants, message });
 		return message;
 	}
 
 	public async markMyMessagesRead(actor: MessageActor, conversationId: Types.ObjectId): Promise<number> {
 		const conversation = await this.getMyConversation(actor, conversationId);
 		const other = conversation.participants.find(
-			(participant) => participantKey(participant.participantType, participant.participantId) !== participantKey(actor.memberType, actor._id),
+			(participant) =>
+				participantKey(participant.participantType, participant.participantId) !==
+				participantKey(actor.memberType, actor._id),
 		);
 		if (!other) throw new NotFoundException('Conversation recipient not found');
 		const readAt = new Date();
-		const result = await this.messageModel.updateMany(
-			{ conversationId, senderId: other.participantId, senderType: other.participantType, readAt: { $exists: false }, deletedAt: { $exists: false } },
-			{ $set: { readAt } },
-		).exec();
-		if (result.modifiedCount > 0) this.messagingEvents.publishMessagesRead({
-			conversationId, participants: conversation.participants, readerId: actor._id, readerType: actor.memberType, readAt,
-		});
+		const result = await this.messageModel
+			.updateMany(
+				{
+					conversationId,
+					senderId: other.participantId,
+					senderType: other.participantType,
+					readAt: { $exists: false },
+					deletedAt: { $exists: false },
+					createdAt: { $lte: readAt },
+				},
+				{ $set: { readAt } },
+			)
+			.exec();
+		await this.notifications.markConversationRead(actor._id, actor.memberType, conversationId, readAt);
+		if (result.modifiedCount > 0)
+			this.messagingEvents.publishMessagesRead({
+				conversationId,
+				participants: conversation.participants,
+				readerId: actor._id,
+				readerType: actor.memberType,
+				readAt,
+			});
 		return result.modifiedCount;
 	}
 
 	private async requireActiveActor(actor: MessageActor): Promise<void> {
-		if (!await this.getActiveParticipant(actor.memberType, actor._id)) {
+		if (!(await this.getActiveParticipant(actor.memberType, actor._id))) {
 			throw new NotFoundException('Active messaging profile not found');
 		}
 	}
@@ -158,17 +240,48 @@ export class MessagingService {
 		let profile: Record<string, any> | null;
 		switch (type) {
 			case MemberType.PATIENT:
-				profile = await this.memberModel.findOne({ ...active, memberType: MemberType.PATIENT }).select('memberFullName memberNick memberImage').lean().exec();
-				return profile ? { participantId: id, participantType: type, displayName: profile.memberFullName || profile.memberNick, image: profile.memberImage } : null;
+				profile = await this.memberModel
+					.findOne({ ...active, memberType: MemberType.PATIENT })
+					.select('memberFullName memberNick memberImage')
+					.lean()
+					.exec();
+				return profile
+					? {
+							participantId: id,
+							participantType: type,
+							displayName: profile.memberFullName || profile.memberNick,
+							image: profile.memberImage,
+						}
+					: null;
 			case MemberType.DOCTOR:
 				profile = await this.doctorModel.findOne(active).select('docFullName docNick docImage').lean().exec();
-				return profile ? { participantId: id, participantType: type, displayName: profile.docFullName || profile.docNick, image: profile.docImage } : null;
+				return profile
+					? {
+							participantId: id,
+							participantType: type,
+							displayName: profile.docFullName || profile.docNick,
+							image: profile.docImage,
+						}
+					: null;
 			case MemberType.RECEPTIONIST:
-				profile = await this.receptionistModel.findOne(active).select('receptionistFullName receptionistNick receptionistImage').lean().exec();
-				return profile ? { participantId: id, participantType: type, displayName: profile.receptionistFullName || profile.receptionistNick, image: profile.receptionistImage } : null;
+				profile = await this.receptionistModel
+					.findOne(active)
+					.select('receptionistFullName receptionistNick receptionistImage')
+					.lean()
+					.exec();
+				return profile
+					? {
+							participantId: id,
+							participantType: type,
+							displayName: profile.receptionistFullName || profile.receptionistNick,
+							image: profile.receptionistImage,
+						}
+					: null;
 			case MemberType.ADMIN:
 				profile = await this.adminModel.findById(id).select('adminNick adminImage').lean().exec();
-				return profile ? { participantId: id, participantType: type, displayName: profile.adminNick, image: profile.adminImage } : null;
+				return profile
+					? { participantId: id, participantType: type, displayName: profile.adminNick, image: profile.adminImage }
+					: null;
 			default:
 				return null;
 		}

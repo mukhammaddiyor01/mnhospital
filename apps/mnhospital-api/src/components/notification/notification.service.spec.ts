@@ -10,6 +10,7 @@ describe('NotificationService receiver ownership', () => {
 	const exec = jest.fn();
 	const model = {
 		create: jest.fn(),
+        countDocuments: jest.fn(() => ({ exec })),
 		aggregate: jest.fn(() => ({ exec })),
 		findOne: jest.fn(() => ({ exec })),
 		findOneAndUpdate: jest.fn(() => ({ exec })),
@@ -20,6 +21,20 @@ describe('NotificationService receiver ownership', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 	});
+
+    it('counts only this receiver and role’s unread notifications', async () => {
+        exec.mockResolvedValue(7);
+        expect(await service.getUnreadCount(receiverId, MemberType.DOCTOR)).toBe(7);
+        expect(model.countDocuments).toHaveBeenCalledWith({ receiverId, receiverType: MemberType.DOCTOR, notificationStatus: NotificationStatus.UNREAD });
+    });
+    it('reading a conversation clears only its existing message alerts for the authorized receiver', async () => {
+        const conversationId = new Types.ObjectId(), readAt = new Date();
+        exec.mockResolvedValue({ modifiedCount: 2 });
+        await service.markConversationRead(receiverId, MemberType.PATIENT, conversationId, readAt);
+        expect(model.updateMany).toHaveBeenCalledWith({ receiverId, receiverType: MemberType.PATIENT,
+            notificationGroup: 'CONVERSATION', notificationType: 'MESSAGE', notificationRefId: conversationId,
+            notificationStatus: NotificationStatus.UNREAD, createdAt: { $lte: readAt } }, { $set: { notificationStatus: NotificationStatus.READ } });
+    });
 
 	it('scopes the inbox query to the JWT receiver ID and role', async () => {
 		exec.mockResolvedValue([{ list: [], metaCounter: [] }]);

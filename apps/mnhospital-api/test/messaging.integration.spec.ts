@@ -19,6 +19,7 @@ describe('Messaging GraphQL access', () => {
 	const conversationId = new Types.ObjectId();
 	const service = {
 		startDirectConversation: jest.fn(),
+        getUnreadCount: jest.fn(),
 		getMyConversations: jest.fn(),
 		getMyConversation: jest.fn(),
 		getMyMessages: jest.fn(),
@@ -49,6 +50,20 @@ describe('Messaging GraphQL access', () => {
 	beforeEach(() => jest.clearAllMocks());
 
 	const tokenFor = (id: Types.ObjectId, memberType: MemberType) => auth.createToken({ _id: id, memberType });
+
+    it('returns unread counts only for the verified role/profile and rejects anonymous requests', async () => {
+        service.getUnreadCount.mockResolvedValue(3);
+        const query = '{getMyUnreadMessageCount}';
+        const guest = await request(app.getHttpServer()).post('/graphql').set('Apollo-Require-Preflight','true').send({query});
+        expect(guest.body.errors).toBeDefined();
+        expect(service.getUnreadCount).not.toHaveBeenCalled();
+        const result = await request(app.getHttpServer()).post('/graphql').set('Apollo-Require-Preflight','true')
+            .set('Authorization', `Bearer ${await tokenFor(doctorId, MemberType.DOCTOR)}`).send({query});
+        expect(result.body.errors).toBeUndefined();
+        expect(result.body.data.getMyUnreadMessageCount).toBe(3);
+        const actor = service.getUnreadCount.mock.calls[0][0];
+        expect(String(actor._id)).toBe(String(doctorId)); expect(actor.memberType).toBe(MemberType.DOCTOR);
+    });
 
 	it('starts a direct conversation using the authenticated role and ID', async () => {
 		service.startDirectConversation.mockResolvedValue({

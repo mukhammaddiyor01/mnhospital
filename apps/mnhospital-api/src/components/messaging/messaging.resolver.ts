@@ -21,6 +21,13 @@ export class MessagingResolver {
 
 	@Roles(...messagingRoles)
 	@UseGuards(RolesGuard)
+	@Query(() => Int)
+	public async getMyUnreadMessageCount(@AuthMember() actor: MessageActor): Promise<number> {
+		return this.messagingService.getUnreadCount(actor);
+	}
+
+	@Roles(...messagingRoles)
+	@UseGuards(RolesGuard)
 	@Mutation(() => ChatConversation)
 	public async startDirectConversation(
 		@Args('input') input: StartDirectConversationInput,
