@@ -15,19 +15,20 @@ export class ViewService {
 	constructor(@InjectModel('View') private readonly viewModel: Model<View>) {}
 
 	public async recordView(input: ViewInput): Promise<View | null> {
-		const viewExist = await this.checkViewExistence(input);
-		if (!viewExist) {
-			console.log('_ New View Insert _');
-			return await this.viewModel.create(input);
-		}
-		await this.viewModel.updateOne({ _id: viewExist._id }, { $set: { updatedAt: new Date() } }).exec();
-		return null;
-	}
-
-	private async checkViewExistence(input: ViewInput): Promise<View | null> {
+		if (!input.memberId) return null;
 		const { memberId, viewRefId, viewGroup } = input;
-		const search: T = { memberId, viewRefId, viewGroup };
-		return await this.viewModel.findOne(search).exec();
+		const now = new Date(), id = new Types.ObjectId();
+		try {
+			const previous = await this.viewModel.findOneAndUpdate(
+				{ memberId, viewRefId, viewGroup },
+				{ $set: { updatedAt: now }, $setOnInsert: { _id: id, memberId, viewRefId, viewGroup } },
+				{ upsert: true, new: false },
+			).lean().exec();
+			return previous ? null : { _id: id, memberId, viewRefId, viewGroup, createdAt: now };
+		} catch (error) {
+			if (error?.code === 11000 && await this.viewModel.exists({ memberId, viewRefId, viewGroup })) return null;
+			throw error;
+		}
 	}
 
 	public async getVisitedServices(memberId: ObjectId, input: OrdinaryInquiry): Promise<Services> {

@@ -26,7 +26,7 @@ describe('Admin doctor profile editing', () => {
 		model = { findOneAndUpdate: jest.fn().mockReturnValue({ exec: async () => ({ _id: id }) }), findOne: jest.fn().mockReturnValue({ exec: async () => ({ _id: id, docSpecialty: DoctorSpecialty.CARDIOLOGIST }) }) };
 		serviceModel = { countDocuments: jest.fn().mockReturnValue({ exec: async () => 0 }) };
 		auth = { createToken: jest.fn(), revokeOwnerSessions: jest.fn().mockResolvedValue(undefined) };
-		service = new DoctorService(model as any, null, null, serviceModel as any, null, null, auth as any, null, null);
+		service = new DoctorService(model as any, null, null, serviceModel as any, null, null, auth as any, null, null, null);
 	});
 
 	it('restricts the mutation to verified admin tokens', async () => {

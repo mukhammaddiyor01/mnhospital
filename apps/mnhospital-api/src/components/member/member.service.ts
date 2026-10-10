@@ -194,7 +194,8 @@ export class MemberService {
 		if (!targetMember) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		if (memberId) {
-			// Record a unique member profile view.
+			// Record a unique member profile view, excluding the owner.
+			if (String(memberId) !== String(targetId)) {
 			const viewInput: ViewInput = {
 				memberId,
 				viewRefId: targetId,
@@ -206,6 +207,7 @@ export class MemberService {
 				targetMember.memberViews++;
 			}
 
+			}
 			const likeInput: LikeInput = {
 				memberId,
 				likeRefId: targetId,
@@ -277,6 +279,7 @@ export class MemberService {
 		const result = await this.memberStatisticEditor({ _id: likeRefId, targetKey: 'memberLikes', modifier: modifier });
 
 		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		result.meLiked = await this.likeService.checkLikeExistence(input);
 		return result;
 	}
 }

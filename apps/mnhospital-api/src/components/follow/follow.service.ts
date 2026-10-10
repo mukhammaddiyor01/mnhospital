@@ -1,4 +1,4 @@
-import { BadGatewayException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -31,9 +31,10 @@ export class FollowService {
 		}
 
 		const targetMember = await this.memberService.getMember(null, followingId);
-		if (!targetMember) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		if (!targetMember || targetMember.memberStatus !== 'ACTIVE' || targetMember.memberType !== MemberType.PATIENT) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
-		const result = await this.registerSubscription(followerId, followingId);
+		const { result, created } = await this.registerSubscription(followerId, followingId);
+		if (!created) return result;
 		if (memberType === MemberType.DOCTOR) await this.doctorService.doctorStatisticEditor({ _id: followerId, targetKey: 'docFollowings', modifier: 1 });
 		else await this.memberService.memberStatusEditor({ _id: followerId, targetKey: 'memberFollowings', modifier: 1 });
 		await this.memberService.memberStatusEditor({
@@ -45,12 +46,18 @@ export class FollowService {
 		return result;
 	}
 
-	private async registerSubscription(followerId: ObjectId, followingId: ObjectId): Promise<Follower> {
+	private async registerSubscription(followerId: ObjectId, followingId: ObjectId): Promise<{ result: Follower; created: boolean }> {
+		const search = { followingId, followerId };
+		const existing = await this.followModel.findOne(search).exec();
+		if (existing) return { result: existing as Follower, created: false };
 		try {
-			return await this.followModel.create({ followingId, followerId });
-		} catch (err) {
-			console.error('Error, FollowService.registerSubscription:', err);
-			throw new BadGatewayException(Message.CREATE_FAILED);
+			return { result: await this.followModel.create(search) as Follower, created: true };
+		} catch (error) {
+			if (error?.code === 11000) {
+				const existing = await this.followModel.findOne(search).exec();
+				if (existing) return { result: existing as Follower, created: false };
+			}
+			throw new BadRequestException('Following could not be saved. Please try again.');
 		}
 	}
 

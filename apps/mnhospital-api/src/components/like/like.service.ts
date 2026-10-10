@@ -24,24 +24,17 @@ export class LikeService {
 			likeGroup: input.likeGroup,
 		};
 
-		const exist = await this.likeModel.findOne(search).exec();
-		let modifier: number;
-
-		if (exist) {
-			await this.likeModel.findOneAndDelete(search).exec();
-			modifier = -1;
-		} else {
-			try {
-				await this.likeModel.create(input);
-				modifier = 1;
-			} catch (err) {
-				console.error('Error, LikeService.toggleLike:', err);
-				throw new BadRequestException(Message.CREATE_FAILED);
-			}
+		// Only the request that actually deletes a record decrements its counter.
+		const removed = await this.likeModel.findOneAndDelete(search).exec();
+		if (removed) return -1;
+		try {
+			await this.likeModel.create(input);
+			return 1;
+		} catch (error) {
+			// A simultaneous like already created the same unique relation.
+			if (error?.code === 11000 && await this.likeModel.exists(search)) return 0;
+			throw new BadRequestException('Like could not be saved. Please try again.');
 		}
-
-		console.log(`- Like modifier ${modifier} -`);
-		return modifier;
 	}
 
 	public async checkLikeExistence(input: LikeInput): Promise<MeLiked[]> {

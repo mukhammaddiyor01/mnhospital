@@ -20,7 +20,7 @@ describe('Public service details with an optional doctor profile', () => {
 				serviceDesc: 'Published service description', serviceStatus: ServiceStatus.ACTIVE,
 			}) }) })),
 		};
-		doctors = new DoctorService(doctorModel as never, null, null, null, null, null, null, null, null);
+		doctors = new DoctorService(doctorModel as never, null, null, null, null, null, null, null, null, null);
 		services = new ServiceService(serviceModel as never, null, doctors, null, null, null);
 	});
 

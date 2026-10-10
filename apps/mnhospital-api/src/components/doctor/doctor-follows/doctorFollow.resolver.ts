@@ -3,7 +3,8 @@ import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { AuthMember } from '../../auth/decorators/authMember.decorator';
-import { AuthGuard } from '../../auth/guards/auth.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { WithoutGuard } from '../../auth/guards/without.guard';
 import { shapeIntoMongoObjectId } from '../../../libs/config';
 import {
@@ -20,7 +21,8 @@ import { MemberType } from '../../member/enums/member.enum';
 export class DoctorFollowResolver {
 	constructor(private readonly doctorFollowService: DoctorFollowService) {}
 
-	@UseGuards(AuthGuard)
+	@Roles(MemberType.PATIENT, MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
 	@Mutation(() => DoctorFollowing)
 	public async subscribeDoctor(
 		@Args('input') input: string,
@@ -31,7 +33,8 @@ export class DoctorFollowResolver {
 		return await this.doctorFollowService.subscribeDoctor(memberId, shapeIntoMongoObjectId(input), memberType);
 	}
 
-	@UseGuards(AuthGuard)
+	@Roles(MemberType.PATIENT, MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
 	@Mutation(() => DoctorFollowing)
 	public async unsubscribeDoctor(
 		@Args('input') input: string,

@@ -1,4 +1,4 @@
-import { BadGatewayException, forwardRef, Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -28,13 +28,21 @@ export class DoctorFollowService {
 
 	public async subscribeDoctor(memberId: ObjectId, doctorId: ObjectId, memberType: MemberType): Promise<DoctorFollowing> {
 		if (memberId.toString() === doctorId.toString()) throw new BadGatewayException(Message.SELF_FOLLOW_DENIED);
-		const targetDoctor = await this.doctorService.getDoctor(doctorId);
-		if (!targetDoctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+		const targetDoctor = await this.doctorService.findPublicDoctor(doctorId);
+		if (!targetDoctor || targetDoctor.memberStatus !== 'ACTIVE') throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		const existing = await this.doctorFollowModel.findOne({ doctorId, memberId }).exec();
-		if (existing) throw new BadGatewayException(Message.CREATE_FAILED);
+		if (existing) return existing as DoctorFollowing;
 
-		const result = await this.doctorFollowModel.create({ doctorId, memberId });
+		let result: DoctorFollowing;
+		try { result = await this.doctorFollowModel.create({ doctorId, memberId }) as DoctorFollowing; }
+		catch (error) {
+			if (error?.code === 11000) {
+				const existing = await this.doctorFollowModel.findOne({ doctorId, memberId }).exec();
+				if (existing) return existing as DoctorFollowing;
+			}
+			throw new BadRequestException('Following could not be saved. Please try again.');
+		}
 		if (memberType === MemberType.DOCTOR) await this.doctorService.doctorStatisticEditor({ _id: memberId, targetKey: 'docFollowings', modifier: 1 });
 		else await this.memberService.memberStatisticEditor({ _id: memberId, targetKey: 'memberFollowings', modifier: 1 });
 		await this.doctorService.doctorStatisticEditor({
@@ -47,7 +55,7 @@ export class DoctorFollowService {
 	}
 
 	public async unsubscribeDoctor(memberId: ObjectId, doctorId: ObjectId, memberType: MemberType): Promise<DoctorFollowing> {
-		const targetDoctor = await this.doctorService.getDoctor(doctorId);
+		const targetDoctor = await this.doctorService.findPublicDoctor(doctorId);
 		if (!targetDoctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
 
 		const result = await this.doctorFollowModel.findOneAndDelete({ doctorId, memberId }).exec();

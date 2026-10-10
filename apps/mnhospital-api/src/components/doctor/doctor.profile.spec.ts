@@ -20,7 +20,7 @@ describe('Doctor own profile', () => {
 	beforeEach(() => {
 		model = { findOne: jest.fn(), findOneAndUpdate: jest.fn() };
 		auth = { createToken: jest.fn().mockResolvedValue('updated-session') };
-		service = new DoctorService(model as any, null, null, null, null, null, auth as any, null, null);
+		service = new DoctorService(model as any, null, null, null, null, null, auth as any, null, null, null);
 	});
 
 	it('loads only the authenticated active doctor', async () => {

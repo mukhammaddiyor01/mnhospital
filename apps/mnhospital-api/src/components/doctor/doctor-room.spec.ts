@@ -28,7 +28,7 @@ describe('Doctor room allocation', () => {
 			revokeOwnerSessions: jest.fn().mockResolvedValue(undefined),
 			createToken: jest.fn().mockResolvedValue('token'),
 		};
-		service = new DoctorService(doctors, null, null, null, null, null, auth, null, rooms);
+		service = new DoctorService(doctors, null, null, null, null, null, auth, null, rooms, null);
 	});
 	it('only allows admin to request room choices', () => {
 		expect(Reflect.getMetadata('roles', DoctorResolver.prototype.getAvailableDoctorRooms)).toEqual([MemberType.ADMIN]);

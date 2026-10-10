@@ -74,7 +74,7 @@ export class ArticleService {
 			targetArticle.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		}
 
-		targetArticle.memberData = await this.doctorService.getDoctor(targetArticle.memberId, memberId);
+		targetArticle.memberData = await this.doctorService.findPublicDoctor(targetArticle.memberId, memberId);
 		return targetArticle;
 	}
 
@@ -97,6 +97,7 @@ export class ArticleService {
 		});
 
 		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		result.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		return result;
 	}
 

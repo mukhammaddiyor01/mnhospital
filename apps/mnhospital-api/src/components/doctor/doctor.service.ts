@@ -9,6 +9,8 @@ import { Direction, Message } from '../../libs/enums/common.enum';
 import { lookupAuthMemberLiked } from '../../libs/config';
 import { AuthService } from '../auth/auth.service';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
+import { ViewService } from '../view/view.service';
+import { ViewGroup } from '../view/enums/view.enum';
 import { LikeService } from '../like/like.service';
 import { LikeInput } from '../like/dto/like.input';
 import { LikeGroup } from '../like/enums/like.enum';
@@ -37,6 +39,7 @@ export class DoctorService {
 		private readonly authService: AuthService,
 		private readonly likeService: LikeService,
 		@InjectModel('Room') private readonly roomModel: Model<HospitalRoom & { assignedDoctorId?: ObjectId }>,
+		private readonly viewService: ViewService,
 	) {}
 
 	public async getMyProfile(doctorId: ObjectId): Promise<Doctor> {
@@ -332,11 +335,17 @@ export class DoctorService {
 	public async getDoctor(targetId: ObjectId, memberId?: ObjectId): Promise<Doctor> {
 		const doctor = await this.findPublicDoctor(targetId, memberId);
 		if (!doctor) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-		const viewed = await this.doctorModel.findOneAndUpdate({ _id: targetId,
-			memberStatus: { $in: [MemberStatus.ACTIVE, MemberStatus.BLOCK] }, deletedAt: { $exists: false } },
-			{ $inc: { docViews: 1 } }, { new: true }).select('docViews').lean().exec();
-		if (!viewed) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
-		doctor.docViews = viewed.docViews;
+		if (memberId) {
+			const newView = await this.viewService.recordView({ memberId, viewRefId: targetId, viewGroup: ViewGroup.DOCTOR });
+			if (newView) {
+				const viewed = await this.doctorModel.findOneAndUpdate(
+					{ _id: targetId, memberStatus: { $in: [MemberStatus.ACTIVE, MemberStatus.BLOCK] }, deletedAt: { $exists: false } },
+					{ $inc: { docViews: 1 } }, { new: true },
+				).select('docViews').lean().exec();
+				if (!viewed) throw new InternalServerErrorException(Message.NO_DATA_FOUND);
+				doctor.docViews = viewed.docViews;
+			}
+		}
 		return doctor;
 	}
 
@@ -421,6 +430,7 @@ export class DoctorService {
 		});
 
 		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		result.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		return result;
 	}
 

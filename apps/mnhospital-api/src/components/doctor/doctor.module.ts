@@ -15,6 +15,7 @@ import { DoctorService } from './doctor.service';
 import RoomSchema from '../../libs/schemas/Room.model';
 import DoctorSchema from './schema/Doctor.model';
 import { AuthModule } from '../auth/auth.module';
+import { ViewModule } from '../view/view.module';
 import { LikeModule } from '../like/like.module';
 import FollowSchema from '../follow/schema/Follow.model';
 import ServiceSchema from '../service/schema/Service.model';
@@ -49,6 +50,7 @@ import DoctorFollowSchema from './doctor-follows/schema/DoctorFollow.model';
 		DoctorViewsModule,
 		AuthModule,
 		LikeModule,
+		ViewModule,
 	],
 	providers: [DoctorResolver, DoctorService, DepartmentResolver, DepartmentService],
 	exports: [MongooseModule, DoctorService, DepartmentService],
