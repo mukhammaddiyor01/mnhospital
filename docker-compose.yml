@@ -1,0 +1,46 @@
+version: '3.3'
+
+services:
+  mnhospital-api:
+    container_name: mnhospital-api
+    restart: always
+    image: node:20.10.0
+    ports:
+      - 2001:4001
+    volumes:
+      - ./:/usr/src/mnhospital
+    working_dir: /usr/src/mnhospital
+
+    networks:
+      - monorepo-network
+
+    # FOR PRODUCTION
+    command:
+      bash -c "npm install && npm run build && npm run start:prod"
+
+      # FOR PRODUCTION
+    # command: bash -c "npm install && npm run start:dev"
+
+  mnhospital-batch:
+    container_name: mnhospital-batch
+    restart: unless-stopped
+    image: node:20.10.0
+    ports:
+      - 2003:4003
+    volumes:
+      - ./:/usr/src/mnhospital
+    working_dir: /usr/src/mnhospital
+
+    networks:
+      - monorepo-network
+
+    # FOR PRODUCTION
+    command: bash -c "npm install && npm run build && npm run start:prod:batch"
+
+networks:
+  monorepo-network:
+    driver: bridge
+
+# mnhospital-next: localhost:2002 <=> container: 4002
+# mnhospital-api: localhost:2001 <=> container: 4001
+# mnhospital-batch: localhost:2003 <=> container: 4003
