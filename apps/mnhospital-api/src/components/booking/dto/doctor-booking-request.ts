@@ -1,9 +1,11 @@
 import { Field, ObjectType } from '@nestjs/graphql';
 import { BookingOrderStatus } from '../../patient/enums/patient.enum';
+import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
 import { TotalCounter } from '../../member/dto/member';
 
 @ObjectType()
 export class DoctorBookingRequest {
+ @Field(() => AppointmentStatus, { nullable: true }) appointmentStatus?: AppointmentStatus;
 	@Field(() => String)
 	_id: string;
 

@@ -243,7 +243,23 @@ export class AdminService {
 
 		const currentService = await this.serviceModel.findOne(search).exec();
 		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-		validateServiceAvailability({ availabilityDates: input.availabilityDates !== undefined ? input.availabilityDates : currentService.availabilityDates, openedAt: input.openedAt ?? currentService.openedAt, closedAt: input.closedAt ?? currentService.closedAt });
+		if (currentService.packageItems?.length > 1) {
+			const duration = currentService.packageItems.reduce((sum, item) => sum + item.duration, 0);
+			if (
+				Number(input.serviceDuration ?? currentService.serviceDuration) < duration ||
+				Number(input.servicePrice ?? currentService.servicePrice) >= currentService.packageRegularPrice
+			)
+				throw new BadRequestException('Use a valid full package price and duration');
+			for (const field of ['memberId', 'departmentId', 'serviceType', 'serviceRoom'])
+				if (input[field] !== undefined && String(input[field]) !== String(currentService[field]))
+					throw new BadRequestException('Package ownership and room follow its standard service');
+		}
+
+		validateServiceAvailability({
+			availabilityDates: input.availabilityDates !== undefined ? input.availabilityDates : currentService.availabilityDates,
+			openedAt: input.openedAt ?? currentService.openedAt,
+			closedAt: input.closedAt ?? currentService.closedAt,
+		});
 		if (input.serviceType !== undefined || input.serviceStatus === ServiceStatus.ACTIVE) {
 			const doctor = await this.doctorService.getDoctorByAdmin(currentService.memberId);
 			assertSpecialtyServiceType(doctor.docSpecialty, input.serviceType ?? currentService.serviceType);

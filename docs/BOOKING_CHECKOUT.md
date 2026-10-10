@@ -57,3 +57,15 @@ node scripts/verify-api-contract.cjs ../mnhospital http://localhost:2001/graphql
 The first argument supplies the backend's existing TypeScript tooling. It validates every exported frontend GraphQL document against API introspection.
 
 Final validation: 363 regression tests passed, 12 real MongoDB checkout tests passed, 107 frontend GraphQL documents validated, 25 browser session checks passed, and both application builds passed after integration. The actual KRW Eximbay checkout opened with a synthetic test card; final approval is pending explicit consent to the gateway Terms & Conditions/Privacy Policy. No money or real card was used.
+
+## Available date discovery
+
+`getAvailableDoctorDates(input: {doctorId, serviceId, month: YYYY-MM})` returns only clinic dates with at least one actual free slot. It uses the same slot calculation as `getAvailableDoctorSlots` and booking validation: active doctor/service, assigned available room, weekly working schedule, service dates and opening/closing bounds, duration, breaks, future time and appointment overlaps. A month needs one appointment read instead of one API call for every day. Existing hold-expiry release behavior remains unchanged.
+
+An empty result reports `NO_SCHEDULE`, `NO_ROOM`, `SERVICE_ENDED`, `INVALID_SERVICE_WINDOW` or `NO_DATES`. No fallback working hours, room assignment or extension of a medical service period is invented. Staff must correct the stored clinical configuration through their existing workspaces.
+
+The patient chooses a service first, then a highlighted calendar day and its server-provided time. Changing service/month clears the old time. Failed or pending queries cannot enable cached choices. Login retains the selected service in its redirect, including records outside the first catalog page, and the patient draft is restored. Create requests bind the expected patient account; amounts, room and patient identity remain server-derived.
+
+## Shared role workflow
+
+See [APPOINTMENT_ROLE_FLOW.md](APPOINTMENT_ROLE_FLOW.md) for distinct clinical/payment/task states, live staff booking-line statuses, cash receipt and accepted check-in actions, readable references and role verification.

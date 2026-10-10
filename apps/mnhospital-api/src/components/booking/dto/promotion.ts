@@ -36,6 +36,7 @@ export class PromoCodeInput {
 	@IsEnum(PromoDiscountType) @Field(() => PromoDiscountType) discountType: PromoDiscountType;
 	@IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) @Max(1000000000) @Field(() => Float) discountValue: number;
 	@IsBoolean() @Field(() => Boolean) isActive: boolean;
+	@IsOptional() @IsBoolean() @Field(() => Boolean, { nullable: true }) showOnHomepage?: boolean;
 	@IsNumber({ maxDecimalPlaces: 2 })
 	@Min(0)
 	@Max(1000000000)
@@ -78,6 +79,7 @@ export class PromoCode {
 	@Field(() => Float) discountValue: number;
 	@Field(() => String) currency: string;
 	@Field(() => Boolean) isActive: boolean;
+	@Field(() => Boolean, { nullable: true }) showOnHomepage?: boolean;
 	@Field(() => Float) minSubtotal: number;
 	@Field(() => [String]) serviceIds: string[];
 	@Field(() => Date, { nullable: true }) startsAt?: Date;
@@ -90,4 +92,16 @@ export class PromoCode {
 export class PromoCodes {
 	@Field(() => [PromoCode]) list: PromoCode[];
 	@Field(() => [TotalCounter]) metaCounter: TotalCounter[];
+}
+
+@ObjectType()
+export class PublicPromoOffer {
+ @Field(() => String) _id: Types.ObjectId;
+ @Field(() => String) code: string;
+ @Field(() => PromoDiscountType) discountType: PromoDiscountType;
+ @Field(() => Float) discountValue: number;
+ @Field(() => String) currency: string;
+ @Field(() => Float) minSubtotal: number;
+ @Field(() => [String]) serviceIds: string[];
+ @Field(() => Date, { nullable: true }) expiresAt?: Date;
 }

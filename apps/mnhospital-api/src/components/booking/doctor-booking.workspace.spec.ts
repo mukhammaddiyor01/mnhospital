@@ -38,7 +38,7 @@ describe('Doctor booking request ownership', () => {
 	it('projects scheduling fields without full order finances or other service lines', async () => {
 		await service.getDoctorBookingRequests(doctorId, { page: 1, limit: 10 });
 		const projection = aggregate.mock.calls[0][0].find((stage) => stage.$project).$project;
-		expect(Object.keys(projection).sort()).toEqual(['_id', 'appointmentId', 'bookingOrderId', 'bookingOrderStatus', 'orderCode', 'requestedStartAt', 'serviceDuration', 'serviceId', 'serviceName'].sort());
+		expect(Object.keys(projection).sort()).toEqual(['_id', 'appointmentStatus', 'appointmentId', 'bookingOrderId', 'bookingOrderStatus', 'orderCode', 'requestedStartAt', 'serviceDuration', 'serviceId', 'serviceName'].sort());
 		expect(projection._id.$concat).toContain('$bookingOrderItems.serviceId');
 	});
 

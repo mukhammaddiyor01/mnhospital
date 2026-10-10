@@ -49,7 +49,7 @@ export class DoctorScheduleInput {
 }
 
 @InputType()
-export class AvailableDoctorSlotsInput {
+export class DoctorBookingAvailabilityInput {
 	@Transform(toObjectId)
 	@IsInstance(ObjectId)
 	@IsNotEmpty()
@@ -62,8 +62,20 @@ export class AvailableDoctorSlotsInput {
 	@Field(() => String)
 	serviceId: ObjectId;
 
+}
+
+@InputType()
+export class AvailableDoctorSlotsInput extends DoctorBookingAvailabilityInput {
 	@IsString()
 	@Matches(/^\d{4}-\d{2}-\d{2}$/)
 	@Field(() => String)
 	date: string;
+}
+
+@InputType()
+export class AvailableDoctorDatesInput extends DoctorBookingAvailabilityInput {
+	@IsString()
+	@Matches(/^\d{4}-(?:0[1-9]|1[0-2])$/)
+	@Field(() => String)
+	month: string;
 }

@@ -14,6 +14,7 @@ import { AuthGuard } from '../auth/guards/auth.guard';
 import { shapeIntoMongoObjectId } from '../../libs/config';
 import { ServiceUpdate } from './dto/service.update';
 import { ServiceDiscountInput } from './dto/service.discount.input';
+import { ServiceOptionInput, ServiceOptionUpdateInput } from './dto/service.option.input';
 import { ServiceType } from './enums/service.enum';
 
 @Resolver()
@@ -25,6 +26,24 @@ export class ServiceResolver {
 		return this.serviceService.setDiscountByAdmin(input.serviceId, input.discountPercent);
 	}
 
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Service)
+	public async createServiceOptionByAdmin(@Args('input') input: ServiceOptionInput): Promise<Service> {
+		return this.serviceService.createOptionByAdmin(input);
+	}
+
+	@Roles(MemberType.ADMIN)
+	@UseGuards(RolesGuard)
+	@Mutation(() => Service)
+	public updateServiceOptionByAdmin(@Args('input') input: ServiceOptionUpdateInput): Promise<Service> {
+		return this.serviceService.updateOptionByAdmin(input);
+	}
+	@UseGuards(WithoutGuard)
+	@Query(() => Services)
+	public getServiceBookingOptions(@Args('serviceId') serviceId: string): Promise<Services> {
+		return this.serviceService.getBookingOptions(shapeIntoMongoObjectId(serviceId));
+	}
 	@Roles(MemberType.DOCTOR)
 	@UseGuards(RolesGuard)
 	@Query(() => [ServiceType])

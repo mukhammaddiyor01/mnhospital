@@ -1,3 +1,4 @@
+import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
 import { Field, Int, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
@@ -24,6 +25,9 @@ export class ReceptionTaskStatusHistory {
 
 @ObjectType()
 export class ReceptionTask {
+ @Field(() => AppointmentStatus, { nullable: true }) appointmentStatus?: AppointmentStatus;
+ @Field(() => String, { nullable: true }) appointmentCode?: string;
+
 	@Field(() => String)
 	_id: ObjectId;
 

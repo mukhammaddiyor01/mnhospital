@@ -6,6 +6,11 @@ import { TotalCounter } from '../../../member/dto/member';
 
 @ObjectType()
 export class DoctorReport {
+	@Field(() => String, { nullable: true }) appointmentCode?: string;
+	@Field(() => String, { nullable: true }) patientName?: string;
+	@Field(() => String, { nullable: true }) serviceName?: string;
+	@Field(() => Date, { nullable: true }) visitAt?: Date;
+
 	@Field(() => String)
 	_id: ObjectId;
 

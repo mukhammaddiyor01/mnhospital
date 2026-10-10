@@ -4,6 +4,7 @@ import StatusHistorySchema from './StatusHistory.model';
 
 const AppointmentSchema = new Schema(
 	{
+		receptionTaskId: { type: Schema.Types.ObjectId },
 		slotKeys: { type: [String], default: undefined },
 		holdExpiresAt: { type: Date },
 		appointmentCode: {

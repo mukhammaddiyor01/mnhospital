@@ -8,8 +8,8 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { WithoutGuard } from '../../auth/guards/without.guard';
 import { MemberType } from '../../member/enums/member.enum';
-import { AvailableDoctorSlot, DoctorSchedule } from './dto/doctor-schedule';
-import { AvailableDoctorSlotsInput, DoctorScheduleInput } from './dto/doctor-schedule.input';
+import { AvailableDoctorDates, AvailableDoctorSlot, DoctorSchedule } from './dto/doctor-schedule';
+import { AvailableDoctorDatesInput, AvailableDoctorSlotsInput, DoctorScheduleInput } from './dto/doctor-schedule.input';
 import { DoctorScheduleService } from './doctorSchedule.service';
 
 @Resolver()
@@ -40,4 +40,10 @@ export class DoctorScheduleResolver {
 		console.log('Query: getAvailableDoctorSlots');
 		return await this.doctorScheduleService.getAvailableSlots(input);
 	}
+	@UseGuards(WithoutGuard)
+	@Query(() => AvailableDoctorDates)
+	public async getAvailableDoctorDates(@Args('input') input: AvailableDoctorDatesInput): Promise<AvailableDoctorDates> {
+		return this.doctorScheduleService.getAvailableDates(input);
+	}
+
 }

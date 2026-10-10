@@ -1,4 +1,5 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { createInputValidationPipe } from '../src/libs/input-validation';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { WsAdapter } from '@nestjs/platform-ws';
@@ -60,7 +61,7 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 		const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
 		app = module.createNestApplication({ logger: false });
 		app.useWebSocketAdapter(new WsAdapter(app));
-		app.useGlobalPipes(new ValidationPipe({ transform: true }));
+		app.useGlobalPipes(createInputValidationPipe());
 		await app.init();
 		connection = app.get(getConnectionToken());
 		expect(connection.name).toBe(databaseName);
@@ -96,11 +97,145 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 		if (!connection || !orders) return;
 		await app.get(getModelToken('Service')).updateOne({ _id: serviceId }, { $set: { servicePrice: 150000, serviceDiscountPercent: 0 } });
 		await app.get(getModelToken('PromoCode')).deleteMany({});
-		await Promise.all([orders.deleteMany({}), payments.deleteMany({}), appointments.deleteMany({}), app.get(getModelToken('Cart')).deleteMany({}), app.get(getModelToken('CartItem')).deleteMany({})]);
+		await app.get(getModelToken('DoctorReport')).deleteMany({});
+		await Promise.all([app.get(getModelToken('ReceptionTask')).deleteMany({}), orders.deleteMany({}), payments.deleteMany({}), appointments.deleteMany({}), app.get(getModelToken('Cart')).deleteMany({}), app.get(getModelToken('CartItem')).deleteMany({})]);
 	});
 	afterAll(async () => {
 		try { if (connection?.name === databaseName && /^mn_flow_[a-f\d]{24}$/.test(databaseName)) await connection.dropDatabase(); }
 		finally { await app?.close(); }
+	});
+	it('discovers actual booking dates and persists the selected visit through cash checkout', async () => {
+		const date = clinicDate(new Date(startsAt));
+		const response = await gql('query($input:AvailableDoctorDatesInput!){getAvailableDoctorDates(input:$input){dates reason}}',
+			{input:{serviceId, doctorId, month:date.slice(0,7)}}, '');
+		expect(response.errors).toBeUndefined();
+		expect(response.data.getAvailableDoctorDates.reason).toBe('AVAILABLE');
+		expect(response.data.getAvailableDoctorDates.dates).toContain(date);
+		const slots = await gql('query($input:AvailableDoctorSlotsInput!){getAvailableDoctorSlots(input:$input){startsAt endsAt}}',
+			{input:{serviceId, doctorId, date}}, '');
+		expect(slots.errors).toBeUndefined();
+		const chosen = slots.data.getAvailableDoctorSlots[0];
+		const order = await booking('date-discovery-checkout', chosen.startsAt);
+		const checkout = await choose(order._id, 'CASH');
+		expect(checkout.errors).toBeUndefined();
+		const saved = await appointments.findById(checkout.data.chooseBookingPayment.appointments[0]._id);
+		expect(saved.startsAt.toISOString()).toBe(chosen.startsAt);
+		expect(saved.endsAt.toISOString()).toBe(chosen.endsAt);
+		expect(String(saved.doctorId)).toBe(doctorId);
+		expect(String(saved.roomId)).toBe(roomId);
+		expect(saved.appointmentStatus).toBe('PENDING');
+		expect(await payments.countDocuments({bookingOrderId:order._id,paymentProvider:'CASH',paymentStatus:'PENDING'})).toBe(1);
+	});
+
+	it('combines discounted discovery, literal search, category and base price with accurate paging', async () => {
+		const services = app.get(getModelToken('Service'));
+		const doctors = app.get(getModelToken('Doctor'));
+		const blocked = await doctors.create({
+			docNick: 'blocked-offer-doctor',
+			docRoom: '101',
+			docPassword: 'fixture',
+			docPhone: '+998900002001',
+			docExperience: 5,
+			docSpecialty: 'CARDIOLOGIST',
+			memberStatus: 'BLOCK',
+		});
+		const fixture = {
+			memberId: new Types.ObjectId(doctorId),
+			departmentId: new Types.ObjectId(),
+			serviceType: 'CONSULTATION',
+			serviceName: 'Offer [check]',
+			serviceTitle: 'Offer [check]',
+			serviceRoomName: 'CONSULTATION',
+			serviceRoom: 'ROOM101',
+			servicePrice: 200000,
+			serviceDuration: '30',
+			serviceImages: [],
+			serviceDesc: 'Literal search offer',
+			serviceDiscountPercent: 10,
+		};
+		const created = await services.create([
+			fixture,
+			fixture,
+			{ ...fixture, memberId: blocked._id },
+			{ ...fixture, serviceStatus: 'INACTIVE' },
+			{ ...fixture, serviceDiscountPercent: 0 },
+			{ ...fixture, servicePrice: 300000 },
+		]);
+		const query =
+			'query($input:ServicesInquiry!){getServices(input:$input){list{_id servicePrice serviceDiscountPercent}metaCounter{total}}}';
+		const input = {
+			page: 1,
+			limit: 1,
+			sort: 'servicePrice',
+			direction: 'ASC',
+			search: {
+				discountedOnly: true,
+				text: '[check]',
+				serviceTypeList: ['CONSULTATION'],
+				priceRange: { start: 190000, end: 210000 },
+			},
+		};
+		try {
+			const first = await gql(query, { input }, '');
+			expect(first.errors).toBeUndefined();
+			expect(first.data.getServices.metaCounter).toEqual([{ total: 2 }]);
+			expect(first.data.getServices.list).toHaveLength(1);
+			expect(first.data.getServices.list[0].serviceDiscountPercent).toBe(10);
+			const second = await gql(query, { input: { ...input, page: 2 } }, '');
+			expect(second.errors).toBeUndefined();
+			expect(second.data.getServices.list).toHaveLength(1);
+			expect(second.data.getServices.list[0]._id).not.toBe(first.data.getServices.list[0]._id);
+			const mismatch = await gql(
+				query,
+				{ input: { ...input, search: { ...input.search, serviceTypeList: ['THERAPY'] } } },
+				'',
+			);
+			expect(mismatch.errors).toBeUndefined();
+			expect(mismatch.data.getServices.list).toEqual([]);
+			expect((await gql(query, { input: { ...input, search: { text: '[' } } }, '')).errors).toBeUndefined();
+		} finally {
+			await services.deleteMany({ _id: { $in: created.map((service) => service._id) } });
+			await doctors.deleteOne({ _id: blocked._id });
+		}
+	});
+
+	it('lets only admin create inactive options with inherited ownership and real booking prices', async () => {
+		const query = 'mutation($input:ServiceOptionInput!){createServiceOptionByAdmin(input:$input){_id memberId departmentId serviceType serviceStatus servicePrice serviceDuration}}';
+		const input = { baseServiceId: serviceId, serviceTitle: 'Extended consultation', servicePrice: 210000, serviceDuration: '45', serviceDesc: 'Extended option fixture' };
+		expect((await gql(query, { input }, token)).errors).toBeDefined();
+		expect((await gql(query, { input }, doctorToken)).errors).toBeDefined();
+		expect((await gql(query, { input: { ...input, serviceDuration: '0' } }, adminToken)).errors).toBeDefined();
+		expect((await gql(query, { input: { ...input, servicePrice: -1 } }, adminToken)).errors).toBeDefined();
+		const created = await gql(query, { input }, adminToken);
+		expect(created.errors).toBeUndefined();
+		const option = created.data.createServiceOptionByAdmin;
+		expect(option).toMatchObject({ memberId: doctorId, serviceStatus: 'INACTIVE', servicePrice: 210000, serviceDuration: '45', serviceType: 'CONSULTATION' });
+		const services = app.get(getModelToken('Service'));
+		try {
+			const base = await services.findById(serviceId).lean(), saved = await services.findById(option._id).lean();
+			expect(String(saved.departmentId)).toBe(String(base.departmentId));
+			expect(saved.serviceRoom).toBe(base.serviceRoom);
+			expect(saved.serviceImages).toEqual(base.serviceImages);
+			expect((await gql(createQuery, { input: { serviceId: option._id, doctorId, requestedStartAt: startsAt, idempotencyKey: 'inactive-option' } })).errors).toBeDefined();
+			expect((await gql('mutation($input:ServiceUpdate!){updateServiceByAdmin(input:$input){_id serviceStatus}}', { input: { _id: option._id, serviceStatus: 'ACTIVE' } }, adminToken)).errors).toBeUndefined();
+			const booked = await gql(createQuery, { input: { serviceId: option._id, doctorId, requestedStartAt: startsAt, idempotencyKey: 'active-option' } });
+			expect(booked.errors).toBeUndefined();
+			expect(booked.data.createAppointmentBooking.bookingOrderTotalAmount).toBe(210000);
+			const order = await orders.findById(booked.data.createAppointmentBooking._id);
+			expect(String(order.bookingOrderItems[0].serviceId)).toBe(option._id);
+		} finally { await services.deleteOne({ _id: option._id }); }
+	});
+	it('preserves the four-service limit and rejects options for blocked doctors', async () => {
+		const services = app.get(getModelToken('Service')), doctors = app.get(getModelToken('Doctor'));
+		const query = 'mutation($input:ServiceOptionInput!){createServiceOptionByAdmin(input:$input){_id}}';
+		const input = { baseServiceId: serviceId, serviceTitle: 'Limit option', servicePrice: 1000, serviceDuration: '30' };
+		await doctors.updateOne({ _id: doctorId }, { $set: { memberStatus: 'BLOCK' } });
+		try { expect((await gql(query, { input }, adminToken)).errors).toBeDefined(); }
+		finally { await doctors.updateOne({ _id: doctorId }, { $set: { memberStatus: 'ACTIVE' } }); }
+		const base = await services.findById(serviceId).lean(); delete base._id;
+		const fixtures = await services.create([base, base, base]);
+		try { expect((await gql(query, { input }, adminToken)).errors).toBeDefined(); expect(await services.countDocuments({ memberId: doctorId, serviceType: 'CONSULTATION' })).toBe(4); }
+		finally { await services.deleteMany({ _id: { $in: fixtures.map(row=>row._id) } }); }
 	});
 	it('books for a newly signed-up patient without fabricated clinical details or consuming their active cart', async () => {
 		const order = await booking('first-owned-booking');
@@ -128,6 +263,279 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 		const response = await gql('mutation($input:PaymentStatusInput!){updatePaymentStatus(input:$input){paymentStatus}}', { input: { paymentId: state.payments[0]._id, paymentStatus: 'PAID' } }, receptionToken);
 		expect(response.errors).toBeUndefined();
 		expect((await orders.findById(order._id)).bookingOrderStatus).toBe('CONFIRMED');
+	});
+
+ it('keeps patient, doctor and reception in sync from cash booking through clinical completion', async () => {
+  const order = await booking(); const checkout = (await choose(order._id, 'CASH')).data.chooseBookingPayment;
+  const id = checkout.appointments[0]._id; const paymentId = checkout.payments[0]._id;
+  const change = (status: string, bearer = doctorToken) => gql('mutation($input:AppointmentStatusInput!){updateAppointmentStatus(input:$input){_id appointmentStatus}}', { input: { appointmentId: id, appointmentStatus: status } }, bearer);
+  const staffOrders = () => gql('query{getBookingOrders(input:{page:1,limit:10}){list{_id bookingOrderStatus bookingOrderItems{appointmentId appointmentStatus paymentStatus paymentProvider paymentId}}}}', {}, receptionToken);
+  const patientVisits = () => gql('query{getMyAppointments(input:{page:1,limit:10}){list{_id appointmentStatus}}}');
+  const queue = () => gql('query{getMyReceptionistAppointmentQueue(input:{page:1,limit:10}){list{_id appointmentStatus}}}', {}, receptionToken);
+  expect((await change('CONFIRMED')).errors).toBeUndefined();
+  const staff = await staffOrders(); expect(staff.errors).toBeUndefined();
+  expect(staff.data.getBookingOrders.list[0]).toMatchObject({ bookingOrderStatus: 'PENDING', bookingOrderItems: [{ appointmentId: id, appointmentStatus: 'CONFIRMED', paymentStatus: 'PENDING', paymentProvider: 'CASH', paymentId }] });
+  expect((await patientVisits()).data.getMyAppointments.list[0].appointmentStatus).toBe('CONFIRMED');
+  const doc = await gql('query{getMyDoctorBookingRequests(input:{page:1,limit:10}){list{appointmentId appointmentStatus bookingOrderStatus}}}', {}, doctorToken);
+  expect(doc.errors).toBeUndefined(); expect(doc.data.getMyDoctorBookingRequests.list[0]).toMatchObject({ appointmentStatus: 'CONFIRMED', bookingOrderStatus: 'PENDING' });
+  expect((await queue()).data.getMyReceptionistAppointmentQueue.list[0].appointmentStatus).toBe('CONFIRMED');
+  const checkIn = () => gql('mutation($input:ReceptionistCheckInInput!){checkInReceptionistAppointment(input:$input){appointmentStatus}}', { input: { appointmentId: id } }, receptionToken);
+  expect((await checkIn()).errors).toBeDefined(); // Accepted CHECK_IN task required.
+  const createTask = await gql('mutation($input:ReceptionTaskInput!){createReceptionTask(input:$input){_id taskStatus}}', { input: { appointmentId: id, taskType: 'CHECK_IN', taskPriority: 'MEDIUM', taskInstruction: 'Patient arrival' } }, receptionToken);
+  expect(createTask.errors).toBeUndefined(); const taskId = createTask.data.createReceptionTask._id;
+  const taskChange = (status: string, result?: string) => gql('mutation($input:ReceptionTaskStatusInput!){updateReceptionTaskStatus(input:$input){taskStatus}}', { input: { taskId, taskStatus: status, ...(result ? { taskResult: result } : {}) } }, receptionToken);
+  expect((await queue()).data.getMyReceptionistAppointmentQueue.list[0].appointmentStatus).toBe('CONFIRMED');
+  expect((await taskChange('ACCEPTED')).errors).toBeUndefined();
+  expect((await taskChange('IN_PROGRESS')).errors).toBeDefined(); // Cannot bypass check-in API.
+  const paid = await gql('mutation($input:PaymentStatusInput!){updatePaymentStatus(input:$input){paymentStatus}}', { input: { paymentId, paymentStatus: 'PAID' } }, receptionToken);
+  expect(paid.errors).toBeUndefined();
+  expect((await staffOrders()).data.getBookingOrders.list[0]).toMatchObject({ bookingOrderStatus: 'CONFIRMED', bookingOrderItems: [{ appointmentStatus: 'CONFIRMED', paymentStatus: 'PAID' }] });
+  expect((await checkIn()).data.checkInReceptionistAppointment.appointmentStatus).toBe('IN_PROGRESS');
+  expect((await patientVisits()).data.getMyAppointments.list[0].appointmentStatus).toBe('IN_PROGRESS');
+  expect((await change('COMPLETED', receptionToken)).errors).toBeDefined();
+  expect((await change('COMPLETED', otherToken)).errors).toBeDefined();
+  expect((await change('COMPLETED')).errors).toBeUndefined();
+  expect((await taskChange('COMPLETED', 'Patient checked in')).errors).toBeUndefined();
+  expect((await orders.findById(order._id)).bookingOrderStatus).toBe('COMPLETED');
+  expect((await patientVisits()).data.getMyAppointments.list[0].appointmentStatus).toBe('COMPLETED');
+  expect((await queue()).data.getMyReceptionistAppointmentQueue.list).toEqual([]);
+  expect((await appointments.findById(id)).statusHistory.map((entry) => entry.newStatus)).toEqual(['CONFIRMED', 'IN_PROGRESS', 'COMPLETED']);
+ });
+
+ it('lets reception record arrival after the doctor starts without repeating the clinical transition', async () => {
+  const order = await booking(); const checkout = (await choose(order._id, 'CASH')).data.chooseBookingPayment; const id = checkout.appointments[0]._id;
+  const task = await gql('mutation($input:ReceptionTaskInput!){createReceptionTask(input:$input){_id}}', { input: { appointmentId: id, taskType: 'CHECK_IN', taskPriority: 'MEDIUM', taskInstruction: 'Arrival' } }, receptionToken);
+  expect(task.errors).toBeUndefined(); const taskId = task.data.createReceptionTask._id;
+  expect((await gql('mutation($input:ReceptionTaskStatusInput!){updateReceptionTaskStatus(input:$input){taskStatus}}', { input: { taskId, taskStatus: 'ACCEPTED' } }, receptionToken)).errors).toBeUndefined();
+  for (const status of ['CONFIRMED', 'IN_PROGRESS']) expect((await gql('mutation($input:AppointmentStatusInput!){updateAppointmentStatus(input:$input){appointmentStatus}}', { input: { appointmentId: id, appointmentStatus: status } }, doctorToken)).errors).toBeUndefined();
+  expect((await gql('mutation($input:ReceptionistCheckInInput!){checkInReceptionistAppointment(input:$input){appointmentStatus}}', { input: { appointmentId: id } }, receptionToken)).data.checkInReceptionistAppointment.appointmentStatus).toBe('IN_PROGRESS');
+  expect((await app.get(getModelToken('ReceptionTask')).findById(taskId)).taskStatus).toBe('IN_PROGRESS');
+  expect((await appointments.findById(id)).statusHistory.map((entry) => entry.newStatus)).toEqual(['CONFIRMED', 'IN_PROGRESS']);
+ });
+ it.each(['CANCELLED', 'NO_SHOW'])('closes assigned reception work when the doctor marks a visit %s', async (status) => {
+  const order = await booking(); const checkout = (await choose(order._id, 'CASH')).data.chooseBookingPayment; const id = checkout.appointments[0]._id;
+  const created = await gql('mutation($input:ReceptionTaskInput!){createReceptionTask(input:$input){_id}}', { input: { appointmentId: id, taskType: 'CHECK_IN', taskPriority: 'MEDIUM', taskInstruction: 'Patient arrival' } }, receptionToken);
+  expect(created.errors).toBeUndefined(); const taskId = created.data.createReceptionTask._id;
+  expect((await gql('mutation($input:AppointmentStatusInput!){updateAppointmentStatus(input:$input){appointmentStatus}}', { input: { appointmentId: id, appointmentStatus: status } }, doctorToken)).errors).toBeUndefined();
+  expect((await app.get(getModelToken('ReceptionTask')).findById(taskId)).taskStatus).toBe('CANCELLED');
+  const tasks = await gql('query($input:ReceptionTaskInquiry!){getReceptionTasks(input:$input){list{appointmentStatus appointmentCode taskStatus}}}', { input: { page: 1, limit: 10, appointmentId: id } }, receptionToken);
+  expect(tasks.errors).toBeUndefined(); expect(tasks.data.getReceptionTasks.list[0]).toMatchObject({ taskStatus: 'CANCELLED', appointmentStatus: status });
+  expect((await payments.findById(checkout.payments[0]._id)).paymentStatus).toBe('PENDING'); // No invented receipt/refund.
+ });
+	it('discovers a reportable patient visit without IDs and shares the saved report only with its patient and accepted reception', async () => {
+		const order = await booking();
+		const checkout = (await choose(order._id, 'CASH')).data.chooseBookingPayment;
+		const id = checkout.appointments[0]._id;
+		const queue = await gql(
+			'query{getMyReceptionistAppointmentQueue(input:{page:1,limit:10}){list{_id receptionAssigned appointmentStatus patientPreview{patientFullName}}}}',
+			{},
+			receptionToken,
+		);
+		expect(queue.errors).toBeUndefined();
+		expect(queue.data.getMyReceptionistAppointmentQueue.list[0]).toMatchObject({
+			_id:id,
+			receptionAssigned: false,
+			appointmentStatus: 'PENDING',
+		});
+		const pickerQuery =
+			'query($input:DoctorReportInquiry!){getMyDoctorReportAppointments(input:$input){list{_id appointmentCode appointmentReason reportId patientPreview{patientFullName}}}}';
+		expect(
+			(await gql(pickerQuery, { input: { page: 1, limit: 20 } }, doctorToken)).data.getMyDoctorReportAppointments.list,
+		).toEqual([]);
+		for (const status of ['CONFIRMED', 'IN_PROGRESS']) expect((await gql('mutation($input:AppointmentStatusInput!){updateAppointmentStatus(input:$input){appointmentStatus}}', { input: { appointmentId: id, appointmentStatus: status } }, doctorToken)).errors).toBeUndefined();
+		const picker = await gql(pickerQuery, { input: { page: 1, limit: 20, appointmentId: id } }, doctorToken);
+		expect(picker.errors).toBeUndefined();
+		expect(picker.data.getMyDoctorReportAppointments.list[0]._id).toBe(id);
+		const reportMutation = 'mutation($input:DoctorReportInput!){createDoctorReport(input:$input){_id patientId}}';
+		const reportInput = {
+			appointmentId: id,
+			docReportSymptoms: 'Synthetic test symptoms',
+			docReportDiagnosis: 'Synthetic test diagnosis',
+			docReportMedication: 'Test care instructions',
+			docReportRecommendation: 'Follow clinic instructions',
+			docReportFollowUp: 'NONE',
+		};
+		expect((await gql(reportMutation, { input: reportInput }, token)).errors).toBeDefined();
+		const created = await gql(reportMutation, { input: reportInput }, doctorToken);
+		expect(created.errors).toBeUndefined();
+		const reportId = created.data.createDoctorReport._id;
+		const patients = await gql(
+			'query{getMyPatientReports(input:{page:1,limit:10}){list{_id appointmentCode serviceName docReportDiagnosis}}}',
+		);
+		expect(patients.errors).toBeUndefined();
+		expect(patients.data.getMyPatientReports.list[0]).toMatchObject({
+			_id: reportId,
+			docReportDiagnosis: reportInput.docReportDiagnosis,
+		});
+		expect(
+			(await gql('query{getMyPatientReports(input:{page:1,limit:10}){list{_id}}}', {}, otherToken)).data
+				.getMyPatientReports.list,
+		).toEqual([]);
+		const receptionReports =
+			'query{getMyReceptionistReports(input:{page:1,limit:10}){list{_id patientName appointmentCode}}}';
+		expect((await gql(receptionReports, {}, receptionToken)).data.getMyReceptionistReports.list).toEqual([]);
+		const task = await gql('mutation($input:ReceptionTaskInput!){createReceptionTask(input:$input){_id}}', { input: { appointmentId: id, taskType: 'CHECK_IN', taskPriority: 'MEDIUM', taskInstruction: 'Arrival' } }, receptionToken);
+		expect(task.errors).toBeUndefined();
+		expect((await gql(receptionReports, {}, receptionToken)).data.getMyReceptionistReports.list).toEqual([]);
+		expect(
+			(
+				await gql(
+					'mutation($input:ReceptionTaskStatusInput!){updateReceptionTaskStatus(input:$input){taskStatus}}',
+					{ input: { taskId: task.data.createReceptionTask._id, taskStatus: 'ACCEPTED' } },
+					receptionToken,
+				)
+			).errors,
+		).toBeUndefined();
+		expect((await gql(receptionReports, {}, receptionToken)).data.getMyReceptionistReports.list[0]._id).toBe(reportId);
+		expect(
+			(await gql(pickerQuery, { input: { page: 1, limit: 20, appointmentId: id } }, doctorToken)).data
+				.getMyDoctorReportAppointments.list[0].reportId,
+		).toBe(reportId);
+		expect((await gql(reportMutation, { input: reportInput }, doctorToken)).errors).toBeDefined();
+	});
+	it('accepts an intake appointment for only one receptionist under competing requests', async () => {
+		const order = await booking();
+		const checkout = (await choose(order._id, 'CASH')).data.chooseBookingPayment;
+		const id = checkout.appointments[0]._id;
+		const staffModel = app.get(getModelToken('Receptionist'));
+		const existing = await staffModel.findOne({ receptionistNick: 'checkout-reception' });
+		const other = await staffModel.create({
+			receptionistNick: 'competing-reception',
+			receptionistPassword: 'SyntheticPassword123',
+			receptionistMail: 'competing-reception@example.test',
+			receptionistPhone: '+998900009888',
+			receptionistFullName: 'Other test reception',
+		});
+		try {
+			const otherReceptionToken = (await app.get(AuthService).startSession(other)).accessToken;
+			const create = 'mutation($input:ReceptionTaskInput!){createReceptionTask(input:$input){_id}}';
+			const taskA = await gql(
+				create,
+				{
+					input: {
+						appointmentId: id,
+						receptionistId: String(existing._id),
+						taskType: 'CHECK_IN',
+						taskPriority: 'MEDIUM',
+						taskInstruction: 'A',
+					},
+				},
+				adminToken,
+			);
+			const taskB = await gql(
+				create,
+				{
+					input: {
+						appointmentId: id,
+						receptionistId: String(other._id),
+						taskType: 'CHECK_IN',
+						taskPriority: 'MEDIUM',
+						taskInstruction: 'B',
+					},
+				},
+				adminToken,
+			);
+			expect(taskA.errors).toBeUndefined();
+			expect(taskB.errors).toBeUndefined();
+			const update =
+				'mutation($input:ReceptionTaskStatusInput!){updateReceptionTaskStatus(input:$input){_id taskStatus}}';
+			const outcomes = await Promise.all([
+				gql(update, { input: { taskId: taskA.data.createReceptionTask._id, taskStatus: 'ACCEPTED' } }, receptionToken),
+				gql(
+					update,
+					{ input: { taskId: taskB.data.createReceptionTask._id, taskStatus: 'ACCEPTED' } },
+					otherReceptionToken,
+				),
+			]);
+			expect(outcomes.filter((result) => !result.errors)).toHaveLength(1);
+			expect(
+				await app.get(getModelToken('ReceptionTask')).countDocuments({ appointmentId: id, taskStatus: 'ACCEPTED' }),
+			).toBe(1);
+			expect((await appointments.findById(id)).receptionTaskId).toBeTruthy();
+		} finally {
+			await staffModel.deleteOne({ _id: other._id });
+		}
+	});
+	it('books a discounted service package at its total price and duration and intersects component availability', async () => {
+		const services = app.get(getModelToken('Service'));
+		const base = await services.findById(serviceId).lean();
+		const extra = await services.create({
+			...base,
+			_id: new Types.ObjectId(),
+			serviceTitle: 'Check-up',
+			serviceName: 'Check-up',
+			servicePrice: 25000,
+			serviceDuration: '15',
+		});
+		let packageId;
+		try {
+			const input = {
+				baseServiceId: serviceId,
+				includedServiceIds: [String(extra._id)],
+				serviceTitle: 'Consultation + Check-up',
+				servicePrice: 165000,
+				serviceDuration: '45',
+				serviceDesc: 'Synthetic package',
+			};
+			const create =
+				'mutation($input:ServiceOptionInput!){createServiceOptionByAdmin(input:$input){_id packageBaseServiceId packageRegularPrice packageItems{serviceId title duration price}}}';
+			expect((await gql(create, {input}, doctorToken)).errors).toBeDefined();
+			expect((await gql(create, { input: { ...input, serviceDuration:'30' } }, adminToken)).errors).toBeDefined();
+			expect((await gql(create, { input: { ...input, servicePrice: 175000 } }, adminToken)).errors).toBeDefined();
+			const created = await gql(create, {input}, adminToken);
+			expect(created.errors).toBeUndefined();
+			packageId = created.data.createServiceOptionByAdmin._id;
+			expect(created.data.createServiceOptionByAdmin).toMatchObject({
+				packageBaseServiceId: serviceId,
+				packageRegularPrice: 175000,
+				packageItems: [
+					{ serviceId, title: base.serviceTitle, duration: 30, price: 150000 },
+					{ serviceId: String(extra._id), title: 'Check-up', duration: 15, price: 25000 },
+				],
+			});
+			const update = await gql(
+				'mutation($input:ServiceOptionUpdateInput!){updateServiceOptionByAdmin(input:$input){serviceStatus}}',
+				{ input: { ...input, optionId: packageId, serviceStatus: 'ACTIVE' } },
+				adminToken,
+			);
+			expect(update.errors).toBeUndefined();
+			const choices = await gql(
+				'query($id:String!){getServiceBookingOptions(serviceId:$id){list{_id packageItems{title}}}}',
+				{id:serviceId},
+				'',
+			);
+			expect(choices.errors).toBeUndefined();
+			expect(choices.data.getServiceBookingOptions.list.map((row) => row._id)).toEqual([serviceId, packageId]); // Check-up is an add-on, not a separate option.
+			const response = await gql(createQuery, {
+				input: { serviceId: packageId, doctorId, requestedStartAt: startsAt, idempotencyKey: 'package-booking' },
+			});
+			expect(response.errors).toBeUndefined();
+			expect(response.data.createAppointmentBooking.bookingOrderTotalAmount).toBe(165000);
+			const checkout = await choose(response.data.createAppointmentBooking._id, 'CASH');
+			expect(checkout.errors).toBeUndefined();
+			const visit = await appointments.findById(checkout.data.chooseBookingPayment.appointments[0]._id);
+			expect(visit.endsAt.getTime() - visit.startsAt.getTime()).toBe(45 * 60000);
+			expect(
+				(await payments.findOne({ bookingOrderId: response.data.createAppointmentBooking._id })).paymentAmount,
+			).toBe(165000);
+			await appointments.deleteMany({});
+			await services.updateOne({ _id: extra._id }, { $set: { availabilityDates: ['2099-12-31'] } });
+			const slots = await gql(
+				'query($input:AvailableDoctorSlotsInput!){getAvailableDoctorSlots(input:$input){startsAt}}',
+				{ input: { doctorId, serviceId: packageId, date: clinicDate(new Date(startsAt)) } },
+				'',
+			);
+			expect(slots.errors).toBeUndefined();
+			expect(slots.data.getAvailableDoctorSlots).toEqual([]);
+            await services.updateOne({ _id: extra._id }, { $set: { availabilityDates: [], servicePrice: 1000 } });
+            const unavailablePackage = await gql('query($id:String!){getServiceBookingOptions(serviceId:$id){list{_id}}}', {id:serviceId}, '');
+            expect(unavailablePackage.data.getServiceBookingOptions.list.map(row=>row._id)).toEqual([serviceId]);
+            const stalePriceSlots = await gql('query($input:AvailableDoctorSlotsInput!){getAvailableDoctorSlots(input:$input){startsAt}}', { input: { doctorId, serviceId: packageId, date: clinicDate(new Date(startsAt)) } }, '');
+            expect(stalePriceSlots.data.getAvailableDoctorSlots).toEqual([]);
+
+		} finally {
+			await services.deleteMany({ _id: { $in: [extra._id, ...(packageId ? [new Types.ObjectId(packageId)] : [])] } });
+		}
 	});
 	it('persists a simulated online success and the existing appointment, and accepts retries without another charge', async () => {
 		const order = await booking();
@@ -258,6 +666,134 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
 	});
 
 
+ it('persists patient and doctor follows once, rejects self and staff, and reverses counters', async () => {
+  const members=app.get(getModelToken('Member'));
+  const first=await members.findOne({memberNick:'checkout-patient-1'});
+  const second=await members.findOne({memberNick:'checkout-patient-2'});
+  const query='mutation($id:String!){subscribe(input:$id){_id followingId followerId}}';
+  const requests=await Promise.all(Array.from({length:5},()=>gql(query,{id:String(second._id)})));
+  requests.forEach(result=>expect(result.errors).toBeUndefined());
+  expect(await app.get(getModelToken('Follow')).countDocuments({followerId:first._id,followingId:second._id})).toBe(1);
+  expect((await members.findById(first._id)).memberFollowings).toBe(1);
+  expect((await members.findById(second._id)).memberFollowers).toBe(1);
+  expect((await gql(query,{id:String(first._id)})).errors).toBeDefined();
+  expect((await gql(query,{id:String(second._id)},receptionToken)).errors).toBeDefined();
+  expect((await gql(query,{id:String(second._id)},'')).errors).toBeDefined();
+  expect((await gql(query,{id:String(second._id)},doctorToken)).errors).toBeUndefined();
+  expect((await app.get(getModelToken('Doctor')).findById(doctorId)).docFollowings).toBe(1);
+  expect((await members.findById(second._id)).memberFollowers).toBe(2);
+  const remove='mutation($id:String!){unsubscribe(input:$id){_id}}';
+  expect((await gql(remove,{id:String(second._id)})).errors).toBeUndefined();
+  expect((await gql(remove,{id:String(second._id)},doctorToken)).errors).toBeUndefined();
+  expect((await members.findById(first._id)).memberFollowings).toBe(0);
+  expect((await members.findById(second._id)).memberFollowers).toBe(0);
+ });
+
+ it('does not count doctor follow actions as profile visits and maintains the doctor relationship', async () => {
+  const doctors=app.get(getModelToken('Doctor')), before=await doctors.findById(doctorId);
+  const query='mutation($id:String!){subscribeDoctor(input:$id){_id}}';
+  const results=await Promise.all(Array.from({length:4},()=>gql(query,{id:doctorId})));
+  results.forEach(result=>expect(result.errors).toBeUndefined());
+  const followed=await doctors.findById(doctorId);
+  expect(followed.docFollowers).toBe(before.docFollowers+1);
+  expect(followed.docViews).toBe(before.docViews);
+  expect((await gql(query,{id:doctorId},doctorToken)).errors).toBeDefined();
+  expect((await gql('mutation($id:String!){unsubscribeDoctor(input:$id){_id}}',{id:doctorId})).errors).toBeUndefined();
+  expect((await doctors.findById(doctorId)).docFollowers).toBe(before.docFollowers);
+  expect((await doctors.findById(doctorId)).docViews).toBe(before.docViews);
+ });
+
+ it('counts concurrent profile reads only once per viewer and excludes the owner', async () => {
+  const members=app.get(getModelToken('Member')), target=await members.findOne({memberNick:'checkout-patient-2'});
+  const before=target.memberViews;
+  const query='query($id:String!){getMember(memberId:$id){_id memberViews meLiked{myFavorite}}}';
+  const results=await Promise.all(Array.from({length:6},()=>gql(query,{id:String(target._id)})));
+  results.forEach(result=>expect(result.errors).toBeUndefined());
+  expect((await members.findById(target._id)).memberViews).toBe(before+1);
+  expect((await gql(query,{id:String(target._id)})).errors).toBeUndefined();
+  expect((await gql(query,{id:String(target._id)},otherToken)).errors).toBeUndefined();
+  expect((await gql(query,{id:String(target._id)},'')).errors).toBeUndefined();
+  expect((await members.findById(target._id)).memberViews).toBe(before+1);
+ });
+
+ it('returns persisted like state and keeps counters equal to records under concurrent toggles', async () => {
+  const target=await app.get(getModelToken('Member')).findOne({memberNick:'checkout-patient-2'});
+  const query='mutation($id:String!){likeTargetMember(memberId:$id){_id memberLikes meLiked{myFavorite}}}';
+  const liked=await gql(query,{id:String(target._id)});
+  expect(liked.errors).toBeUndefined();expect(liked.data.likeTargetMember.meLiked[0].myFavorite).toBe(true);
+  const removed=await gql(query,{id:String(target._id)});
+  expect(removed.data.likeTargetMember.meLiked).toEqual([]);
+  const results=await Promise.all(Array.from({length:8},()=>gql(query,{id:String(target._id)})));
+  results.forEach(result=>expect(result.errors).toBeUndefined());
+  const persisted=await app.get(getModelToken('Member')).findById(target._id);
+  const count=await app.get(getModelToken('Like')).countDocuments({likeRefId:target._id,likeGroup:'MEMBER'});
+  expect(persisted.memberLikes).toBe(count); expect(count).toBeLessThanOrEqual(1);
+  expect((await gql(query,{id:String(target._id)},'')).errors).toBeDefined();
+  await app.get(getModelToken('Member')).updateOne({_id:target._id},{$set:{memberStatus:'BLOCK'}});
+  expect((await gql(query,{id:String(target._id)})).errors).toBeDefined();
+  await app.get(getModelToken('Member')).updateOne({_id:target._id},{$set:{memberStatus:'ACTIVE'}});
+ });
+
+ it('returns selected service and doctor like state without inflating their view counters', async () => {
+  const doctors=app.get(getModelToken('Doctor')), before=await doctors.findById(doctorId);
+  const doc=await gql('mutation($id:String!){likeTargetDoctor(doctorId:$id){_id docLikes meLiked{myFavorite}}}',{id:doctorId});
+  expect(doc.errors).toBeUndefined();expect(doc.data.likeTargetDoctor.meLiked[0].myFavorite).toBe(true);
+  expect((await doctors.findById(doctorId)).docViews).toBe(before.docViews);
+  const service=await gql('mutation($id:String!){likeTargetService(serviceId:$id){_id serviceLikes meLiked{myFavorite}}}',{id:serviceId});
+  expect(service.errors).toBeUndefined();expect(service.data.likeTargetService.meLiked[0].myFavorite).toBe(true);
+  const reads=await Promise.all(Array.from({length:4},()=>gql('query($id:String!){getService(serviceId:$id){_id serviceViews}}',{id:serviceId})));
+  reads.forEach(result=>expect(result.errors).toBeUndefined());
+  expect((await app.get(getModelToken('Service')).findById(serviceId)).serviceViews).toBe(1);
+  expect((await doctors.findById(doctorId)).docViews).toBe(before.docViews);
+ });
+
+ it('counts each authenticated viewer once for each doctor, including refreshes and parallel reads', async () => {
+  const doctors=app.get(getModelToken('Doctor')), views=app.get(getModelToken('View'));
+  const first=await app.get(getModelToken('Member')).findOne({memberNick:'checkout-patient-1'});
+  const original=await doctors.findById(doctorId).select('+docPassword'), before=original.docViews;
+  const query='query($id:String!){getDoctor(doctorId:$id){_id docViews}}';
+  const results=await Promise.all(Array.from({length:6},()=>gql(query,{id:doctorId})));
+  results.forEach(result=>expect(result.errors).toBeUndefined());
+  expect((await doctors.findById(doctorId)).docViews).toBe(before+1);
+  expect(await views.countDocuments({memberId:first._id,viewRefId:doctorId,viewGroup:'DOCTOR'})).toBe(1);
+  for(let n=0;n<3;n++) expect((await gql(query,{id:doctorId})).data.getDoctor.docViews).toBe(before+1);
+  expect((await gql(query,{id:doctorId},'')).data.getDoctor.docViews).toBe(before+1);
+  const other=await gql(query,{id:doctorId},otherToken);
+  expect(other.errors).toBeUndefined();expect(other.data.getDoctor.docViews).toBe(before+2);
+  expect((await gql(query,{id:doctorId},otherToken)).data.getDoctor.docViews).toBe(before+2);
+  const another=await doctors.create({docNick:'unique-view-doctor',docPassword:original.docPassword,docPhone:'+998900007007',docFullName:'Unique View Doctor',docExperience:2,docSpecialty:'CARDIOLOGIST',docRoom:'102',docViews:13});
+  try {
+   const reads=await Promise.all(Array.from({length:4},()=>gql(query,{id:String(another._id)})));
+   reads.forEach(result=>expect(result.errors).toBeUndefined());
+   expect((await doctors.findById(another._id)).docViews).toBe(14);
+   expect((await gql(query,{id:String(another._id)})).data.getDoctor.docViews).toBe(14);
+   expect((await doctors.findById(doctorId)).docViews).toBe(before+2);
+  } finally { await doctors.deleteOne({_id:another._id}); }
+ });
+
+ it('keeps service views unique across return visits and another service and never adds doctor metadata views', async () => {
+  const services=app.get(getModelToken('Service')), views=app.get(getModelToken('View'));
+  const original=await services.findById(serviceId);
+  const before=original.serviceViews, doctorBefore=(await app.get(getModelToken('Doctor')).findById(doctorId)).docViews;
+  const query='query($id:String!){getService(serviceId:$id){_id serviceViews}}';
+  const previouslyViewed=await views.exists({memberId:(await app.get(getModelToken('Member')).findOne({memberNick:'checkout-patient-1'}))._id,viewRefId:serviceId,viewGroup:'SERVICE'});
+  const expected=before+(previouslyViewed?0:1);
+  for(let n=0;n<3;n++) expect((await gql(query,{id:serviceId})).data.getService.serviceViews).toBe(expected);
+  expect((await gql(query,{id:serviceId},'')).data.getService.serviceViews).toBe(expected);
+  const other=await gql(query,{id:serviceId},otherToken);
+  expect(other.errors).toBeUndefined();expect(other.data.getService.serviceViews).toBe(expected+1);
+  expect((await gql(query,{id:serviceId},otherToken)).data.getService.serviceViews).toBe(expected+1);
+  const another=await services.create({memberId:original.memberId,departmentId:original.departmentId,serviceType:'CONSULTATION',serviceName:'Unique service views',serviceTitle:'Unique service views',serviceDesc:'Unique view persistence test service',serviceRoomName:'CONSULTATION',serviceRoom:'ROOM101',servicePrice:50000,serviceDuration:'30',serviceImages:[],serviceViews:9});
+  try {
+   const reads=await Promise.all(Array.from({length:5},()=>gql(query,{id:String(another._id)})));
+   reads.forEach(result=>expect(result.errors).toBeUndefined());
+   expect((await services.findById(another._id)).serviceViews).toBe(10);
+   expect((await gql(query,{id:String(another._id)})).data.getService.serviceViews).toBe(10);
+   expect((await services.findById(serviceId)).serviceViews).toBe(expected+1);
+   expect((await app.get(getModelToken('Doctor')).findById(doctorId)).docViews).toBe(doctorBefore);
+  } finally { await services.deleteOne({_id:another._id}); }
+ });
+
  it('allows only admin discount and promo CRUD, normalizes codes and archives removal', async () => {
   const mutation = 'mutation($input:PromoCodeInput!){createPromoCodeByAdmin(input:$input){_id code currency}}';
   const input = { code: ' visit10 ', discountType: 'PERCENT', discountValue: 10, isActive: true };
@@ -272,6 +808,40 @@ persistence('Patient checkout with the complete API and real Mongo persistence',
   expect(await app.get(getModelToken('PromoCode')).countDocuments({ _id: id, deletedAt: { $exists: true } })).toBe(1);
   for (const bearer of [token, doctorToken, receptionToken]) expect((await gql('mutation($input:ServiceDiscountInput!){setServiceDiscountByAdmin(input:$input){_id}}', { input: { serviceId, discountPercent: 20 } }, bearer)).errors).toBeDefined();
  });
+ it('publishes only opted-in valid promo offers without exposing administrative fields', async () => {
+  const mutation = 'mutation($input:PromoCodeInput!){createPromoCodeByAdmin(input:$input){_id showOnHomepage}}';
+  const input = {code:'PUBLIC7000',discountType:'FIXED',discountValue:7000,isActive:true,showOnHomepage:true,minSubtotal:10000,serviceIds:[serviceId]};
+  expect((await gql(mutation,{input},doctorToken)).errors).toBeDefined();
+  const created=await gql(mutation,{input},adminToken);
+  expect(created.errors).toBeUndefined();
+  const id=created.data.createPromoCodeByAdmin._id;
+  const model=app.get(getModelToken('PromoCode'));
+  const base={discountType:'FIXED',discountValue:7000,currency:'UZS',isActive:true,showOnHomepage:true,createdBy:new Types.ObjectId()};
+  await model.insertMany([
+   {...base,code:'PRIVATE',showOnHomepage:false},
+   {...base,code:'LEGACY',showOnHomepage:undefined},
+   {...base,code:'INACTIVE',isActive:false},
+   {...base,code:'FUTURE',startsAt:new Date(Date.now()+60000)},
+   {...base,code:'EXPIRED',expiresAt:new Date(Date.now()-1000)},
+   {...base,code:'ARCHIVED',deletedAt:new Date()},
+   {...base,code:'OTHER_CURRENCY',currency:'KRW'},
+  ]);
+  const query='{getPublicPromoOffers{_id code discountType discountValue currency minSubtotal serviceIds expiresAt}}';
+  const result=await gql(query,{},'');
+  expect(result.errors).toBeUndefined();
+  expect(result.data.getPublicPromoOffers).toEqual([expect.objectContaining({code:'PUBLIC7000',discountValue:7000,serviceIds:[serviceId],minSubtotal:10000})]);
+  const projection=await app.get(require('../src/components/booking/promotion.service').PromotionService).publicOffers();
+  expect(projection[0]).not.toHaveProperty('createdBy');
+  expect(projection[0]).not.toHaveProperty('updatedBy');
+  expect(projection[0]).not.toHaveProperty('showOnHomepage');
+  expect((await gql('{getPublicPromoOffers{createdBy}}',{},'')).errors).toBeDefined();
+  const hidden=await gql('mutation($input:PromoCodeUpdate!){updatePromoCodeByAdmin(input:$input){showOnHomepage}}',{input:{...input,_id:id,showOnHomepage:false}},adminToken);
+  expect(hidden.data.updatePromoCodeByAdmin.showOnHomepage).toBe(false);
+  expect((await gql(query,{},'')).data.getPublicPromoOffers).toEqual([]);
+  await model.insertMany(Array.from({length:5},(_,i)=>({...base,code:`VISIBLE${i}`})));
+  expect((await gql(query,{},'')).data.getPublicPromoOffers).toHaveLength(3);
+ });
+
  it('snapshots admin service discount then promo discount into actual cash payment', async () => {
   expect((await gql('mutation($input:ServiceDiscountInput!){setServiceDiscountByAdmin(input:$input){serviceDiscountPercent}}', { input: { serviceId, discountPercent: 20 } }, adminToken)).errors).toBeUndefined();
   const order = await booking(); expect(order.bookingOrderTotalAmount).toBe(120000);

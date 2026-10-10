@@ -11,3 +11,7 @@ New cart items and direct appointment bookings snapshot base price, service disc
 The first payment intent locks the order's pricing atomically. Promo changes and payment creation therefore cannot produce a different charged amount. A code must still be active when payment first starts; later admin changes do not alter an already locked payment. Cash remains pending until the existing receptionist confirmation flow. Online simulation and Eximbay provider handling retain the existing implementation. Orders containing a zero-price line use cash confirmation and create no online payment intent.
 
 Verification: 398 unit tests, 22 isolated MongoDB/API integration cases, frontend build, 411 GraphQL documents and 166 workspace API fields. Browser verification covers admin discount creation, promo creation and patient checkout apply/remove/reapply. Test fixtures use an isolated database; no real payment is taken.
+
+## Homepage offers
+
+Admins explicitly opt codes into homepage publication using `showOnHomepage` (default false; legacy codes stay hidden). `getPublicPromoOffers` projects only public offer fields, returns at most three recently updated offers and filters inactive, archived, future, expired and other-currency codes. This public display does not apply discounts or change checkout rules. The homepage shows the amount, copyable code, minimum eligible amount, eligible service scope and expiry. Codes for selected services link to an eligible service. Admins can disable publication without deactivating private code use.

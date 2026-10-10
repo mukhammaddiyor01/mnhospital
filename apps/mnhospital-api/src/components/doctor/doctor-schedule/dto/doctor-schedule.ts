@@ -47,3 +47,12 @@ export class AvailableDoctorSlot {
 	@Field(() => Date)
 	endsAt: Date;
 }
+
+@ObjectType()
+export class AvailableDoctorDates {
+	@Field(() => [String])
+	dates: string[];
+
+	@Field(() => String)
+	reason: string;
+}

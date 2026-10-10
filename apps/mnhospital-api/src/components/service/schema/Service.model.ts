@@ -3,6 +3,12 @@ import { ServiceRoom, ServiceRoomName, ServiceStatus, ServiceType } from '../enu
 
 const ServiceSchema = new Schema(
 	{
+		packageBaseServiceId: { type: Schema.Types.ObjectId, ref: 'Service', index: true },
+		packageRegularPrice: { type: Number, min: 0 },
+		packageItems: {
+			type: [{ _id: false, serviceId: String, title: String, price: Number, duration: Number }],
+			default: undefined,
+		},
 		memberId: {
 			type: Schema.Types.ObjectId,
 			ref: 'Doctor',

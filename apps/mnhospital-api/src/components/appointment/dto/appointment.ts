@@ -32,6 +32,9 @@ export class AppointmentStatusHistory {
 
 @ObjectType()
 export class Appointment {
+	receptionTaskId?: ObjectId;
+	@Field(() => String, { nullable: true }) reportId?: string;
+	@Field(() => Boolean, { nullable: true }) receptionAssigned?: boolean;
 	@Field(() => AppointmentPatientPreview, { nullable: true })
 	patientPreview?: AppointmentPatientPreview;
 	slotKeys?: string[];

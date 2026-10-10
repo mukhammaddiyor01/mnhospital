@@ -39,19 +39,25 @@ describe('Staff appointment patient thumbnails', () => {
 		expect(pipeline[2].$facet.list.slice(0, 2)).toEqual([{ $skip: 0 }, { $limit: 10 }]);
 		expect(pipeline[2].$facet.list.slice(2)).toEqual(appointmentPatientPreview());
 	});
-	it('only enriches the assigned active reception queue', async () => {
+	it('enriches own assigned work and unassigned operational intake', async () => {
 		const service = new ReceptionistService(tasks, appointments, null, null, null, null, null);
 		await service.getMyAppointmentQueue(actor, { page: 1, limit: 6 });
 		expect(tasks.distinct).toHaveBeenCalledWith('appointmentId', {
 			receptionistId: actor,
 			taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] },
 		});
-		expect(appointments.aggregate.mock.calls[0][0][0].$match._id).toEqual({ $in: [appointmentId] });
+		expect(appointments.aggregate.mock.calls[0][0][0].$match.$or[0]).toEqual({ _id: { $in: [appointmentId] } });
+		expect(appointments.aggregate.mock.calls[0][0][0].$match.$or[1]).toMatchObject({
+			_id: { $nin: [appointmentId] },
+			receptionTaskId: { $exists: false },
+			holdExpiresAt: { $exists: false },
+		});
 	});
-	it('does not query patients when reception has no assigned appointments', async () => {
+	it('still reads unassigned intake when reception has no assigned appointments', async () => {
 		tasks.distinct.mockResolvedValue([]);
 		const service = new ReceptionistService(tasks, appointments, null, null, null, null, null);
 		expect(await service.getMyAppointmentQueue(actor, { page: 1, limit: 6 })).toEqual({ list: [], metaCounter: [] });
-		expect(appointments.aggregate).not.toHaveBeenCalled();
+		expect(appointments.aggregate).toHaveBeenCalled();
+		expect(appointments.aggregate.mock.calls[0][0][0].$match.$or[1]._id).toEqual({ $nin: [] });
 	});
 });

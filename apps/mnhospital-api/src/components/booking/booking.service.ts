@@ -1,3 +1,4 @@
+import { Appointment } from '../appointment/dto/appointment';
 import { PromotionService } from './promotion.service';
 import { discountedServicePrice } from './pricing.policy';
 import { clinicCurrency } from '../../libs/booking/clinic-time';
@@ -44,6 +45,7 @@ export class BookingService {
 		private readonly notificationEvents: NotificationEventService,
 		private readonly appointmentService?: AppointmentService,
 		private readonly promotions?: PromotionService,
+ @InjectModel('Appointment') private readonly appointmentModel?: Model<Appointment>,
 	) {}
 
 	public async createCart(memberId: ObjectId, input: CartInput): Promise<Cart> {
@@ -619,11 +621,16 @@ export class BookingService {
 			{ $unwind: '$bookingOrderItems' },
 			{ $match: { 'bookingOrderItems.doctorId': doctorId.toString() } },
 			{ $sort: { createdAt: -1, _id: -1, 'bookingOrderItems.serviceId': 1 } },
+            { $lookup: { from: 'appointment', let: { id: '$bookingOrderItems.appointmentId', order: '$_id', patient: '$patientId', service: '$bookingOrderItems.serviceId', doctor: '$bookingOrderItems.doctorId' }, pipeline: [
+                { $match: { $expr: { $and: [ { $eq: [{ $toString: '$_id' }, '$$id'] }, { $eq: ['$bookingOrderId', '$$order'] }, { $eq: ['$patientId', '$$patient'] }, { $eq: [{ $toString: '$serviceId' }, '$$service'] }, { $eq: [{ $toString: '$doctorId' }, '$$doctor'] } ] } } },
+                { $project: { appointmentStatus: 1 } }
+            ], as: 'appointmentState' } },
 			{ $project: {
 				_id: { $concat: [{ $toString: '$_id' }, ':', '$bookingOrderItems.serviceId'] },
 				bookingOrderId: { $toString: '$_id' },
 				orderCode: 1,
 				bookingOrderStatus: 1,
+                appointmentStatus: { $arrayElemAt: ['$appointmentState.appointmentStatus', 0] },
 				serviceId: '$bookingOrderItems.serviceId',
 				serviceName: '$bookingOrderItems.serviceName',
 				serviceDuration: '$bookingOrderItems.serviceDuration',
@@ -660,6 +667,21 @@ export class BookingService {
 			])
 			.exec();
 
-		return result[0] ?? { list: [], metaCounter: [] };
+		const page = result[0] ?? { list: [], metaCounter: [] };
+        if (!page.list.length) return page;
+        const ids = page.list.map((order) => order._id);
+        const [appointments, payments] = await Promise.all([
+            this.appointmentModel.find({ bookingOrderId: { $in: ids } }).select('_id bookingOrderId patientId serviceId doctorId appointmentStatus appointmentCode').lean().exec(),
+            this.paymentModel.find({ bookingOrderId: { $in: ids } }).select('_id bookingOrderId patientId serviceId doctorId paymentStatus paymentProvider paymentAmount createdAt').sort({ createdAt: -1, _id: -1 }).lean().exec(),
+        ]);
+        for (const order of page.list) for (const line of order.bookingOrderItems) {
+            const ownsLine = (record) => String(record.bookingOrderId) === String(order._id) && String(record.patientId) === String(order.patientId) && String(record.serviceId) === line.serviceId && String(record.doctorId) === line.doctorId;
+            const appointment = appointments.find((record) => ownsLine(record) && String(record._id) === line.appointmentId);
+            const attempts = payments.filter(ownsLine);
+            const payment = attempts.find((record) => record.paymentStatus === PaymentStatus.PAID) ?? attempts.find((record) => record.paymentStatus === PaymentStatus.PENDING) ?? attempts[0];
+            if (appointment) { line.appointmentStatus = appointment.appointmentStatus; line.appointmentCode = appointment.appointmentCode; }
+            if (payment) { line.paymentId = String(payment._id); line.paymentStatus = payment.paymentStatus; line.paymentProvider = payment.paymentProvider; line.paymentAmount = payment.paymentAmount; }
+        }
+        return page;
 	}
 }

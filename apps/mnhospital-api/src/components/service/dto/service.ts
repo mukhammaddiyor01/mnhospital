@@ -7,7 +7,19 @@ import { Doctor } from '../../doctor/dto/doctor';
 import { MeLiked } from '../../like/dto/like';
 
 @ObjectType()
+export class ServicePackageItem {
+	@Field(() => String) serviceId: string;
+	@Field(() => String) title: string;
+	@Field(() => Float) price: number;
+	@Field(() => Int) duration: number;
+}
+
+@ObjectType()
 export class Service {
+	@Field(() => String, { nullable: true }) packageBaseServiceId?: ObjectId;
+	@Field(() => Float, { nullable: true }) packageRegularPrice?: number;
+	@Field(() => [ServicePackageItem], { nullable: true }) packageItems?: ServicePackageItem[];
+
 	@Field(() => String)
 	_id: ObjectId;
 

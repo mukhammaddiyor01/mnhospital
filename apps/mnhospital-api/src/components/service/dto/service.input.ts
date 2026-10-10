@@ -5,6 +5,7 @@ import {
 	ArrayMaxSize,
 	ArrayUnique,
 	IsArray,
+	IsBoolean,
 	IsDate,
 	IsEnum,
 	IsIn,
@@ -140,6 +141,11 @@ export class ServicePeriodsRange {
 
 @InputType()
 export class ServiceSearch {
+	@IsOptional()
+	@IsBoolean()
+	@Field(() => Boolean, { nullable: true })
+	discountedOnly?: boolean;
+
 	@IsOptional()
 	@Transform(({ value }) => (typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value))
 	@IsInstance(ObjectId, { message: 'memberId must be a valid ObjectId' })

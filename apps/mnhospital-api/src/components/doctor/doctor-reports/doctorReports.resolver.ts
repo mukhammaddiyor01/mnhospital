@@ -1,3 +1,4 @@
+import { Appointments } from '../../appointment/dto/appointment';
 import { UseGuards } from '@nestjs/common';
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Types } from 'mongoose';
@@ -15,6 +16,15 @@ import { DoctorReportsService } from './doctorReports.service';
 export class DoctorReportsResolver {
 	constructor(private readonly doctorReportsService: DoctorReportsService) {}
 
+	@Roles(MemberType.DOCTOR)
+	@UseGuards(RolesGuard)
+	@Query(() => Appointments)
+	public getMyDoctorReportAppointments(
+		@Args('input') input: DoctorReportInquiry,
+		@AuthMember('_id') doctorId: ObjectId,
+	): Promise<Appointments> {
+		return this.doctorReportsService.getReportAppointments(doctorId, input);
+	}
 	@Roles(MemberType.DOCTOR)
 	@UseGuards(RolesGuard)
 	@Mutation(() => DoctorReport)

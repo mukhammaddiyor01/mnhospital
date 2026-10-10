@@ -1,16 +1,6 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
 import { Transform, Type } from 'class-transformer';
-import {
-	IsDate,
-	IsEnum,
-	IsInstance,
-	IsInt,
-	IsNotEmpty,
-	IsOptional,
-	IsString,
-	Length,
-	Min,
-} from 'class-validator';
+import { IsDate, IsEnum, IsInstance, IsInt, IsNotEmpty, IsOptional, IsString, Length, Min } from 'class-validator';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { DoctorReportFollowUp } from '../enums/doctor-report.enum';
@@ -120,6 +110,12 @@ export class DoctorReportUpdateInput {
 
 @InputType()
 export class DoctorReportInquiry {
+	@Transform(({ value }) => (typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : value))
+	@IsOptional()
+	@IsInstance(ObjectId)
+	@Field(() => String, { nullable: true })
+	appointmentId?: ObjectId;
+
 	@IsInt()
 	@Min(1)
 	@Field(() => Int, { defaultValue: 1 })

@@ -1,3 +1,4 @@
+import { reportPreview } from '../doctor/doctor-reports/report-preview';
 import { appointmentPatientPreview } from '../appointment/patient-preview';
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -175,7 +176,9 @@ export class ReceptionistService {
 	public async getMyReports(receptionistId: ObjectId, input: ReceptionistReportInquiry): Promise<DoctorReports> {
 		const taskMatch: Record<string, unknown> = {
 			receptionistId,
-			taskStatus: { $ne: ReceptionTaskStatus.CANCELLED },
+			taskStatus: {
+				$in: [ReceptionTaskStatus.ACCEPTED, ReceptionTaskStatus.IN_PROGRESS, ReceptionTaskStatus.COMPLETED],
+			},
 		};
 		if (input.patientId) taskMatch.patientId = input.patientId;
 
@@ -189,7 +192,7 @@ export class ReceptionistService {
 				{ $sort: { createdAt: -1 } },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }, ...reportPreview()],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
@@ -202,17 +205,24 @@ export class ReceptionistService {
 		receptionistId: ObjectId,
 		input: ReceptionistAppointmentQueueInquiry,
 	): Promise<Appointments> {
-		const appointmentIds = await this.receptionTaskModel.distinct('appointmentId', {
-			receptionistId,
-			taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] },
-		});
-		if (!appointmentIds.length) return { list: [], metaCounter: [] };
-
+		const active = { taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] } };
+		const [mine, other] = await Promise.all([
+			this.receptionTaskModel.distinct('appointmentId', { ...active, receptionistId }),
+			this.receptionTaskModel.distinct('appointmentId', {
+				...active,
+				receptionistId: { $exists: true, $ne: receptionistId },
+			}),
+		]);
+		// Operational intake already belongs to reception's booking authority.
+		// Clinical reports remain restricted to accepted/assigned reception work.
 		const match: Record<string, unknown> = {
-			_id: { $in: appointmentIds },
 			appointmentStatus: {
-				$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
-			},
+					$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
+				},
+			$or: [
+				{ _id: { $in: mine } },
+				{ _id: { $nin: other }, receptionTaskId: { $exists: false }, holdExpiresAt: { $exists: false } },
+			],
 		};
 		if (input.status) match.appointmentStatus = input.status;
 
@@ -222,7 +232,12 @@ export class ReceptionistService {
 				{ $sort: { startsAt: 1 } },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }, ...appointmentPatientPreview()],
+						list: [
+							{ $skip: (input.page - 1) * input.limit },
+							{ $limit: input.limit },
+							...appointmentPatientPreview(),
+							{ $set: { receptionAssigned: { $in: ['$_id', mine] } } },
+						],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
@@ -237,18 +252,23 @@ export class ReceptionistService {
 		reason?: string,
 	): Promise<Appointment> {
 		const task = await this.receptionTaskModel
-			.findOne({ appointmentId, receptionistId, taskStatus: ReceptionTaskStatus.ACCEPTED })
+			.findOne({ appointmentId, receptionistId, taskType: 'CHECK_IN', taskStatus: ReceptionTaskStatus.ACCEPTED })
 			.select('_id')
 			.exec();
 		if (!task) throw new ForbiddenException('Appointment requires an accepted reception task');
 
-		const appointment = await this.appointmentService.updateAppointmentStatus(
-			receptionistId,
-			MemberType.RECEPTIONIST,
-			appointmentId,
-			AppointmentStatus.IN_PROGRESS,
-			reason,
-		);
+		// A doctor may already have started the visit. Record the accepted
+		// check-in task without repeating or reverting the clinical transition.
+		const current = await this.appointmentModel.findById(appointmentId).exec();
+		if (!current || ![AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS].includes(current.appointmentStatus)) {
+            throw new BadRequestException('Check-in requires a confirmed or in-progress appointment');
+        }
+		const appointment =
+			current.appointmentStatus === AppointmentStatus.IN_PROGRESS
+				? current
+				: await this.appointmentService.updateAppointmentStatus(
+            receptionistId, MemberType.RECEPTIONIST, appointmentId, AppointmentStatus.IN_PROGRESS, reason,
+        );
 
 		await this.updateTask(receptionistId, MemberType.RECEPTIONIST, {
 			taskId: task._id,
@@ -344,6 +364,20 @@ export class ReceptionistService {
 			.exec();
 		if (!appointment) throw new BadRequestException('Reception task requires an active appointment');
 
+		if (memberType === MemberType.RECEPTIONIST && input.taskType === 'CHECK_IN') {
+			const other = await this.receptionTaskModel
+			.findOne({
+					appointmentId: appointment._id,
+					taskType: 'CHECK_IN',
+					receptionistId: { $exists: true, $ne: memberId },
+					taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] },
+				})
+				.select('_id')
+				.lean()
+				.exec();
+			if (other) throw new ForbiddenException('Another receptionist is responsible for this appointment');
+		}
+
 		let receptionistId = input.receptionistId;
 		if (memberType === MemberType.RECEPTIONIST) {
 			if (receptionistId && receptionistId.toString() !== memberId.toString()) {
@@ -391,6 +425,7 @@ export class ReceptionistService {
 			match.$or = [{ receptionistId: memberId }, { receptionistId: { $exists: false } }];
 		}
 		if (input.taskStatus) match.taskStatus = input.taskStatus;
+		if (input.appointmentId) match.appointmentId = input.appointmentId;
 
 		const result = await this.receptionTaskModel
 			.aggregate([
@@ -398,7 +433,26 @@ export class ReceptionistService {
 				{ $sort: { createdAt: -1 } },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [
+							{ $skip: (input.page - 1) * input.limit },
+							{ $limit: input.limit },
+							{
+								$lookup: {
+									from: 'appointment',
+									localField: 'appointmentId',
+									foreignField: '_id',
+									pipeline: [{ $project: { appointmentStatus: 1, appointmentCode: 1 } }],
+									as: 'appointment',
+								},
+							},
+							{
+								$set: {
+									appointmentStatus: { $arrayElemAt: ['$appointment.appointmentStatus', 0] },
+									appointmentCode: { $arrayElemAt: ['$appointment.appointmentCode', 0] },
+								},
+							},
+							{ $unset: 'appointment' },
+						],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},
@@ -433,10 +487,59 @@ export class ReceptionistService {
 		if (!allowedStatuses[task.taskStatus].includes(input.taskStatus)) {
 			throw new BadRequestException(`Cannot change task status from ${task.taskStatus} to ${input.taskStatus}`);
 		}
+		if ([ReceptionTaskStatus.ACCEPTED, ReceptionTaskStatus.IN_PROGRESS].includes(input.taskStatus)) {
+			const appointment = await this.appointmentModel
+				.findById(task.appointmentId)
+				.select('appointmentStatus')
+				.lean()
+				.exec();
+			if (
+				!appointment ||
+				![AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS].includes(appointment.appointmentStatus)
+			) {
+                throw new BadRequestException('Reception task requires an active appointment');
+            }
+			if (
+				task.taskType === 'CHECK_IN' &&
+				input.taskStatus === ReceptionTaskStatus.IN_PROGRESS &&
+				appointment.appointmentStatus !== AppointmentStatus.IN_PROGRESS
+			) {
+                throw new BadRequestException('Use appointment check-in to start this reception task');
+            }
+		}
 		if (input.taskStatus === ReceptionTaskStatus.COMPLETED && !input.taskResult?.trim() && !task.taskResult?.trim()) {
 			throw new BadRequestException('Task result is required when completing a reception task');
 		}
 
+		let claimedAppointment = false;
+		if (task.taskType === 'CHECK_IN' && input.taskStatus === ReceptionTaskStatus.ACCEPTED) {
+			const another = await this.receptionTaskModel
+			.findOne({
+					appointmentId: task.appointmentId,
+					_id: { $ne: task._id },
+					taskType: 'CHECK_IN',
+					taskStatus: { $in: [ReceptionTaskStatus.ACCEPTED, ReceptionTaskStatus.IN_PROGRESS] },
+				})
+				.select('_id')
+				.lean()
+				.exec();
+			if (another) throw new BadRequestException('This appointment already has accepted reception work');
+			const claim = await this.appointmentModel
+				.updateOne(
+					{
+						_id: task.appointmentId,
+						appointmentStatus: {
+					$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
+				},
+						receptionTaskId: { $exists: false },
+					},
+					{ $set: { receptionTaskId: task._id } },
+				)
+				.exec();
+			if (!claim.matchedCount)
+				throw new BadRequestException('Another receptionist has already accepted this appointment');
+			claimedAppointment = true;
+		}
 		if (memberType === MemberType.RECEPTIONIST && !task.receptionistId) task.receptionistId = memberId;
 		task.statusHistory.push({
 			previousStatus: task.taskStatus,
@@ -450,7 +553,21 @@ export class ReceptionistService {
 		if (input.taskStatus === ReceptionTaskStatus.ACCEPTED) task.acceptedAt = new Date();
 		if (input.taskStatus === ReceptionTaskStatus.COMPLETED) task.completedAt = new Date();
 
-		const result = await task.save();
+		let result: ReceptionTask;
+		try {
+			result = await task.save();
+		} catch (error) {
+			if (claimedAppointment)
+				await this.appointmentModel
+					.updateOne({ _id: task.appointmentId, receptionTaskId: task._id }, { $unset: { receptionTaskId: 1 } })
+					.exec();
+			throw error;
+		}
+		if (task.taskType === 'CHECK_IN' && input.taskStatus === ReceptionTaskStatus.CANCELLED) {
+			await this.appointmentModel
+				.updateOne({ _id: task.appointmentId, receptionTaskId: task._id }, { $unset: { receptionTaskId: 1 } })
+				.exec();
+		}
 		if (input.taskStatus === ReceptionTaskStatus.COMPLETED) {
 			await this.notificationEvents.toDoctor(result.doctorId, {
 				key: `reception-task:${result._id}:completed`,

@@ -73,6 +73,9 @@ export class ReceptionTaskStatusInput {
 
 @InputType()
 export class ReceptionTaskInquiry {
+ @Transform(toObjectId) @IsInstance(ObjectId) @IsOptional()
+ @Field(() => String, { nullable: true }) appointmentId?: ObjectId;
+
 	@IsInt()
 	@Min(1)
 	@Field(() => Int, { defaultValue: 1 })

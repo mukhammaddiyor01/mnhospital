@@ -2,10 +2,20 @@ import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
 import { Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
 import { BookingOrderStatus } from '../../patient/enums/patient.enum';
+import { AppointmentStatus } from '../../../libs/enums/appointment.enum';
+import { PaymentStatus, PaymentProvider } from '../../patient/enums/patient.enum';
 import { TotalCounter } from '../../member/dto/member';
 
 @ObjectType()
 export class BookingOrderItem {
+ // Live operational state; never stored in the order's price snapshot.
+ @Field(() => AppointmentStatus, { nullable: true }) appointmentStatus?: AppointmentStatus;
+ @Field(() => String, { nullable: true }) appointmentCode?: string;
+ @Field(() => String, { nullable: true }) paymentId?: string;
+ @Field(() => PaymentStatus, { nullable: true }) paymentStatus?: PaymentStatus;
+ @Field(() => PaymentProvider, { nullable: true }) paymentProvider?: PaymentProvider;
+ @Field(() => Float, { nullable: true }) paymentAmount?: number;
+
 	@Field(() => String)
 	serviceId: string;
 

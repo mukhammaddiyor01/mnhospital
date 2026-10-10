@@ -1,9 +1,14 @@
-import { serviceAllowsDate, serviceAllowsInterval } from '../../service/service-availability.policy';
+import { discountedServicePrice } from '../../booking/pricing.policy';
+import {
+	ServiceAvailability,
+	serviceAllowsDate,
+	serviceAllowsInterval,
+} from '../../service/service-availability.policy';
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import ObjectId = Types.ObjectId;
-import { clinicDayStart, clinicOffsetMillis } from '../../../libs/booking/clinic-time';
+import { clinicCurrency, clinicDayStart, clinicOffsetMillis } from '../../../libs/booking/clinic-time';
 import { Appointment } from '../../appointment/dto/appointment';
 import { HospitalRoom } from '../../appointment/dto/room';
 import { RoomStatus } from '../../../libs/enums/appointment.enum';
@@ -12,8 +17,8 @@ import { MemberStatus } from '../../member/enums/member.enum';
 import { Service } from '../../service/dto/service';
 import { ServiceStatus } from '../../service/enums/service.enum';
 import { Doctor } from '../dto/doctor';
-import { AvailableDoctorSlot, DoctorSchedule } from './dto/doctor-schedule';
-import { AvailableDoctorSlotsInput, DoctorScheduleInput } from './dto/doctor-schedule.input';
+import { AvailableDoctorDates, AvailableDoctorSlot, DoctorSchedule } from './dto/doctor-schedule';
+import { AvailableDoctorDatesInput, AvailableDoctorSlotsInput, DoctorScheduleInput } from './dto/doctor-schedule.input';
 
 @Injectable()
 export class DoctorScheduleService {
@@ -68,11 +73,18 @@ export class DoctorScheduleService {
 		const doctor = await this.ensureActiveDoctor(input.doctorId);
 		if (this.roomModel) {
 			if (!doctor.docRoom) return [];
-			const room = await this.roomModel.findOne({ roomNumber: doctor.docRoom, roomStatus: RoomStatus.AVAILABLE,
-				$or: [{ assignedDoctorId: null }, { assignedDoctorId: input.doctorId }] }).select('_id').lean().exec();
+			const room = await this.roomModel
+				.findOne({
+					roomNumber: doctor.docRoom,
+					roomStatus: RoomStatus.AVAILABLE,
+					$or: [{assignedDoctorId: null}, {assignedDoctorId: input.doctorId}],
+				})
+				.select('_id')
+				.lean()
+				.exec();
 			if (!room) return [];
 		}
-		const service = await this.serviceModel
+		let service = await this.serviceModel
 			.findOne({
 				_id: input.serviceId,
 				memberId: input.doctorId,
@@ -83,6 +95,8 @@ export class DoctorScheduleService {
 			.exec();
 		if (!service) throw new BadRequestException('The service is not available for this doctor');
 
+		service = await this.packageAvailability(service);
+		if (!service) return [];
 		const serviceDuration = Number(service.serviceDuration);
 		if (!Number.isInteger(serviceDuration) || serviceDuration <= 0 || serviceDuration > 1440) {
 			throw new BadRequestException('Service duration must be a positive number');
@@ -98,23 +112,168 @@ export class DoctorScheduleService {
 		if (!schedule) return [];
 
 		if (!Number.isInteger(schedule.slotDurationMinutes) || schedule.slotDurationMinutes < 1) throw new BadRequestException('Invalid schedule slot interval');
-		const range = this.validateTimeRange(schedule);
 		const dayStart = day.getTime();
 		const dayEnd = dayStart + 24 * 60 * 60 * 1000;
-		await this.appointmentModel.updateMany(
-			{ appointmentStatus: AppointmentStatus.PENDING, holdExpiresAt: { $lte: new Date() } },
-			{ $set: { appointmentStatus: AppointmentStatus.CANCELLED, cancelledAt: new Date(), cancellationReason: 'Payment reservation expired', slotKeys: [] } },
-		).exec();
+		await this.appointmentModel
+			.updateMany(
+				{appointmentStatus: AppointmentStatus.PENDING, holdExpiresAt: {$lte: new Date()}},
+				{
+					$set: {
+						appointmentStatus: AppointmentStatus.CANCELLED,
+						cancelledAt: new Date(),
+						cancellationReason: 'Payment reservation expired',
+						slotKeys: [],
+					},
+				},
+			)
+			.exec();
 		const appointments = await this.appointmentModel
 			.find({
 				doctorId: input.doctorId,
-				appointmentStatus: { $in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS] },
+				appointmentStatus: {
+					$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
+				},
 				startsAt: { $lt: new Date(dayEnd) },
 				endsAt: { $gt: new Date(dayStart) },
 			})
 			.select('startsAt endsAt')
 			.lean()
 			.exec();
+
+		return this.slotsForDay(service, schedule, appointments, day);
+	}
+
+	public async getAvailableDates(input: AvailableDoctorDatesInput): Promise<AvailableDoctorDates> {
+		// One month, one appointment read. Never advertise dates based only on service selections.
+		if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(input.month)) throw new BadRequestException('Month must use YYYY-MM');
+		const day = clinicDayStart(`${input.month}-01`);
+		const [year, month] = input.month.split('-').map(Number);
+		const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+		const end = new Date(day.getTime() + days * 86400000);
+		const doctor = await this.ensureActiveDoctor(input.doctorId);
+		let service = await this.serviceModel
+			.findOne({
+				_id: input.serviceId,
+				memberId: input.doctorId,
+				serviceStatus: ServiceStatus.ACTIVE,
+				deletedAt: { $exists: false },
+			})
+			.lean()
+			.exec();
+		if (!service) throw new BadRequestException('The service is not available for this doctor');
+		service = await this.packageAvailability(service);
+		if (!service) return { dates: [], reason: 'PACKAGE_UNAVAILABLE' };
+		if (service.openedAt && service.closedAt && new Date(service.closedAt) <= new Date(service.openedAt)) {
+			return {dates: [], reason: 'INVALID_SERVICE_WINDOW'};
+		}
+		if (service.closedAt && new Date(service.closedAt).getTime() <= Date.now()) return {dates: [], reason: 'SERVICE_ENDED'};
+		if (this.roomModel) {
+			const room =
+				doctor.docRoom &&
+				(await this.roomModel
+					.findOne({
+						roomNumber: doctor.docRoom,
+						roomStatus: RoomStatus.AVAILABLE,
+						$or: [{assignedDoctorId: null}, {assignedDoctorId: input.doctorId}],
+					})
+					.select('_id')
+					.lean()
+					.exec());
+			if (!room) return {dates: [], reason: 'NO_ROOM'};
+		}
+		const schedules = await this.scheduleModel.find({doctorId: input.doctorId, isActive: true}).lean().exec();
+		if (!schedules.length) return {dates: [], reason: 'NO_SCHEDULE'};
+		await this.appointmentModel
+			.updateMany(
+				{appointmentStatus: AppointmentStatus.PENDING, holdExpiresAt: {$lte: new Date()}},
+				{
+					$set: {
+						appointmentStatus: AppointmentStatus.CANCELLED,
+						cancelledAt: new Date(),
+						cancellationReason: 'Payment reservation expired',
+						slotKeys: [],
+					},
+				},
+			)
+			.exec();
+		const appointments = await this.appointmentModel
+			.find({
+				doctorId: input.doctorId,
+				appointmentStatus: {
+					$in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
+				},
+				startsAt: {$lt: end},
+				endsAt: {$gt: day},
+			})
+			.select('startsAt endsAt')
+			.lean()
+			.exec();
+		const dates: string[] = [];
+		for (let n = 1; n <= days; n++) {
+			const date = `${input.month}-${String(n).padStart(2, '0')}`;
+			if (!serviceAllowsDate(service, date)) continue;
+			const start = new Date(day.getTime() + (n - 1) * 86400000);
+			const weekday = new Date(start.getTime() + clinicOffsetMillis()).getUTCDay();
+			const schedule = schedules.find((row) => row.weekday === weekday);
+			if (schedule && this.slotsForDay(service, schedule, appointments, start).length) dates.push(date);
+		}
+		return {dates, reason: dates.length ? 'AVAILABLE' : 'NO_DATES'};
+	}
+
+	private async packageAvailability(service) {
+		if (!service.packageBaseServiceId || !service.packageItems?.length) return service;
+		const ids = service.packageItems.map((item) => new Types.ObjectId(item.serviceId));
+		const components = await this.serviceModel
+			.find({
+				_id: { $in: ids },
+				memberId: service.memberId,
+				serviceStatus: ServiceStatus.ACTIVE,
+				deletedAt: { $exists: false },
+				packageBaseServiceId: { $exists: false },
+			})
+			.lean()
+			.exec();
+		if (
+			components.length !== ids.length ||
+            components.some(item => item.serviceRoom !== service.serviceRoom) ||
+            discountedServicePrice(service.servicePrice, service.serviceDiscountPercent, clinicCurrency()).total >= components.reduce((sum, item) => sum + discountedServicePrice(item.servicePrice, item.serviceDiscountPercent, clinicCurrency()).total, 0) ||
+			components.reduce((sum, item) => sum + Number(item.serviceDuration), 0) > Number(service.serviceDuration)
+		)
+			return null;
+		const dates = [service, ...components].map((item) => item.availabilityDates ?? []).filter((list) => list.length);
+		const availabilityDates = dates.length
+			? dates.reduce((common, list) => common.filter((date) => list.includes(date)))
+			: [];
+		if (dates.length && !availabilityDates.length) return null;
+		const starts = [service, ...components]
+			.map((item) => item.openedAt)
+			.filter(Boolean)
+			.map((value) => new Date(value).getTime());
+		const ends = [service, ...components]
+			.map((item) => item.closedAt)
+			.filter(Boolean)
+			.map((value) => new Date(value).getTime());
+		const openedAt = starts.length ? new Date(Math.max(...starts)) : undefined;
+		const closedAt = ends.length ? new Date(Math.min(...ends)) : undefined;
+		if (openedAt && closedAt && closedAt <= openedAt) return null;
+		return { ...service, availabilityDates, openedAt, closedAt };
+	}
+
+	private slotsForDay(
+		service: ServiceAvailability & {serviceDuration?: string},
+		schedule: DoctorSchedule,
+		appointments: Array<{startsAt: Date; endsAt: Date}>,
+		day: Date,
+	): AvailableDoctorSlot[] {
+		const serviceDuration = Number(service.serviceDuration);
+		if (!Number.isInteger(serviceDuration) || serviceDuration < 1 || serviceDuration > 1440) {
+			throw new BadRequestException('Service duration must be a positive number');
+		}
+		if (!Number.isInteger(schedule.slotDurationMinutes) || schedule.slotDurationMinutes < 1) {
+			throw new BadRequestException('Invalid schedule slot interval');
+		}
+		const range = this.validateTimeRange(schedule);
+		const dayStart = day.getTime();
 
 		const slots: AvailableDoctorSlot[] = [];
 		const workStart = dayStart + range.startMinutes * 60 * 1000;
@@ -130,7 +289,12 @@ export class DoctorScheduleService {
 			const overlapsAppointment = appointments.some(
 				(appointment) => cursor < appointment.endsAt.getTime() && slotEnd > appointment.startsAt.getTime(),
 			);
-			if (cursor > Date.now() && !overlapsBreak && !overlapsAppointment && serviceAllowsInterval(service, new Date(cursor), new Date(slotEnd))) {
+			if (
+				cursor > Date.now() &&
+				!overlapsBreak &&
+				!overlapsAppointment &&
+				serviceAllowsInterval(service, new Date(cursor), new Date(slotEnd))
+			) {
 				slots.push({ startsAt: new Date(cursor), endsAt: new Date(slotEnd) });
 			}
 		}
@@ -182,5 +346,4 @@ export class DoctorScheduleService {
 		if (hours > 23 || minutes > 59) throw new BadRequestException('Time must use a valid 24-hour value');
 		return hours * 60 + minutes;
 	}
-
 }

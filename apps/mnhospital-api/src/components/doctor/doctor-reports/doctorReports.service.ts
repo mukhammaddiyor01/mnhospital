@@ -1,3 +1,6 @@
+import { reportPreview } from './report-preview';
+import { appointmentPatientPreview } from '../../appointment/patient-preview';
+import { Appointments } from '../../appointment/dto/appointment';
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -26,11 +29,14 @@ export class DoctorReportsService {
 			.findOne({
 				_id: input.appointmentId,
 				doctorId,
-				appointmentStatus: { $in: [AppointmentStatus.ENDED, AppointmentStatus.COMPLETED] },
+				appointmentStatus: {
+					$in: [AppointmentStatus.IN_PROGRESS, AppointmentStatus.ENDED, AppointmentStatus.COMPLETED],
+				},
 			})
 			.lean()
 			.exec();
-		if (!appointment) throw new BadRequestException('Only your ended or completed appointment can receive a report');
+		if (!appointment)
+			throw new BadRequestException('Only your started, ended or completed appointment can receive a report');
 
 		const existing = await this.doctorReportModel.findOne({ appointmentId: appointment._id }).lean().exec();
 		if (existing) throw new BadRequestException('A report already exists for this appointment');
@@ -52,7 +58,8 @@ export class DoctorReportsService {
 				docReportFollowUpDate: input.docReportFollowUpDate,
 			});
 		} catch (error) {
-			throw new BadRequestException('Report creation failed because this appointment already has a report');
+			if (error?.code === 11000) throw new BadRequestException('A report already exists for this appointment');
+			throw new InternalServerErrorException('The report could not be saved. Please try again.');
 		}
 		await this.notificationEvents.toPatient(report.patientId, {
 			key: `report:${report._id}:created`,
@@ -121,14 +128,53 @@ export class DoctorReportsService {
 		return result;
 	}
 
+	public async getReportAppointments(doctorId: ObjectId, input: DoctorReportInquiry): Promise<Appointments> {
+		const result = await this.appointmentModel
+			.aggregate([
+				{
+					$match: {
+						doctorId,
+						...(input.appointmentId ? { _id: input.appointmentId } : {}),
+						appointmentStatus: {
+							$in: [AppointmentStatus.IN_PROGRESS, AppointmentStatus.ENDED, AppointmentStatus.COMPLETED],
+						},
+					},
+				},
+				{ $sort: { startsAt: -1, _id: -1 } },
+				{
+					$facet: {
+						list: [
+							{ $skip: (input.page - 1) * input.limit },
+							{ $limit: input.limit },
+							...appointmentPatientPreview(),
+							{
+								$lookup: {
+									from: 'doctorReports',
+									localField: '_id',
+									foreignField: 'appointmentId',
+									pipeline: [{ $project: { _id: 1 } }],
+									as: 'report',
+								},
+							},
+							{ $set: { reportId: { $toString: { $arrayElemAt: ['$report._id', 0] } } } },
+							{ $unset: 'report' },
+						],
+						metaCounter: [{ $count: 'total' }],
+					},
+				},
+			])
+			.exec();
+		return result[0] ?? { list: [], metaCounter: [] };
+	}
 	private async getReports(match: Record<string, unknown>, input: DoctorReportInquiry): Promise<DoctorReports> {
+		if (input.appointmentId) match.appointmentId = input.appointmentId;
 		const result = await this.doctorReportModel
 			.aggregate([
 				{ $match: match },
 				{ $sort: { createdAt: -1 } },
 				{
 					$facet: {
-						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+						list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }, ...reportPreview()],
 						metaCounter: [{ $count: 'total' }],
 					},
 				},

@@ -1,3 +1,7 @@
+import { discountedServicePrice } from '../booking/pricing.policy';
+import { clinicCurrency } from '../../libs/booking/clinic-time';
+import { ServiceOptionInput, ServiceOptionUpdateInput } from './dto/service.option.input';
+import { MemberStatus } from '../member/enums/member.enum';
 import { validateServiceAvailability } from './service-availability.policy';
 import { BadRequestException, HttpException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -38,10 +42,150 @@ export class ServiceService {
 	}
 
 	public async setDiscountByAdmin(id: string, percent: number): Promise<Service> {
-		if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new BadRequestException('Discount must be between 0 and 100');
-		const result = await this.serviceModel.findOneAndUpdate({ _id: id, serviceStatus: { $ne: ServiceStatus.DELETED } }, { $set: { serviceDiscountPercent: percent } }, { new: true, runValidators: true }).exec();
+		if (!Number.isFinite(percent) || percent < 0 || percent > 100)
+			throw new BadRequestException('Discount must be between 0 and 100');
+		const result = await this.serviceModel
+			.findOneAndUpdate(
+				{ _id: id, serviceStatus: { $ne: ServiceStatus.DELETED } },
+				{ $set: { serviceDiscountPercent: percent } },
+				{ new: true, runValidators: true },
+			)
+			.exec();
 		if (!result) throw new BadRequestException('Service is unavailable');
 		return result;
+	}
+
+	public async createOptionByAdmin(input: ServiceOptionInput): Promise<Service> {
+		const base = await this.serviceModel.findOne({ _id: shapeIntoMongoObjectId(input.baseServiceId), serviceStatus: { $ne: ServiceStatus.DELETED } }).lean().exec();
+		if (!base) throw new BadRequestException('Base service is unavailable');
+		const doctor = await this.doctorService.getDoctorByAdmin(base.memberId);
+		if (doctor.memberStatus !== MemberStatus.ACTIVE || doctor.deletedAt) throw new BadRequestException('The assigned doctor is unavailable');
+		const packageData = input.includedServiceIds ? await this.packageData(base, input) : undefined;
+		// Reuse service creation, ownership, specialty, calendar, limit and counter rules.
+		const created = await this.createService({
+			memberId: base.memberId, departmentId: base.departmentId, serviceType: base.serviceType,
+			serviceName: base.serviceName, serviceTitle: input.serviceTitle.trim(), servicePrice: input.servicePrice,
+			serviceDuration: input.serviceDuration, serviceDesc: input.serviceDesc?.trim() || base.serviceDesc,
+			serviceImages: base.serviceImages, serviceRoomName: base.serviceRoomName, serviceRoom: base.serviceRoom,
+			availabilityDates: base.availabilityDates, openedAt: base.openedAt, closedAt: base.closedAt,
+			serviceStatus: ServiceStatus.INACTIVE,
+		});
+		if (!packageData) return created;
+		return this.serviceModel
+			.findOneAndUpdate({ _id: created._id }, { $set: packageData }, { new: true, runValidators: true })
+			.exec();
+	}
+
+	private async packageData(base: Service, input: ServiceOptionInput, optionId?: ObjectId) {
+		if (base.packageBaseServiceId || base.serviceStatus !== ServiceStatus.ACTIVE)
+			throw new BadRequestException('Choose an active standard service as the package base');
+		const ids = input.includedServiceIds ?? [];
+		if (
+			!ids.length ||
+			ids.length > 3 ||
+			new Set(ids).size !== ids.length ||
+			ids.includes(String(base._id)) ||
+			(optionId && ids.includes(String(optionId)))
+		)
+			throw new BadRequestException('Choose distinct additional services, excluding the base and package itself');
+		const extras = await this.serviceModel
+			.find({
+				_id: { $in: ids.map((id) => shapeIntoMongoObjectId(id)) },
+				memberId: base.memberId,
+				serviceStatus: ServiceStatus.ACTIVE,
+				deletedAt: { $exists: false },
+				packageBaseServiceId: { $exists: false },
+			})
+			.lean()
+			.exec();
+		if (extras.length !== ids.length || extras.some((row) => row.serviceRoom !== base.serviceRoom))
+			throw new BadRequestException('Package services must be active, belong to the same doctor and use the same room');
+		const ordered = [base, ...ids.map((id) => extras.find((row) => String(row._id) === id))];
+		const packageItems = ordered.map((row) => ({
+			serviceId: String(row._id),
+			title: row.serviceTitle || row.serviceName,
+			price: discountedServicePrice(row.servicePrice, row.serviceDiscountPercent, clinicCurrency()).total,
+			duration: Number(row.serviceDuration),
+		}));
+		const duration = packageItems.reduce((total, item) => total + item.duration, 0);
+		const packageRegularPrice = packageItems.reduce((total, item) => total + item.price, 0);
+		if (!Number.isInteger(duration) || duration < 1 || duration > 1440 || Number(input.serviceDuration) < duration)
+			throw new BadRequestException('Package duration must cover all included services');
+		if (!Number.isFinite(input.servicePrice) || input.servicePrice >= packageRegularPrice)
+			throw new BadRequestException('Package total must be lower than buying its services separately');
+		return { packageBaseServiceId: base._id, packageRegularPrice, packageItems };
+	}
+	public async updateOptionByAdmin(input: ServiceOptionUpdateInput): Promise<Service> {
+		const option = await this.serviceModel.findOne({ _id: shapeIntoMongoObjectId(input.optionId), serviceStatus: { $ne: ServiceStatus.DELETED } })
+			.lean()
+			.exec();
+		const base = await this.serviceModel.findOne({ _id: shapeIntoMongoObjectId(input.baseServiceId), serviceStatus: { $ne: ServiceStatus.DELETED } }).lean().exec();
+		if (
+			!option ||
+			!base ||
+			String(option._id) === String(base._id) ||
+			String(option.memberId) !== String(base.memberId) ||
+			String(option.departmentId) !== String(base.departmentId) ||
+			option.serviceType !== base.serviceType
+		)
+			throw new BadRequestException('Choose a package belonging to this base service');
+		const doctor = await this.doctorService.getDoctorByAdmin(base.memberId);
+		if (doctor.memberStatus !== MemberStatus.ACTIVE || doctor.deletedAt) throw new BadRequestException('The assigned doctor is unavailable');
+		if (input.serviceStatus && ![ServiceStatus.ACTIVE, ServiceStatus.INACTIVE].includes(input.serviceStatus))
+			throw new BadRequestException('Package publishing supports active or inactive status');
+		const data = await this.packageData(base, input, option._id);
+		return this.serviceModel
+			.findOneAndUpdate(
+				{ _id: option._id, serviceStatus: { $ne: ServiceStatus.DELETED } },
+				{
+					$set: {
+						...data,
+						serviceTitle: input.serviceTitle.trim(),
+						servicePrice: input.servicePrice,
+						serviceDuration: input.serviceDuration,
+						serviceDesc: input.serviceDesc,
+						...(input.serviceStatus ? { serviceStatus: input.serviceStatus } : {}),
+					},
+				},
+				{ new: true, runValidators: true },
+			)
+			.exec();
+	}
+	public async getBookingOptions(serviceId: ObjectId): Promise<Services> {
+		const selected = await this.serviceModel.findOne({ _id: serviceId, serviceStatus: ServiceStatus.ACTIVE, deletedAt: { $exists: false } })
+			.lean()
+			.exec();
+		if (!selected) throw new BadRequestException('Service is unavailable');
+		const root = selected.packageBaseServiceId ?? selected._id;
+		const result = await this.serviceModel
+			.aggregate([
+				{
+					$match: {
+						memberId: selected.memberId,
+						serviceStatus: ServiceStatus.ACTIVE,
+						deletedAt: { $exists: false },
+						$or: [{ _id: root }, { packageBaseServiceId: root, 'packageItems.1': { $exists: true } }],
+					},
+				},
+				lookupDoctor,
+				{ $unwind: '$memberData' },
+				{ $match: { 'memberData.memberStatus': MemberStatus.ACTIVE, 'memberData.deletedAt': { $exists: false } } },
+				{ $sort: { createdAt: 1, _id: 1 } },
+			])
+			.exec();
+		const base = result.find((row) => String(row._id) === String(root));
+		if (!base) return { list: [], metaCounter: [] };
+		const list = [base];
+        for (const row of result.filter((item) => String(item._id) !== String(root))) {
+            try {
+                const data = await this.packageData(base, { includedServiceIds: row.packageItems.slice(1).map(item => item.serviceId), servicePrice: row.servicePrice, serviceDuration: row.serviceDuration } as ServiceOptionInput, row._id);
+                list.push({ ...row, ...data });
+            } catch (error) {
+                if (!(error instanceof BadRequestException)) throw error;
+                // Hide packages whose component services changed or became unavailable.
+            }
+        }
+		return { list, metaCounter: [{ total: list.length }] };
 	}
 
 	public async createService(input: ServiceInput): Promise<Service> {
@@ -106,6 +250,7 @@ export class ServiceService {
 		});
 
 		if (!result) throw new InternalServerErrorException(Message.SOMETHING_WENT_WRONG);
+		result.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		return result;
 	}
 
@@ -122,8 +267,8 @@ export class ServiceService {
 			const viewInput = { memberId: memberId, viewRefId: serviceId, viewGroup: ViewGroup.SERVICE };
 			const newView = await this.viewService.recordView(viewInput);
 			if (newView) {
-				await this.serviceStatsEditor({ _id: serviceId, targetKey: 'serviceViews', modifier: 1 });
-				targetService.serviceViews++;
+				const viewed = await this.serviceStatsEditor({ _id: serviceId, targetKey: 'serviceViews', modifier: 1 });
+				targetService.serviceViews = viewed.serviceViews;
 			}
 
 			const likeInput: LikeInput = {
@@ -134,7 +279,8 @@ export class ServiceService {
 			targetService.meLiked = await this.likeService.checkLikeExistence(likeInput);
 		}
 
-		targetService.memberData = (await this.doctorService.findPublicDoctor(targetService.memberId, memberId)) ?? undefined;
+		targetService.memberData =
+			(await this.doctorService.findPublicDoctor(targetService.memberId, memberId)) ?? undefined;
 		return targetService;
 	}
 
@@ -208,7 +354,24 @@ export class ServiceService {
 
 		const currentService = await this.serviceModel.findOne(search).exec();
 		if (!currentService) throw new InternalServerErrorException(Message.UPDATE_FAILED);
-		validateServiceAvailability({ availabilityDates: input.availabilityDates !== undefined ? input.availabilityDates : currentService.availabilityDates, openedAt: input.openedAt ?? currentService.openedAt, closedAt: input.closedAt ?? currentService.closedAt });
+		if (currentService.packageItems?.length > 1) {
+			const duration = currentService.packageItems.reduce((sum, item) => sum + item.duration, 0);
+			if (
+				Number(input.serviceDuration ?? currentService.serviceDuration) < duration ||
+				Number(input.servicePrice ?? currentService.servicePrice) >= currentService.packageRegularPrice
+			)
+				throw new BadRequestException('Use a valid full package price and duration');
+			for (const field of ['memberId', 'departmentId', 'serviceType', 'serviceRoom'])
+				if (input[field] !== undefined && String(input[field]) !== String(currentService[field]))
+					throw new BadRequestException('Package ownership and room follow its standard service');
+		}
+
+		validateServiceAvailability({
+			availabilityDates:
+				input.availabilityDates !== undefined ? input.availabilityDates : currentService.availabilityDates,
+			openedAt: input.openedAt ?? currentService.openedAt,
+			closedAt: input.closedAt ?? currentService.closedAt,
+		});
 		if (input.serviceType !== undefined || input.serviceStatus === ServiceStatus.ACTIVE) {
 			const doctor = await this.doctorService.getDoctorByAdmin(currentService.memberId);
 			assertSpecialtyServiceType(doctor.docSpecialty, input.serviceType ?? currentService.serviceType);
@@ -265,15 +428,21 @@ export class ServiceService {
 		const result = await this.serviceModel
 			.aggregate([
 				{ $match: match },
-				{ $sort: sort },
+				{ $sort: { ...sort, _id: 1 } },
+				...(input.search.discountedOnly
+					? [
+							lookupDoctor,
+							{ $unwind: '$memberData' },
+							{ $match: { 'memberData.memberStatus': 'ACTIVE', 'memberData.deletedAt': { $exists: false } } },
+						]
+					: []),
 				{
 					$facet: {
 						list: [
 							{ $skip: (input.page - 1) * input.limit },
 							{ $limit: input.limit },
 							...(memberId ? [lookupAuthMemberLiked(memberId, '$_id', LikeGroup.SERVICE)] : []),
-							lookupDoctor,
-							{ $unwind: '$memberData' },
+							...(input.search.discountedOnly ? [] : [lookupDoctor, { $unwind: '$memberData' }]),
 						],
 						metaCounter: [{ $count: 'total' }],
 					},
@@ -296,7 +465,9 @@ export class ServiceService {
 			periodsRange,
 			priceRange,
 			text,
+			discountedOnly,
 		} = input.search;
+		if (discountedOnly) match.serviceDiscountPercent = { $gt: 0, $lte: 100 };
 
 		if (memberId) match.memberId = shapeIntoMongoObjectId(memberId);
 
@@ -335,7 +506,7 @@ export class ServiceService {
 		}
 
 		if (text) {
-			const searchRegex = new RegExp(text, 'i');
+			const searchRegex = new RegExp(text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
 			match.$or = [{ serviceName: searchRegex }, { serviceTitle: searchRegex }, { serviceDesc: searchRegex }];
 		}

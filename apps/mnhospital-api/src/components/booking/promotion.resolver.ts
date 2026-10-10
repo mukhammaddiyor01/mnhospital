@@ -9,6 +9,7 @@ import { shapeIntoMongoObjectId } from '../../libs/config';
 import { PromotionService } from './promotion.service';
 import { BookingOrder } from './dto/booking-order';
 import {
+	PublicPromoOffer,
 	BookingPromoInput,
 	PromoCode,
 	PromoCodeInput,
@@ -20,6 +21,10 @@ import {
 @Resolver()
 export class PromotionResolver {
 	constructor(private readonly promotions: PromotionService) {}
+	@Query(() => [PublicPromoOffer])
+	getPublicPromoOffers() {
+		return this.promotions.publicOffers();
+	}
 	@Roles(MemberType.ADMIN)
 	@UseGuards(RolesGuard)
 	@Query(() => PromoCodes)

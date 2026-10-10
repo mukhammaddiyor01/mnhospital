@@ -282,7 +282,7 @@ export class AppointmentService {
 
 		const result = await appointment.save();
 		await this.receptionTaskModel.updateMany({ appointmentId: result._id, taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] } },
-			{ $set: { taskStatus: ReceptionTaskStatus.CANCELLED }, $push: { statusHistory: { newStatus: ReceptionTaskStatus.CANCELLED, changedByMemberId: memberId, changedAt: new Date(), reason: 'Appointment cancelled' } } }).exec();
+			{ $inc: { __v: 1 }, $set: { taskStatus: ReceptionTaskStatus.CANCELLED }, $push: { statusHistory: { newStatus: ReceptionTaskStatus.CANCELLED, changedByMemberId: memberId, changedAt: new Date(), reason: 'Appointment cancelled' } } }).exec();
 		await this.notificationEvents.toDoctor(result.doctorId, {
 			key: `appointment:${result._id}:cancelled`,
 			type: NotificationType.APPOINTMENT,
@@ -436,6 +436,10 @@ export class AppointmentService {
 
 		if ([AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW, AppointmentStatus.ENDED, AppointmentStatus.COMPLETED].includes(appointmentStatus)) appointment.slotKeys = [];
 		const result = await appointment.save();
+        if ([AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW].includes(appointmentStatus)) {
+            await this.receptionTaskModel.updateMany({ appointmentId: result._id, taskStatus: { $nin: [ReceptionTaskStatus.CANCELLED, ReceptionTaskStatus.COMPLETED] } },
+                { $inc: { __v: 1 }, $set: { taskStatus: ReceptionTaskStatus.CANCELLED }, $push: { statusHistory: { newStatus: ReceptionTaskStatus.CANCELLED, changedByMemberId: memberId, changedAt: new Date(), reason: `Appointment ${appointmentStatus.toLowerCase()}` } } }).exec();
+        }
 		if (appointmentStatus === AppointmentStatus.COMPLETED) await this.completeBookingIfFinished(result.bookingOrderId);
 		const event = {
 			key: `appointment:${result._id}:${appointmentStatus}`,

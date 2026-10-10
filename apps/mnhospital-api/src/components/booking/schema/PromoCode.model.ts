@@ -6,6 +6,7 @@ export default new Schema(
 		discountValue: { type: Number, required: true, min: 0.01 },
 		currency: { type: String, required: true },
 		isActive: { type: Boolean, default: true },
+		showOnHomepage: { type: Boolean, default: false },
 		minSubtotal: { type: Number, default: 0, min: 0 },
 		serviceIds: { type: [String], default: [] },
 		startsAt: Date,

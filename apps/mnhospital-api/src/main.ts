@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { createInputValidationPipe } from './libs/input-validation';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { LoggingInterceptor } from './libs/interceptor/Logging.interceptor';
 import { graphqlUploadExpress } from 'graphql-upload';
@@ -9,7 +9,7 @@ import * as express from 'express';
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule);
 	app.useWebSocketAdapter(new WsAdapter(app));
-	app.useGlobalPipes(new ValidationPipe());
+	app.useGlobalPipes(createInputValidationPipe());
 	app.useGlobalInterceptors(new LoggingInterceptor());
 	app.enableCors({ origin: true, credentials: true });
 	app.use(express.urlencoded({ extended: true }));

@@ -16,6 +16,20 @@ export class PromotionService {
 		@InjectModel('Service') private readonly services: Model<Service>,
 		private readonly patients: PatientService,
 	) {}
+	async publicOffers() {
+		const now = new Date();
+		return this.promos.find({
+			showOnHomepage: true,
+			isActive: true,
+			deletedAt: { $exists: false },
+			currency: clinicCurrency(),
+			$and: [
+				{ $or: [{ startsAt: null }, { startsAt: { $lte: now } }] },
+				{ $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] },
+			],
+		}).select('_id code discountType discountValue currency minSubtotal serviceIds expiresAt')
+			.sort({ updatedAt: -1, _id: -1 }).limit(3).lean().exec();
+	}
 	async list(input: PromoCodesInquiry) {
 		const filter = { deletedAt: { $exists: false } };
 		const [list, total] = await Promise.all([
