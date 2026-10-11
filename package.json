@@ -6,7 +6,9 @@
 	"private": true,
 	"license": "UNLICENSED",
 	"scripts": {
-		"build": "nest build",
+		"build": "npm run build:api && npm run build:batch",
+		"build:api": "nest build mnhospital-api",
+		"build:batch": "nest build mnhospital-batch",
 		"format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
 		"start": "nest start",
 		"start:dev": "nest start --watch",

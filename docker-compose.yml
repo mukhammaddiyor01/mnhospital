@@ -20,7 +20,7 @@ services:
 
     # FOR PRODUCTION
     command:
-      bash -c "npm install && npm run build && npm run start:prod"
+      bash -c "npm install && npm run build:api && npm run start:prod"
 
       # FOR PRODUCTION
     # command: bash -c "npm install && npm run start:dev"
@@ -31,6 +31,8 @@ services:
     image: node:20.10.0
     ports:
       - 2003:4003
+    environment:
+      - PORT_BATCH=4003
     volumes:
       - ./:/usr/src/mnhospital
     working_dir: /usr/src/mnhospital
@@ -39,7 +41,7 @@ services:
       - monorepo-network
 
     # FOR PRODUCTION
-    command: bash -c "npm install && npm run build && npm run start:prod:batch"
+    command: bash -c "rm -rf dist && -npm install && npm run build:batch && npm run start:prod:batch"
 
 networks:
   monorepo-network:
