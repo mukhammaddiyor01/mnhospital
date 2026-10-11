@@ -7,6 +7,10 @@ services:
     image: node:20.10.0
     ports:
       - 2001:4001
+    environment:
+      - PORT_API=4001
+      - CLIENT_URL=http://localhost:2002
+      - AUTH_ALLOWED_ORIGINS=http://localhost:4002,http://localhost:2002,http://localhost:3000
     volumes:
       - ./:/usr/src/mnhospital
     working_dir: /usr/src/mnhospital
@@ -44,3 +48,9 @@ networks:
 # mnhospital-next: localhost:2002 <=> container: 4002
 # mnhospital-api: localhost:2001 <=> container: 4001
 # mnhospital-batch: localhost:2003 <=> container: 4003
+
+# docker compose up -d
+# docker compose stop
+# docker compose start
+# docker compose restart
+# docker compose stop && docker compose rm -f
