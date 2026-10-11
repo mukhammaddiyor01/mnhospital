@@ -7,8 +7,8 @@ services:
       - 2001:4001
     environment:
       - PORT_API=4001
-      - CLIENT_URL=http://localhost:2002
-      - AUTH_ALLOWED_ORIGINS=http://localhost:4002,http://localhost:2002,http://localhost:3000
+      - CLIENT_URL=${CLIENT_URL:-http://localhost:2002}
+      - AUTH_ALLOWED_ORIGINS=${AUTH_ALLOWED_ORIGINS:-http://localhost:4002,http://localhost:2002,http://localhost:3000,${CLIENT_URL:-http://localhost:2002}}
     volumes:
       - ./:/usr/src/mnhospital
     working_dir: /usr/src/mnhospital
