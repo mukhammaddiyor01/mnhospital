@@ -50,11 +50,11 @@ export class AuthResolver {
 		checkSessionRequest(context);
 		try {
 			const authorization = context.req.headers.authorization;
-			const expected =
-				sessionRole(context.req) && typeof authorization === 'string' && /^Bearer [^\s]+$/.test(authorization)
-					? authorization.slice(7)
-					: undefined;
-			if (sessionRole(context.req) && !expected) throw new ForbiddenException('Session access token is required');
+			// A new browser tab has no tab-scoped access token. Its HttpOnly role cookie
+			// can restore the session; an existing tab still binds refresh to its bearer.
+			if (authorization !== undefined && (typeof authorization !== 'string' || !/^Bearer [^\s]+$/.test(authorization)))
+				throw new ForbiddenException('Invalid session access token');
+			const expected = typeof authorization === 'string' ? authorization.slice(7) : undefined;
 			const session = await this.authService.refreshSession(readRefreshCookie(context.req), expected);
 			writeRefreshCookie(context.res, session.refreshToken, session.expiresAt, context.req);
 			return { accessToken: session.accessToken };

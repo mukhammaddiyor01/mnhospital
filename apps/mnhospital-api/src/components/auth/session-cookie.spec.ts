@@ -5,6 +5,7 @@ import {
 	writeRefreshCookie,
 	clearRefreshCookie,
 } from './session-cookie';
+import { AuthResolver } from './auth.resolver';
 describe('Session cookie/origin configuration', () => {
 	const original = {
 		node: process.env.NODE_ENV,
@@ -49,6 +50,26 @@ describe('Session cookie/origin configuration', () => {
 			'',
 		);
 		expect(readRefreshCookie({ headers: { cookie: 'mn-hospital-refresh=%ZZ' } } as any)).toBe('');
+	});
+	it('restores a new tab from its selected HttpOnly cookie without a bearer, while binding existing tabs', async () => {
+		process.env.AUTH_ALLOWED_ORIGINS = 'https://hospital.example';
+		const refreshSession = jest.fn().mockResolvedValue({ accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: new Date() });
+		const resolver = new AuthResolver({ refreshSession } as any);
+		const res = { cookie: jest.fn() };
+		const req: any = { headers: {
+			origin: 'https://hospital.example',
+			'apollo-require-preflight': 'true',
+			'x-mn-session-role': 'PATIENT',
+			cookie: 'mn-hospital-refresh-patient=stored-refresh',
+		} };
+		await expect(resolver.refreshSession({ req, res } as any)).resolves.toEqual({ accessToken: 'new-access' });
+		expect(refreshSession).toHaveBeenCalledWith('stored-refresh', undefined);
+		expect(res.cookie).toHaveBeenCalledWith('mn-hospital-refresh-patient', 'new-refresh', expect.any(Object));
+		req.headers['authorization'] = 'Bearer old-access';
+		await resolver.refreshSession({ req, res } as any);
+		expect(refreshSession).toHaveBeenLastCalledWith('stored-refresh', 'old-access');
+		req.headers['authorization'] = 'invalid';
+		await expect(resolver.refreshSession({ req, res } as any)).rejects.toMatchObject({ status: 403 });
 	});
 	it('selects only the requested role cookie from a shared browser cookie jar', () => {
 		const cookie =
