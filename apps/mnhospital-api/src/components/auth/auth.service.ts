@@ -29,9 +29,11 @@ interface RefreshSessionRecord {
 	tokenHash: string;
 	usedTokenHashes: string[];
 	expiresAt: Date;
+	updatedAt: Date;
 	revokedAt?: Date;
 }
 export const REFRESH_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_IDLE_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -276,11 +278,12 @@ export class AuthService {
 		return this.jwtService.signAsync(payload, { expiresIn: '15m' });
 	}
 
-	public async startSession(profile: T): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date }> {
+	public async startSession(profile: T): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date; cookieExpiresAt: Date }> {
 		const active = await this.getActiveProfile(new Types.ObjectId(String(profile._id)), profile.memberType);
 		const id = new Types.ObjectId();
 		const refreshToken = this.newCredential(id);
-		const expiresAt = new Date(Date.now() + REFRESH_SESSION_MS);
+		const now = Date.now();
+		const expiresAt = new Date(now + REFRESH_SESSION_MS);
 		await this.database(() =>
 			this.sessions.create({
 				_id: id,
@@ -291,7 +294,7 @@ export class AuthService {
 				expiresAt,
 			}),
 		);
-		return { accessToken: await this.createToken(active, String(id)), refreshToken, expiresAt };
+		return { accessToken: await this.createToken(active, String(id)), refreshToken, expiresAt, cookieExpiresAt: new Date(now + SESSION_IDLE_MS) };
 	}
 
 	private async assertSessionProfile(session: T): Promise<T> {
@@ -323,6 +326,7 @@ export class AuthService {
 		) {
 			throw new UnauthorizedException('Invalid session identity');
 		}
+		const now = Date.now();
 		const session = await this.database(() =>
 			this.sessions
 				.findOne({
@@ -330,7 +334,8 @@ export class AuthService {
 					ownerId: new Types.ObjectId(claims._id),
 					ownerType: claims.memberType,
 					revokedAt: null,
-					expiresAt: { $gt: new Date() },
+					expiresAt: { $gt: new Date(now) },
+					updatedAt: { $gt: new Date(now - SESSION_IDLE_MS) },
 				})
 				.lean()
 				.exec(),
@@ -352,9 +357,16 @@ export class AuthService {
 				throw new ForbiddenException('Session was replaced');
 		}
 		const credential = this.parseCredential(token);
+		const now = Date.now();
+		const validSession = {
+			_id: credential.id,
+			revokedAt: null,
+			expiresAt: { $gt: new Date(now) },
+			updatedAt: { $gt: new Date(now - SESSION_IDLE_MS) },
+		};
 		const session = await this.database(() =>
 			this.sessions
-				.findOne({ _id: credential.id, revokedAt: null, expiresAt: { $gt: new Date() } })
+				.findOne(validSession)
 				.select('+tokenHash +usedTokenHashes')
 				.lean()
 				.exec(),
@@ -371,7 +383,7 @@ export class AuthService {
 		const rotated = await this.database(() =>
 			this.sessions
 				.findOneAndUpdate(
-					{ _id: session._id, tokenHash: credential.hash, revokedAt: null, expiresAt: { $gt: new Date() } },
+					{ ...validSession, tokenHash: credential.hash },
 					{ $set: { tokenHash: this.hash(refreshToken) }, $push: { usedTokenHashes: credential.hash } },
 					{ new: true },
 				)
@@ -386,6 +398,7 @@ export class AuthService {
 			accessToken: await this.createToken(profile, String(session._id)),
 			refreshToken,
 			expiresAt: session.expiresAt,
+			cookieExpiresAt: new Date(Math.min(session.expiresAt.getTime(), Date.now() + SESSION_IDLE_MS)),
 		};
 	}
 

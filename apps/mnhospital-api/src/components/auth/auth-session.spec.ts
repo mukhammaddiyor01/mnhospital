@@ -2,6 +2,7 @@ import { Types, model } from 'mongoose';
 import { createAuthFixture } from '../../../test/auth-fixture';
 import { MemberStatus, MemberType } from '../member/enums/member.enum';
 import RefreshTokenSchema from '../member/schema/RefreshToken.model';
+import { SESSION_IDLE_MS } from './auth.service';
 
 const Refresh = model('RefreshSessionValidationTest', RefreshTokenSchema);
 describe('Owned refresh sessions and access tokens', () => {
@@ -118,6 +119,25 @@ describe('Owned refresh sessions and access tokens', () => {
 		[...fixture.records.values()][0].expiresAt = new Date(0);
 		await expect(fixture.auth.refreshSession(first.refreshToken)).rejects.toMatchObject({ status: 401 });
 		await expect(fixture.auth.verifyToken(first.accessToken)).rejects.toMatchObject({ status: 401 });
+	});
+
+	it('expires both access and refresh after 15 minutes without a refresh', async () => {
+		const first = await fixture.auth.startSession(fixture.profile(MemberType.PATIENT));
+		const row = [...fixture.records.values()][0];
+		row.updatedAt = new Date(Date.now() - SESSION_IDLE_MS - 1000);
+		await expect(fixture.auth.verifyToken(first.accessToken)).rejects.toMatchObject({ status: 401 });
+		await expect(fixture.auth.refreshSession(first.refreshToken)).rejects.toMatchObject({ status: 401 });
+	});
+
+	it('refresh activity renews the idle window without extending the 30-day limit', async () => {
+		const first = await fixture.auth.startSession(fixture.profile(MemberType.DOCTOR));
+		const row = [...fixture.records.values()][0];
+		row.updatedAt = new Date(Date.now() - SESSION_IDLE_MS + 60_000);
+		const renewed = await fixture.auth.refreshSession(first.refreshToken);
+		expect(row.updatedAt.getTime()).toBeGreaterThan(Date.now() - 5_000);
+		expect(renewed.expiresAt).toEqual(first.expiresAt);
+		expect(renewed.cookieExpiresAt.getTime()).toBeGreaterThan(Date.now() + SESSION_IDLE_MS - 5_000);
+		await expect(fixture.auth.verifyToken(renewed.accessToken)).resolves.toMatchObject({ memberType: MemberType.DOCTOR });
 	});
 
 	it('logout revokes the session, including when a consumed cookie was sent, and leaves other sessions active', async () => {

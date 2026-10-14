@@ -53,7 +53,8 @@ describe('Session cookie/origin configuration', () => {
 	});
 	it('restores a new tab from its selected HttpOnly cookie without a bearer, while binding existing tabs', async () => {
 		process.env.AUTH_ALLOWED_ORIGINS = 'https://hospital.example';
-		const refreshSession = jest.fn().mockResolvedValue({ accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: new Date() });
+		const cookieExpiresAt = new Date(Date.now() + 15 * 60_000);
+		const refreshSession = jest.fn().mockResolvedValue({ accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: new Date(Date.now() + 30 * 86400_000), cookieExpiresAt });
 		const resolver = new AuthResolver({ refreshSession } as any);
 		const res = { cookie: jest.fn() };
 		const req: any = { headers: {
@@ -65,6 +66,7 @@ describe('Session cookie/origin configuration', () => {
 		await expect(resolver.refreshSession({ req, res } as any)).resolves.toEqual({ accessToken: 'new-access' });
 		expect(refreshSession).toHaveBeenCalledWith('stored-refresh', undefined);
 		expect(res.cookie).toHaveBeenCalledWith('mn-hospital-refresh-patient', 'new-refresh', expect.any(Object));
+		expect(res.cookie.mock.calls[0][2].expires).toEqual(cookieExpiresAt);
 		req.headers['authorization'] = 'Bearer old-access';
 		await resolver.refreshSession({ req, res } as any);
 		expect(refreshSession).toHaveBeenLastCalledWith('stored-refresh', 'old-access');

@@ -41,7 +41,7 @@ export class AuthResolver {
 	): Promise<AuthSession> {
 		checkSessionRequest(context);
 		const session = await this.authService.changeAccountPassword(actor._id, actor.memberType, input);
-		writeRefreshCookie(context.res, session.refreshToken, session.expiresAt, context.req);
+		writeRefreshCookie(context.res, session.refreshToken, session.cookieExpiresAt, context.req);
 		return { accessToken: session.accessToken };
 	}
 
@@ -56,7 +56,7 @@ export class AuthResolver {
 				throw new ForbiddenException('Invalid session access token');
 			const expected = typeof authorization === 'string' ? authorization.slice(7) : undefined;
 			const session = await this.authService.refreshSession(readRefreshCookie(context.req), expected);
-			writeRefreshCookie(context.res, session.refreshToken, session.expiresAt, context.req);
+			writeRefreshCookie(context.res, session.refreshToken, session.cookieExpiresAt, context.req);
 			return { accessToken: session.accessToken };
 		} catch (error) {
 			if (error instanceof UnauthorizedException) clearRefreshCookie(context.res, context.req);

@@ -23,7 +23,7 @@ export class SessionLoginInterceptor implements NestInterceptor {
 					throw new ForbiddenException('Session role does not match login');
 				await this.authService.logoutCredential(readRefreshCookie(http.req));
 				const session = await this.authService.startSession(profile);
-				writeRefreshCookie(http.res, session.refreshToken, session.expiresAt, http.req);
+				writeRefreshCookie(http.res, session.refreshToken, session.cookieExpiresAt, http.req);
 				profile.accessToken = session.accessToken;
 				http.req.body.authMember = {
 					_id: profile._id,
@@ -48,7 +48,7 @@ export class SessionAccessInterceptor implements NestInterceptor {
 			mergeMap(async (profile) => {
 				if (passwordChanged) {
 					const session = await this.authService.startSession(profile);
-					writeRefreshCookie(http.res, session.refreshToken, session.expiresAt, http.req);
+					writeRefreshCookie(http.res, session.refreshToken, session.cookieExpiresAt, http.req);
 					profile.accessToken = session.accessToken;
 				} else profile.accessToken = await this.authService.createToken(profile, http.req.body.authMember.sid);
 				return profile;

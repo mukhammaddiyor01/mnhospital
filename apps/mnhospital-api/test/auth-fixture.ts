@@ -38,11 +38,12 @@ export function createAuthFixture() {
 		if (!row) return null;
 		Object.assign(row, update.$set);
 		for (const [key, value] of Object.entries(update.$push ?? {})) row[key].push(value);
+		row.updatedAt = new Date();
 		return clone(row);
 	};
 	const sessions = {
 		create: jest.fn(async (row) => {
-			const record = { ...row, usedTokenHashes: [] };
+			const record = { ...row, usedTokenHashes: [], createdAt: new Date(), updatedAt: new Date() };
 			records.set(String(row._id), record);
 			return record;
 		}),
