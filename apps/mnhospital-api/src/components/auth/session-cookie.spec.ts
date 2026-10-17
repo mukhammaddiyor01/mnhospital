@@ -51,27 +51,34 @@ describe('Session cookie/origin configuration', () => {
 		);
 		expect(readRefreshCookie({ headers: { cookie: 'mn-hospital-refresh=%ZZ' } } as any)).toBe('');
 	});
-	it('restores a new tab from its selected HttpOnly cookie without a bearer, while binding existing tabs', async () => {
+	it('requires a tab access token for role-scoped refresh without clearing another tab cookie', async () => {
 		process.env.AUTH_ALLOWED_ORIGINS = 'https://hospital.example';
 		const cookieExpiresAt = new Date(Date.now() + 15 * 60_000);
 		const refreshSession = jest.fn().mockResolvedValue({ accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: new Date(Date.now() + 30 * 86400_000), cookieExpiresAt });
 		const resolver = new AuthResolver({ refreshSession } as any);
-		const res = { cookie: jest.fn() };
+		const res = { cookie: jest.fn(), clearCookie: jest.fn() };
 		const req: any = { headers: {
 			origin: 'https://hospital.example',
 			'apollo-require-preflight': 'true',
 			'x-mn-session-role': 'PATIENT',
 			cookie: 'mn-hospital-refresh-patient=stored-refresh',
 		} };
+		await expect(resolver.refreshSession({ req, res } as any)).rejects.toMatchObject({ status: 403 });
+		expect(refreshSession).not.toHaveBeenCalled();
+		expect(res.cookie).not.toHaveBeenCalled();
+		expect(res.clearCookie).not.toHaveBeenCalled();
+		req.headers['authorization'] = 'Bearer old-access';
 		await expect(resolver.refreshSession({ req, res } as any)).resolves.toEqual({ accessToken: 'new-access' });
-		expect(refreshSession).toHaveBeenCalledWith('stored-refresh', undefined);
+		expect(refreshSession).toHaveBeenLastCalledWith('stored-refresh', 'old-access');
 		expect(res.cookie).toHaveBeenCalledWith('mn-hospital-refresh-patient', 'new-refresh', expect.any(Object));
 		expect(res.cookie.mock.calls[0][2].expires).toEqual(cookieExpiresAt);
-		req.headers['authorization'] = 'Bearer old-access';
-		await resolver.refreshSession({ req, res } as any);
-		expect(refreshSession).toHaveBeenLastCalledWith('stored-refresh', 'old-access');
 		req.headers['authorization'] = 'invalid';
 		await expect(resolver.refreshSession({ req, res } as any)).rejects.toMatchObject({ status: 403 });
+		delete req.headers['x-mn-session-role'];
+		delete req.headers.authorization;
+		req.headers.cookie = 'mn-hospital-refresh=legacy-refresh';
+		await expect(resolver.refreshSession({ req, res } as any)).resolves.toEqual({ accessToken: 'new-access' });
+		expect(refreshSession).toHaveBeenLastCalledWith('legacy-refresh', undefined);
 	});
 	it('selects only the requested role cookie from a shared browser cookie jar', () => {
 		const cookie =

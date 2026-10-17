@@ -130,7 +130,7 @@ describe('Session GraphQL/cookie integration with production auth service', () =
 			).toBe('UNAUTHENTICATED');
 		},
 	);
-	it('restores a new PATIENT tab from its role cookie but rejects a replaced tab bearer', async () => {
+	it('rejects role-cookie refresh without the tab bearer and refuses a replaced bearer', async () => {
 		const rolePost = (query: string, cookie?: string, token?: string) => {
 			const req = request(app.getHttpServer())
 				.post('/graphql')
@@ -149,7 +149,10 @@ describe('Session GraphQL/cookie integration with production auth service', () =
 		const stale = await rolePost('mutation { refreshSession { accessToken } }', replacementCookie, first.body.data.fixtureLogin.accessToken);
 		expect(stale.body.errors[0].extensions.code).toBe('FORBIDDEN');
 		expect(stale.headers['set-cookie']).toBeUndefined();
-		const restored = await rolePost('mutation { refreshSession { accessToken } }', replacementCookie);
+		const guest = await rolePost('mutation { refreshSession { accessToken } }', replacementCookie);
+		expect(guest.body.errors[0].extensions.code).toBe('FORBIDDEN');
+		expect(guest.headers['set-cookie']).toBeUndefined();
+		const restored = await rolePost('mutation { refreshSession { accessToken } }', replacementCookie, replacement.body.data.fixtureLogin.accessToken);
 		expect(restored.body.errors).toBeUndefined();
 		expect(restored.headers['set-cookie'][0]).toContain('mn-hospital-refresh-patient=');
 		expect((await fixture.auth.verifyToken(restored.body.data.refreshSession.accessToken)).memberType).toBe(MemberType.PATIENT);

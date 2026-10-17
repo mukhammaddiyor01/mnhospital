@@ -50,8 +50,10 @@ export class AuthResolver {
 		checkSessionRequest(context);
 		try {
 			const authorization = context.req.headers.authorization;
-			// A new browser tab has no tab-scoped access token. Its HttpOnly role cookie
-			// can restore the session; an existing tab still binds refresh to its bearer.
+			// Role cookies renew only a tab that already holds the matching access token.
+			// Cookie-only refresh remains available to legacy API clients without a role selector.
+			if (sessionRole(context.req) && authorization === undefined)
+				throw new ForbiddenException('Session access token is required');
 			if (authorization !== undefined && (typeof authorization !== 'string' || !/^Bearer [^\s]+$/.test(authorization)))
 				throw new ForbiddenException('Invalid session access token');
 			const expected = typeof authorization === 'string' ? authorization.slice(7) : undefined;
