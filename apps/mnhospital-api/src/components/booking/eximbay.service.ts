@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+	BadRequestException,
+	Injectable,
+	InternalServerErrorException,
+	Logger,
+	ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface EximbayReadyPayload {
@@ -17,13 +23,54 @@ interface EximbayReadyPayload {
 
 @Injectable()
 export class EximbayService {
+	private readonly logger = new Logger(EximbayService.name);
 	constructor(private readonly configService: ConfigService) {}
+
+	private async gatewayRequest<T>(operation: 'ready' | 'verify' | 'retrieve', body: unknown): Promise<T> {
+		const config = this.getConfig();
+		const unavailable = () =>
+			new ServiceUnavailableException(
+				'Online card payments are temporarily unavailable. Please try again later or pay at reception.',
+			);
+		let response: Response;
+		let data: { rescode?: string; code?: string };
+		try {
+			response = await fetch(`${config.baseUrl}/v1/payments/${operation}`, {
+				method: 'POST',
+				headers: this.getHeaders(config.apiKey),
+				signal: AbortSignal.timeout(15000),
+				body: JSON.stringify(body),
+			});
+			data = await response.json();
+		} catch {
+			this.logger.warn(`Eximbay ${operation}: gateway connection or response failed`);
+			throw unavailable();
+		}
+		if (!data || !response.ok || data.rescode !== '0000') {
+			const rawCode = data?.code ?? data?.rescode;
+			const code =
+				typeof rawCode === 'string' && /^[A-Z0-9_]{2,16}$/.test(rawCode) ? rawCode : `HTTP_${response.status}`;
+			this.logger.warn(`Eximbay ${operation}: rejected (${code})`);
+			if (operation === 'verify' && code !== 'EC1000')
+				throw new BadRequestException('The payment result could not be verified');
+			throw unavailable();
+		}
+		return data as T;
+	}
 
 	public getTestMode(): 'SIMULATED' | 'SANDBOX' | 'DISABLED' {
 		const mode = this.configService.get<string>('EXIMBAY_TEST_MODE');
 		if (mode === 'disabled') return 'DISABLED';
-		if (mode === 'simulated') return (this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV) === 'production' ? 'DISABLED' : 'SIMULATED';
-		try { this.getConfig(); return 'SANDBOX'; } catch { return 'DISABLED'; }
+		if (mode === 'simulated')
+			return (this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV) === 'production'
+				? 'DISABLED'
+				: 'SIMULATED';
+		try {
+			this.getConfig();
+			return 'SANDBOX';
+		} catch {
+			return 'DISABLED';
+		}
 	}
 
 	private getConfig() {
@@ -40,7 +87,13 @@ export class EximbayService {
 			throw new InternalServerErrorException('Eximbay is restricted to sandbox test payments');
 		}
 
-		return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, mid, serverUrl: serverUrl.replace(/\/$/, ''), clientUrl: clientUrl.replace(/\/$/, '') };
+		return {
+			baseUrl: baseUrl.replace(/\/$/, ''),
+			apiKey,
+			mid,
+			serverUrl: serverUrl.replace(/\/$/, ''),
+			clientUrl: clientUrl.replace(/\/$/, ''),
+		};
 	}
 
 	private getHeaders(apiKey: string): HeadersInit {
@@ -95,17 +148,9 @@ export class EximbayService {
 			settings: { display_type: 'R' },
 		};
 
-		const response = await fetch(`${config.baseUrl}/v1/payments/ready`, {
-			method: 'POST',
-			headers: this.getHeaders(config.apiKey),
-			signal: AbortSignal.timeout(15000),
-			body: JSON.stringify(payload),
-		});
-		const data = (await response.json()) as { rescode?: string; resmsg?: string; fgkey?: string };
-
-		if (!response.ok || data.rescode !== '0000' || !data.fgkey) {
-			throw new InternalServerErrorException(`Eximbay ready failed: ${data.resmsg || response.statusText}`);
-		}
+		const data = await this.gatewayRequest<{ fgkey?: string }>('ready', payload);
+		if (!data.fgkey)
+			throw new ServiceUnavailableException('The payment window is unavailable. Please try again later.');
 
 		return {
 			fgkey: data.fgkey,
@@ -119,52 +164,24 @@ export class EximbayService {
 	}
 
 	public async verify(rawData: string): Promise<void> {
-		const config = this.getConfig();
-		const response = await fetch(`${config.baseUrl}/v1/payments/verify`, {
-			method: 'POST',
-			headers: this.getHeaders(config.apiKey),
-			signal: AbortSignal.timeout(15000),
-			body: JSON.stringify({ data: rawData }),
-		});
-		const data = (await response.json()) as { rescode?: string; resmsg?: string };
-
-		if (!response.ok || data.rescode !== '0000') {
-			throw new BadRequestException(`Eximbay verify failed: ${data.resmsg || response.statusText}`);
-		}
+		await this.gatewayRequest('verify', { data: rawData });
 	}
 
-	public async retrieve(input: {
-		providerPaymentId: string;
-		currency: string;
-		amount: number;
-		transactionId: string;
-	}) {
+	public async retrieve(input: { providerPaymentId: string; currency: string; amount: number; transactionId: string }) {
 		const config = this.getConfig();
-		const response = await fetch(`${config.baseUrl}/v1/payments/retrieve`, {
-			method: 'POST',
-			headers: this.getHeaders(config.apiKey),
-			signal: AbortSignal.timeout(15000),
-			body: JSON.stringify({
-				mid: config.mid,
-				key_field: 'transaction_id',
-				payment: {
-					order_id: input.providerPaymentId,
-					currency: input.currency,
-					amount: String(input.amount),
-					transaction_id: input.transactionId,
-					lang: 'EN',
-				},
-			}),
-		});
-		const data = (await response.json()) as {
-			rescode?: string;
-			resmsg?: string;
+		const data = await this.gatewayRequest<{
 			payment?: { order_id?: string; amount?: string; transaction_id?: string; currency?: string; status?: string };
-		};
-
-		if (!response.ok || data.rescode !== '0000') {
-			throw new BadRequestException(`Eximbay retrieve failed: ${data.resmsg || response.statusText}`);
-		}
+		}>('retrieve', {
+			mid: config.mid,
+			key_field: 'transaction_id',
+			payment: {
+				order_id: input.providerPaymentId,
+				currency: input.currency,
+				amount: String(input.amount),
+				transaction_id: input.transactionId,
+				lang: 'EN',
+			},
+		});
 
 		return data;
 	}
