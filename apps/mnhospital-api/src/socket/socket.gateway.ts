@@ -19,6 +19,7 @@ import {
 } from '../components/messaging/messaging-events.service';
 import { ChatParticipant } from '../components/messaging/dto/messaging';
 import { GeneralChatService, MAX_GENERAL_MESSAGE_LENGTH } from './general-chat.service';
+import { isAllowedBrowserOrigin } from '../libs/security/allowed-origins';
 
 interface ChatIdentity {
 	name: string;
@@ -79,6 +80,11 @@ export class SocketGateway
 	}
 
 	public async handleConnection(client: WebSocket, request: IncomingMessage): Promise<void> {
+		// Browsers send Origin on WebSocket upgrades. Reject cross-site chat connections.
+		if (request.headers?.origin && !isAllowedBrowserOrigin(request.headers.origin)) {
+			client.close(1008, 'Origin not allowed');
+			return;
+		}
 		const token = new URL(request.url ?? '/', 'http://localhost').searchParams.get('token');
 		let identity: ChatIdentity = { name: 'Guest', role: 'GUEST' };
 		if (token) {

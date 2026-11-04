@@ -10,8 +10,8 @@ describe('Appointment notification triggers', () => {
 	const appointmentId = new Types.ObjectId();
 	const orderId = new Types.ObjectId();
 	const serviceId = new Types.ObjectId();
-	const startsAt = new Date('2026-11-01T09:00:00.000Z');
-	const endsAt = new Date('2026-11-01T09:30:00.000Z');
+	const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+	const endsAt = new Date(startsAt.getTime() + 30 * 60 * 1000);
 	const appointment = {
 		_id: appointmentId,
 		patientId,

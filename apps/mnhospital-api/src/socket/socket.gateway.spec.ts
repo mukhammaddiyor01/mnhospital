@@ -67,6 +67,23 @@ describe('General live chat', () => {
 		expect(verifyToken).not.toHaveBeenCalled();
 	});
 
+	it('rejects a browser WebSocket from an untrusted origin before reading chat history', async () => {
+		const previous = process.env.AUTH_ALLOWED_ORIGINS;
+		process.env.AUTH_ALLOWED_ORIGINS = 'https://mnhospital.uz';
+		try {
+			const untrusted = client();
+			await gateway.handleConnection(untrusted, { url: '/', headers: { origin: 'https://attacker.invalid' } } as IncomingMessage);
+			expect(untrusted.close).toHaveBeenCalledWith(1008, 'Origin not allowed');
+			expect(storage.getRecentMessages).not.toHaveBeenCalled();
+			const trusted = client();
+			await gateway.handleConnection(trusted, { url: '/', headers: { origin: 'https://mnhospital.uz' } } as IncomingMessage);
+			expect(events(trusted)[0]).toEqual({ event: 'getMessages', list: [] });
+		} finally {
+			if (previous === undefined) delete process.env.AUTH_ALLOWED_ORIGINS;
+			else process.env.AUTH_ALLOWED_ORIGINS = previous;
+		}
+	});
+
 	it('uses the verified profile identity and rejects an invalid supplied token', async () => {
 		verifyToken.mockResolvedValueOnce({
 			_id: new Types.ObjectId(),

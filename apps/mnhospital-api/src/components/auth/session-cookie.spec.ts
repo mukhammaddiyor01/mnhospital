@@ -6,6 +6,7 @@ import {
 	clearRefreshCookie,
 } from './session-cookie';
 import { AuthResolver } from './auth.resolver';
+import { allowedBrowserOrigins, isAllowedBrowserOrigin } from '../../libs/security/allowed-origins';
 describe('Session cookie/origin configuration', () => {
 	const original = {
 		node: process.env.NODE_ENV,
@@ -37,6 +38,19 @@ describe('Session cookie/origin configuration', () => {
 			} as any),
 		).toThrow();
 		expect(() => checkSessionRequest({ req: { headers: { origin: 'https://hospital.example' } } } as any)).toThrow();
+	});
+	it('permits only exact configured origins and fails closed in production', () => {
+		process.env.NODE_ENV = 'production';
+		process.env.AUTH_ALLOWED_ORIGINS = 'https://mnhospital.uz,https://www.mnhospital.uz';
+		expect(isAllowedBrowserOrigin('https://mnhospital.uz')).toBe(true);
+		expect(isAllowedBrowserOrigin('https://www.mnhospital.uz')).toBe(true);
+		for (const origin of ['https://attacker.invalid', 'null', 'http://mnhospital.uz', 'https://mnhospital.uz.attacker.invalid', undefined])
+			expect(isAllowedBrowserOrigin(origin)).toBe(false);
+		process.env.AUTH_ALLOWED_ORIGINS = 'https://mnhospital.uz/path';
+		expect(allowedBrowserOrigins().size).toBe(0);
+		delete process.env.AUTH_ALLOWED_ORIGINS;
+		delete process.env.CLIENT_URL;
+		expect(allowedBrowserOrigins().size).toBe(0);
 	});
 	it('keeps Secure/HttpOnly on production cookies including explicitly configured cross-site deployment', () => {
 		process.env.NODE_ENV = 'production';

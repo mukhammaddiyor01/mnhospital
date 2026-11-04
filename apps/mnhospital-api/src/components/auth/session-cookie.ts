@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { CookieOptions, Request, Response } from 'express';
 import { MemberType } from '../member/enums/member.enum';
+import { isAllowedBrowserOrigin } from '../../libs/security/allowed-origins';
 
 export const REFRESH_COOKIE = 'mn-hospital-refresh';
 export interface SessionContext {
@@ -23,23 +24,9 @@ function refreshCookieName(req?: Request): string {
 
 export function checkSessionRequest({ req }: SessionContext): void {
 	sessionRole(req);
-	const allowed = (
-		process.env.AUTH_ALLOWED_ORIGINS ??
-		process.env.CLIENT_URL ??
-		'http://localhost:2002,http://localhost:3000'
-	)
-		.split(',')
-		.flatMap((value) => {
-			try {
-				const url = new URL(value.trim());
-				return ['http:', 'https:'].includes(url.protocol) ? [url.origin] : [];
-			} catch {
-				return [];
-			}
-		});
 	if (
 		req.headers['apollo-require-preflight'] !== 'true' ||
-		(req.headers.origin && !allowed.includes(req.headers.origin))
+		(req.headers.origin && !isAllowedBrowserOrigin(req.headers.origin))
 	) {
 		throw new ForbiddenException('Session request origin is not allowed');
 	}
